@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "scitex-app"
+version = "0.1.0"
+description = "SciTeX App SDK — write-once interface for local + cloud apps"
+readme = "README.md"
+license = "AGPL-3.0-only"
+requires-python = ">=3.10"
+authors = [{name = "Yusuke Watanabe", email = "ywatanabe@scitex.ai"}]
+keywords = ["scitex", "app-sdk", "files", "storage", "cloud", "local"]
+
+# Zero runtime dependencies — stdlib only
+dependencies = []
+
+[project.optional-dependencies]
+cli = ["click>=8.0.0"]
+cloud = ["requests>=2.28.0"]
+mcp = ["fastmcp>=2.0.0"]
+dev = ["pytest>=7.0.0", "pytest-cov>=4.0.0"]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=2.0",
+    "myst-parser>=2.0",
+    "sphinx-copybutton>=0.5",
+    "sphinx-autodoc-typehints>=1.25",
+]
+all = [
+    "scitex-app[cli]",
+    "scitex-app[cloud]",
+    "scitex-app[mcp]",
+    "scitex-app[dev]",
+    "scitex-app[docs]",
+]
+
+[project.scripts]
+scitex-app = "scitex_app._cli:main"
+
+[project.entry-points."scitex_dev.docs"]
+scitex-app = "scitex_app"
+
+[project.urls]
+Homepage = "https://github.com/ywatanabe1989/scitex-app"
+Repository = "https://github.com/ywatanabe1989/scitex-app"
+Documentation = "https://scitex-app.readthedocs.io/"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scitex_app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.scitex-linter]
+library_dirs = ["src", "tests", "examples"]
