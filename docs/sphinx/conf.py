@@ -14,11 +14,12 @@ copyright = "2024-2026, Yusuke Watanabe"
 author = "Yusuke Watanabe"
 
 try:
-    from importlib.metadata import version
+    from importlib.metadata import version as _get_version
 
-    release = version("scitex-app")
+    release = _get_version("scitex-app")
 except Exception:
     release = "0.1.0"
+version = release
 
 extensions = [
     "sphinx.ext.autodoc",
