@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
 from ._protocol import FilesBackend
+from ._tree import build_tree
 
 # Backend registry: name -> factory callable
 _registry: Dict[str, Callable[..., FilesBackend]] = {}
@@ -98,33 +99,39 @@ def get_files(
     return FileSystemBackend(root or Path.cwd())
 
 
-# Cloud service modules (accessible but not in __all__)
-from . import _cloud_data as data  # noqa: E402,F401
-from . import _cloud_external as external  # noqa: E402,F401
-from . import _cloud_files as files  # noqa: E402,F401
-from . import _cloud_jobs as jobs  # noqa: E402,F401
-from . import _cloud_scitex as scitex  # noqa: E402,F401
-from ._client import PlatformClient  # noqa: E402,F401
-from ._client import get_client  # noqa: E402,F401
-from ._client import reset_client  # noqa: E402,F401
-from ._cloud_files import CloudFilesBackend  # noqa: E402,F401
-
 __all__ = [
-    # Core (minimal public API)
     "FilesBackend",
     "get_files",
     "register_backend",
-    # Cloud client
-    "PlatformClient",
-    "get_client",
-    "reset_client",
-    "CloudFilesBackend",
-    # Cloud service modules
-    "data",
-    "files",
-    "jobs",
-    "scitex",
-    "external",
+    "build_tree",
 ]
+
+
+# Internal cloud modules — accessible via scitex_app.sdk._client etc.
+# but NOT part of the public API contract. Use scitex_cloud.sdk for
+# cloud service access (data, files, jobs, scitex, external).
+def __getattr__(name: str) -> Any:
+    """Lazy-load cloud internals on demand (not in __all__)."""
+    _lazy = {
+        "PlatformClient": ("._client", "PlatformClient"),
+        "get_client": ("._client", "get_client"),
+        "reset_client": ("._client", "reset_client"),
+        "CloudFilesBackend": ("._cloud_files", "CloudFilesBackend"),
+        "data": (".", "_cloud_data"),
+        "files": (".", "_cloud_files"),
+        "jobs": (".", "_cloud_jobs"),
+        "scitex": (".", "_cloud_scitex"),
+        "external": (".", "_cloud_external"),
+    }
+    if name in _lazy:
+        import importlib
+
+        mod_path, attr = _lazy[name]
+        if mod_path == ".":
+            return importlib.import_module(f".{attr}", __package__)
+        mod = importlib.import_module(mod_path, __package__)
+        return getattr(mod, attr)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # EOF

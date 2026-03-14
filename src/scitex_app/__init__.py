@@ -24,12 +24,13 @@ Public API (3 functions)::
 
 from __future__ import annotations
 
-from .sdk import FilesBackend, get_files, register_backend
+from .sdk import FilesBackend, build_tree, get_files, register_backend
 
 __all__ = [
     "FilesBackend",
     "get_files",
     "register_backend",
+    "build_tree",
 ]
 
 # EOF
