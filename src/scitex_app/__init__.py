@@ -32,15 +32,20 @@ __all__ = [
     "register_backend",
     "build_tree",
     "chat",
+    "paths",
 ]
 
 
 def __getattr__(name: str):
-    """Lazy imports for optional modules (chat, etc.)."""
+    """Lazy imports for optional modules (chat, paths, etc.)."""
     if name == "chat":
         from . import _chat
 
         return _chat
+    if name == "paths":
+        from . import paths as _paths
+
+        return _paths
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
