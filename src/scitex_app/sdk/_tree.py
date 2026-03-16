@@ -93,8 +93,8 @@ def build_tree(
                 }
             )
 
-    # Sort: directories first, then alphabetically
-    items.sort(key=lambda x: (x["type"] != "directory", x["name"].lower()))
+    # Sort: pure alphabetical (case-insensitive), dirs and files interleaved
+    items.sort(key=lambda x: x["name"].lower())
     return items
 
 
