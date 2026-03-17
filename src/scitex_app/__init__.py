@@ -33,6 +33,8 @@ __all__ = [
     "build_tree",
     "chat",
     "paths",
+    "_django",
+    "validator",
 ]
 
 
@@ -46,6 +48,14 @@ def __getattr__(name: str):
         from . import paths as _paths
 
         return _paths
+    if name == "_django":
+        from . import _django as _dj
+
+        return _dj
+    if name == "validator":
+        from . import validator as _validator
+
+        return _validator
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
