@@ -157,6 +157,35 @@ scitex-app mcp start
 
 </details>
 
+## Role in SciTeX Ecosystem
+
+`scitex-app` is the **runtime SDK** that apps import at execution time. It provides the backend-agnostic interfaces that let apps work locally, on the cloud, or self-hosted without code changes.
+
+```
+scitex (orchestrator, templates, CLI, MCP)
+  |-- scitex-app (this package) -- runtime SDK for apps
+  |     |-- ScitexAppConfig     -- Django base class for app integration
+  |     |-- AppValidator        -- security/privilege checking
+  |     |-- FilesBackend        -- unified file I/O protocol
+  |     |-- paths               -- project path resolution
+  |     +-- chat                -- AI backend interface
+  |-- scitex-ui                 -- React/TS component library
+  +-- figrecipe                 -- reference app (figures)
+```
+
+**What this package owns:**
+
+- `FilesBackend` protocol and implementations (filesystem, cloud, custom)
+- `ScitexAppConfig` Django base class (`from scitex_app._django import ScitexAppConfig`)
+- `AppValidator` for security and privilege checking
+- Path resolution utilities for project/workspace discovery
+
+**What this package does NOT own:**
+
+- Templates and scaffolding -- see [scitex](https://github.com/ywatanabe1989/scitex-python)
+- Frontend components -- see [scitex-ui](https://github.com/ywatanabe1989/scitex-ui)
+- Orchestration, CLI, MCP -- see [scitex](https://github.com/ywatanabe1989/scitex-python)
+
 ## Part of SciTeX
 
 App SDK is part of [**SciTeX**](https://scitex.ai). When used inside the SciTeX framework, the SDK is available via `scitex.app`:
