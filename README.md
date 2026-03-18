@@ -157,13 +157,34 @@ scitex-app mcp start
 
 </details>
 
+## App Development CLI
+
+Create, validate, and publish SciTeX apps — no platform installation required.
+
+```bash
+# Scaffold a new app
+scitex-app app init . --name my_cool_app
+
+# Validate before submission
+scitex-app app validate .
+
+# Dev-install on your SciTeX Cloud server
+scitex-app app dev-install . --server http://127.0.0.1:8000
+
+# Submit for public review
+scitex-app app submit .
+```
+
+Also available via the main CLI: `scitex app init`, `scitex app validate`, etc.
+
 ## Role in SciTeX Ecosystem
 
-`scitex-app` is the **runtime SDK** that apps import at execution time. It provides the backend-agnostic interfaces that let apps work locally, on the cloud, or self-hosted without code changes.
+`scitex-app` is the **complete toolkit for app developers** — runtime SDK + development CLI. It provides backend-agnostic interfaces that let apps work locally, on the cloud, or self-hosted without code changes.
 
 ```
-scitex (orchestrator, templates, CLI, MCP)
-  |-- scitex-app (this package) -- runtime SDK for apps
+scitex (orchestrator, core compute, CLI, MCP)
+  |-- scitex-app (this package) -- app SDK + development CLI
+  |     |-- appmaker            -- scaffold, validate, publish
   |     |-- ScitexAppConfig     -- Django base class for app integration
   |     |-- AppValidator        -- security/privilege checking
   |     |-- FilesBackend        -- unified file I/O protocol
@@ -175,6 +196,8 @@ scitex (orchestrator, templates, CLI, MCP)
 
 **What this package owns:**
 
+- App scaffolding, validation, and submission (`scitex-app app init/validate/submit`)
+- Dev-install workflow (`scitex-app app dev-install`)
 - `FilesBackend` protocol and implementations (filesystem, cloud, custom)
 - `ScitexAppConfig` Django base class (`from scitex_app._django import ScitexAppConfig`)
 - `AppValidator` for security and privilege checking
@@ -182,9 +205,9 @@ scitex (orchestrator, templates, CLI, MCP)
 
 **What this package does NOT own:**
 
-- Templates and scaffolding -- see [scitex](https://github.com/ywatanabe1989/scitex-python)
 - Frontend components -- see [scitex-ui](https://github.com/ywatanabe1989/scitex-ui)
-- Orchestration, CLI, MCP -- see [scitex](https://github.com/ywatanabe1989/scitex-python)
+- Platform server APIs -- see [scitex-cloud](https://github.com/ywatanabe1989/scitex-cloud)
+- Core compute (io, stats, plt) -- see [scitex](https://github.com/ywatanabe1989/scitex-python)
 
 ## Part of SciTeX
 
