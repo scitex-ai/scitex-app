@@ -63,13 +63,16 @@ def build_tree(
             continue
 
         if entry["type"] == "directory":
-            children = build_tree(
-                backend,
-                entry["path"],
-                extensions=extensions,
-                skip_hidden=skip_hidden,
-                max_depth=max_depth - 1,
-            )
+            try:
+                children = build_tree(
+                    backend,
+                    entry["path"],
+                    extensions=extensions,
+                    skip_hidden=skip_hidden,
+                    max_depth=max_depth - 1,
+                )
+            except PermissionError:
+                continue  # skip directories we can't read
             if children:  # only include non-empty directories
                 items.append(
                     {
@@ -120,12 +123,19 @@ def _list_entries(
         if not target.is_dir():
             return []
         entries = []
-        for item in sorted(target.iterdir(), key=lambda x: x.name.lower()):
-            rel = str(item.relative_to(root))
-            if item.is_dir():
-                entries.append({"path": rel, "type": "directory"})
-            elif item.is_file():
-                entries.append({"path": rel, "type": "file"})
+        try:
+            children = sorted(target.iterdir(), key=lambda x: x.name.lower())
+        except PermissionError:
+            return []
+        for item in children:
+            try:
+                rel = str(item.relative_to(root))
+                if item.is_dir():
+                    entries.append({"path": rel, "type": "directory"})
+                elif item.is_file():
+                    entries.append({"path": rel, "type": "file"})
+            except PermissionError:
+                continue  # skip files/dirs we can't access
         return entries
 
     # Last resort: list() returns only files, no directory info
