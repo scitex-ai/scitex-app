@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+# Timestamp: 2026-03-17
+# File: scitex_app/validator.py
+
+"""scitex_app.validator — App validation pipeline for SciTeX platform.
+
+Validates app directories against the SciTeX app contract before deployment.
+Pure Python, no Django dependency.
+
+Usage:
+    from scitex_app.validator import AppValidator
+
+    validator = AppValidator("/path/to/myapp")
+    result = validator.validate()
+    if not result.passed:
+        for error in result.errors:
+            print(f"ERROR: {error}")
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Optional
+
+logger = logging.getLogger(__name__)
+
+# Required manifest fields
+MANIFEST_REQUIRED_FIELDS = {"name", "slug", "label", "version", "icon"}
+
+# Valid privilege types
+VALID_PRIVILEGE_TYPES = {"filesystem", "network", "api"}
+VALID_FILESYSTEM_SCOPES = {"project", "readonly", "none"}
+VALID_NETWORK_SCOPES = {"none", "allowlist"}
+VALID_API_SCOPES = {"scitex", "llm", "none"}
+
+# Shell selectors that apps must NOT target
+SHELL_SELECTORS = {
+    "#scitex-ai-panel",
+    "#main-content",
+    ".ws-module-pane",
+    ".workspace-header",
+    ".workspace-sidebar",
+    ".stx-shell-",
+    "#workspace-container",
+    ".ws-app-sidebar",
+}
+
+# Dangerous JS patterns
+DANGEROUS_JS_PATTERNS = [
+    r"\beval\s*\(",
+    r"\bFunction\s*\(",
+    r"\bdocument\.cookie\b",
+    r"\bwindow\.parent\b",
+    r"\bwindow\.top\b",
+    r"\b__import__\b",
+    r"\bos\.system\b",
+    r"\bsubprocess\b",
+    r"\bexec\s*\(",
+]
+
+# Default max bundle size (50MB)
+DEFAULT_MAX_BUNDLE_SIZE = 50 * 1024 * 1024
+
+# Directories to skip during CSS/JS scanning (build artifacts, docs, etc.)
+SKIP_DIRS = {"node_modules", "dist", ".vite", "_docs", "__pycache__", "assets"}
+
+
+@dataclass
+class ValidationResult:
+    """Result of app validation."""
+
+    passed: bool = True
+    errors: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    privileges: List[dict] = field(default_factory=list)
+    manifest: Optional[dict] = None
+
+    def add_error(self, msg: str):
+        self.errors.append(msg)
+        self.passed = False
+
+    def add_warning(self, msg: str):
+        self.warnings.append(msg)
+
+
+class AppValidator:
+    """Validates a SciTeX app directory against the platform contract.
+
+    Args:
+        app_path: Path to the app's root directory (or _django subdirectory)
+        max_bundle_size: Maximum total file size in bytes
+    """
+
+    def __init__(
+        self,
+        app_path: str | Path,
+        max_bundle_size: int = DEFAULT_MAX_BUNDLE_SIZE,
+    ):
+        self.app_path = Path(app_path).resolve()
+        self.max_bundle_size = max_bundle_size
+        self._result = ValidationResult()
+
+    def validate(self) -> ValidationResult:
+        """Run all validation checks. Returns ValidationResult."""
+        self._result = ValidationResult()
+
+        # Order matters: manifest first (other checks may depend on it)
+        self.validate_manifest()
+        self.validate_structure()
+        self.validate_css()
+        self.validate_js()
+        self.validate_bundle_size()
+        if self._result.manifest:
+            self.validate_privileges()
+
+        return self._result
+
+    def validate_manifest(self) -> None:
+        """Check manifest.json exists and has required fields."""
+        # Look in app root or _django subdirectory
+        for candidate in [
+            self.app_path / "manifest.json",
+            self.app_path / "_django" / "manifest.json",
+        ]:
+            if candidate.exists():
+                try:
+                    manifest = json.loads(candidate.read_text())
+                    self._result.manifest = manifest
+                except json.JSONDecodeError as exc:
+                    self._result.add_error(f"manifest.json is invalid JSON: {exc}")
+                    return
+
+                missing = MANIFEST_REQUIRED_FIELDS - set(manifest.keys())
+                if missing:
+                    self._result.add_error(
+                        f"manifest.json missing required fields: "
+                        f"{', '.join(sorted(missing))}"
+                    )
+
+                # Validate field types
+                if "name" in manifest and not isinstance(manifest["name"], str):
+                    self._result.add_error("manifest.name must be a string")
+                if "version" in manifest and not re.match(
+                    r"^\d+\.\d+\.\d+", str(manifest["version"])
+                ):
+                    self._result.add_warning(
+                        f"manifest.version '{manifest['version']}' "
+                        "doesn't follow semver"
+                    )
+
+                self._result.privileges = manifest.get("privileges", [])
+                return
+
+        self._result.add_error("No manifest.json found in app directory")
+
+    def validate_structure(self) -> None:
+        """Check required file structure exists."""
+        # Check for _django package (required for platform apps)
+        django_dir = self.app_path / "_django"
+        if not django_dir.is_dir():
+            # Maybe the app_path IS the _django dir
+            if (self.app_path / "views.py").exists():
+                django_dir = self.app_path
+            else:
+                self._result.add_warning(
+                    "No _django/ directory found. "
+                    "App may not integrate with scitex-cloud."
+                )
+                return
+
+        required_files = ["views.py", "urls.py"]
+        for fname in required_files:
+            if not (django_dir / fname).exists():
+                self._result.add_error(f"Missing required file: _django/{fname}")
+
+    @staticmethod
+    def _should_skip(path: Path) -> bool:
+        """Check if a file should be skipped (build artifacts, docs, etc.)."""
+        return bool(SKIP_DIRS & set(path.parts))
+
+    def validate_css(self) -> None:
+        """Check CSS source files don't target shell elements."""
+        for css_file in self.app_path.rglob("*.css"):
+            if self._should_skip(css_file):
+                continue
+            try:
+                content = css_file.read_text(errors="replace")
+            except OSError:
+                continue
+
+            for selector in SHELL_SELECTORS:
+                if selector in content:
+                    rel = css_file.relative_to(self.app_path)
+                    self._result.add_error(
+                        f"{rel}: targets shell selector '{selector}' — "
+                        "app CSS must not modify shell elements"
+                    )
+
+    def validate_js(self) -> None:
+        """Check JS/TS source files for dangerous patterns."""
+        for ext in ("*.js", "*.ts", "*.tsx", "*.jsx"):
+            for js_file in self.app_path.rglob(ext):
+                if self._should_skip(js_file):
+                    continue
+
+                try:
+                    content = js_file.read_text(errors="replace")
+                except OSError:
+                    continue
+
+                rel = js_file.relative_to(self.app_path)
+                for pattern in DANGEROUS_JS_PATTERNS:
+                    if re.search(pattern, content):
+                        self._result.add_error(
+                            f"{rel}: contains dangerous pattern matching '{pattern}'"
+                        )
+
+    def validate_bundle_size(self) -> None:
+        """Check total file size is under the limit."""
+        total_size = 0
+        for f in self.app_path.rglob("*"):
+            if f.is_file() and "node_modules" not in f.parts:
+                total_size += f.stat().st_size
+
+        if total_size > self.max_bundle_size:
+            mb = total_size / (1024 * 1024)
+            limit_mb = self.max_bundle_size / (1024 * 1024)
+            self._result.add_error(
+                f"Bundle size {mb:.1f}MB exceeds limit of {limit_mb:.1f}MB"
+            )
+
+    def validate_privileges(self) -> None:
+        """Check declared privileges are valid."""
+        for priv in self._result.privileges:
+            if not isinstance(priv, dict):
+                self._result.add_error(f"Invalid privilege entry (not a dict): {priv}")
+                continue
+
+            ptype = priv.get("type")
+            if ptype not in VALID_PRIVILEGE_TYPES:
+                self._result.add_error(
+                    f"Unknown privilege type '{ptype}'. "
+                    f"Valid: {', '.join(sorted(VALID_PRIVILEGE_TYPES))}"
+                )
+
+            scope = priv.get("scope", "none")
+            valid_scopes = {
+                "filesystem": VALID_FILESYSTEM_SCOPES,
+                "network": VALID_NETWORK_SCOPES,
+                "api": VALID_API_SCOPES,
+            }.get(ptype, set())
+
+            if valid_scopes and scope not in valid_scopes:
+                self._result.add_error(
+                    f"Invalid scope '{scope}' for privilege type '{ptype}'. "
+                    f"Valid: {', '.join(sorted(valid_scopes))}"
+                )
+
+
+# EOF

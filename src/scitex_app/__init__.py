@@ -24,12 +24,39 @@ Public API (3 functions)::
 
 from __future__ import annotations
 
-from .sdk import FilesBackend, get_files, register_backend
+from .sdk import FilesBackend, build_tree, get_files, register_backend
 
 __all__ = [
     "FilesBackend",
     "get_files",
     "register_backend",
+    "build_tree",
+    "chat",
+    "paths",
+    "_django",
+    "validator",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy imports for optional modules (chat, paths, etc.)."""
+    if name == "chat":
+        from . import _chat
+
+        return _chat
+    if name == "paths":
+        from . import paths as _paths
+
+        return _paths
+    if name == "_django":
+        from . import _django as _dj
+
+        return _dj
+    if name == "validator":
+        from . import validator as _validator
+
+        return _validator
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # EOF
