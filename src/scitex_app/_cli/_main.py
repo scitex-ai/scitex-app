@@ -24,6 +24,7 @@ else:
     CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
     COMMAND_CATEGORIES = [
+        ("App Development", ["app"]),
         ("Files", ["read", "write", "list", "exists"]),
         ("Integration", ["mcp", "list-python-apis"]),
     ]
@@ -160,6 +161,11 @@ else:
         result = files.exists(path)
         click.echo("true" if result else "false")
         raise SystemExit(0 if result else 1)
+
+    # -- App Development ----------------------------------------------------
+    from ._app import app
+
+    main.add_command(app)
 
     # -- Integration ---------------------------------------------------------
     main.add_command(mcp)
