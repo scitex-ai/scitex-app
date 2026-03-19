@@ -202,11 +202,55 @@ def _build_all_files(
     # pyproject.toml for dual-mode (standalone + extension)
     files["pyproject.toml"] = _pyproject_toml(name, label, description, license_id)
 
+    # CLI with gui command for standalone mode
+    files["_cli.py"] = _cli_py(name, label)
+
     # React frontend files
     if use_react:
         files.update(build_react_files(name, label, icon))
 
     return files
+
+
+def _cli_py(name, label):
+    """Generate _cli.py — standalone GUI launcher."""
+    slug = name.replace("_", "-")
+    return f'''"""CLI for {label} — standalone GUI launcher."""
+
+import click
+
+
+@click.group(invoke_without_command=True)
+@click.pass_context
+def main(ctx):
+    """{label} — SciTeX Cloud App."""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@main.command()
+@click.option("--port", "-p", default=8050, help="Server port")
+@click.option("--host", "-h", default="127.0.0.1", help="Host to bind")
+@click.option("--no-browser", is_flag=True, help="Don't open browser")
+@click.option("--force", is_flag=True, help="Kill existing process on port")
+def gui(port, host, no_browser, force):
+    """Launch standalone GUI with workspace shell."""
+    if force:
+        import subprocess
+        subprocess.run(
+            ["fuser", "-k", f"{{port}}/tcp"],
+            capture_output=True,
+        )
+
+    from scitex_app._standalone import run_standalone
+
+    run_standalone(
+        app_module="{name}",
+        port=port,
+        host=host,
+        open_browser=not no_browser,
+    )
+'''
 
 
 def _pyproject_toml(name, label, description, license_id):
@@ -223,6 +267,9 @@ version = "0.1.0"
 description = "{desc}"
 requires-python = ">=3.10"
 license = "{license_id}"
+
+[project.scripts]
+{slug} = "{name}._cli:main"
 
 [project.optional-dependencies]
 scitex = ["scitex-app>=0.1.0", "scitex-ui>=0.1.0"]
