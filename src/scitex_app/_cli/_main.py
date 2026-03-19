@@ -27,6 +27,7 @@ else:
         ("App Development", ["app"]),
         ("Files", ["read", "write", "list", "exists"]),
         ("Integration", ["mcp", "list-python-apis"]),
+        ("Documentation", ["docs", "skills"]),
     ]
 
     class CategorizedGroup(click.Group):
@@ -172,8 +173,9 @@ else:
     main.add_command(list_python_apis)
 
     try:
-        from scitex_dev.cli import docs_click_group
+        from scitex_dev.cli import docs_click_group, skills_click_group
 
         main.add_command(docs_click_group(package="scitex-app"))
+        main.add_command(skills_click_group(package="scitex-app"))
     except ImportError:
         pass
