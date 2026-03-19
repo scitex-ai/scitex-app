@@ -7,7 +7,9 @@ the app structure and build features without manual guidance.
 from __future__ import annotations
 
 
-def _agents_md(name: str, label: str, icon: str, description: str) -> str:
+def _agents_md(
+    name: str, label: str, icon: str, description: str, frontend_type: str = "html"
+) -> str:
     """Generate AGENTS.md — the agent's full context for building this app."""
     desc = description or "A SciTeX Cloud app."
     return f"""# {label} — SciTeX Cloud App
@@ -36,7 +38,9 @@ It is NOT a full HTML page — no `<html>`, `<head>`, or `<body>` tags.
 ### Template Rules
 
 1. Start with `{{% load static %}}` for static file references
-2. Include your CSS: `<link rel="stylesheet" href="{{% static '{name}/css/{name}.css' %}}">`
+2. Include your CSS: `<link rel="stylesheet" href="{{% static '{name}/css/{
+        name
+    }.css' %}}">`
 3. Wrap everything in a scoped container: `<div class="{name}-container">`
 4. Use `data-ai-hint` attributes on key sections for LLM context
 5. Keep the template under 1024 lines
@@ -82,11 +86,51 @@ After editing files, the changes are **live immediately** — the workspace
 loads templates directly from this directory. Just switch to another tab
 and back, or reload the page.
 
-## JavaScript
+## JavaScript / React
 
-For interactivity, add `<script>` tags at the bottom of `index_partial.html`.
+{
+        ""
+        if frontend_type == "html"
+        else f'''### React Frontend (this app uses React)
+
+This app has a React frontend in `frontend/`:
+
+```
+frontend/
+  src/main.tsx           <- React entry point
+  src/App.tsx            <- Main app component (EDIT THIS)
+  src/store/useAppStore.ts <- Zustand state store
+  vite.config.ts         <- Vite build config
+  package.json           <- Dependencies
+```
+
+**Development:**
+```bash
+cd frontend && npm install && npm run dev   # Dev server with HMR
+cd frontend && npm run build                # Production build
+```
+
+**Key scitex-ui components available:**
+```tsx
+import {{ Workspace }} from "scitex-ui/react/shell";
+import {{ DataTable }} from "scitex-ui/react/app/data-table";
+import {{ FileBrowser }} from "scitex-ui/react/app/file-browser";
+```
+
+**Standalone mode:**
+```python
+from scitex_app._standalone import run_standalone
+run_standalone(app_module="{name}._django", port=5050)
+```
+'''
+    }{
+        ""
+        if frontend_type == "react"
+        else '''For interactivity, add `<script>` tags at the bottom of `index_partial.html`.
 Keep scripts inline and scoped. For complex apps, create a TypeScript file
 in `static/{name}/ts/` and include it via `<script type="module">`.
+'''
+    }
 
 ## Standalone Mode
 
