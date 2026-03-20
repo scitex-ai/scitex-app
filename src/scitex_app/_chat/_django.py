@@ -85,7 +85,30 @@ def chat_stream_view(request):
     return response
 
 
+# Session views
+from ._session_views import (
+    session_detail_view,
+    session_list_view,
+    session_messages_view,
+)
+
 # URL patterns — mount with: urlpatterns += chat_urlpatterns
 chat_urlpatterns = [
     path("api/chat/stream", chat_stream_view, name="scitex-chat-stream"),
+    # Session CRUD
+    path(
+        "api/chat/sessions/",
+        session_list_view,
+        name="scitex-chat-sessions",
+    ),
+    path(
+        "api/chat/sessions/<int:session_id>/",
+        session_detail_view,
+        name="scitex-chat-session-detail",
+    ),
+    path(
+        "api/chat/sessions/<int:session_id>/messages/",
+        session_messages_view,
+        name="scitex-chat-session-messages",
+    ),
 ]

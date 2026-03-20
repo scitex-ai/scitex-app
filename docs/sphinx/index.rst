@@ -31,6 +31,7 @@ so apps work locally, on the cloud, or self-hosted without code changes.
 
    installation
    quickstart
+   app_development
    cli
    mcp
    api/scitex_app

@@ -24,8 +24,10 @@ else:
     CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
     COMMAND_CATEGORIES = [
+        ("App Development", ["app"]),
         ("Files", ["read", "write", "list", "exists"]),
         ("Integration", ["mcp", "list-python-apis"]),
+        ("Documentation", ["docs", "skills"]),
     ]
 
     class CategorizedGroup(click.Group):
@@ -161,13 +163,19 @@ else:
         click.echo("true" if result else "false")
         raise SystemExit(0 if result else 1)
 
+    # -- App Development ----------------------------------------------------
+    from ._app import app
+
+    main.add_command(app)
+
     # -- Integration ---------------------------------------------------------
     main.add_command(mcp)
     main.add_command(list_python_apis)
 
     try:
-        from scitex_dev.cli import docs_click_group
+        from scitex_dev.cli import docs_click_group, skills_click_group
 
         main.add_command(docs_click_group(package="scitex-app"))
+        main.add_command(skills_click_group(package="scitex-app"))
     except ImportError:
         pass
