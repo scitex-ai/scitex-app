@@ -19,6 +19,8 @@ mgmt
 # old directories as trash bin
 *old*
 **/*old*
+# Exception: scaffold files contain "old" in "scaffold"
+!**/appmaker/_scaffold*
 .old
 **/.old
 .dev
