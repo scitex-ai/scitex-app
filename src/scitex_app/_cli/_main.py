@@ -25,7 +25,7 @@ else:
 
     COMMAND_CATEGORIES = [
         ("App Development", ["app"]),
-        ("Files", ["read", "write", "list", "exists"]),
+        ("Files", ["read", "write", "list", "exists", "delete", "rename", "copy"]),
         ("Integration", ["mcp", "list-python-apis"]),
         ("Documentation", ["docs", "skills"]),
     ]
@@ -125,43 +125,246 @@ else:
     @click.argument("path")
     @click.option("--root", default=".", help="Root directory for file backend.")
     @click.option("--binary", is_flag=True, help="Read as binary.")
-    def read(path, root, binary):
-        """Read a file through the SDK backend."""
+    @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+    def read(path, root, binary, as_json):
+        """Read a file through the SDK backend.
+
+        Examples:
+            scitex-app read config.yaml
+            scitex-app read data.bin --binary
+            scitex-app read config.yaml --json
+        """
+        import json as json_mod
+
         from scitex_app.sdk import get_files
 
         files = get_files(root)
         content = files.read(path, binary=binary)
-        if binary:
-            import sys
+        if as_json:
+            import base64
 
+            val = base64.b64encode(content).decode("ascii") if binary else content
+            click.echo(json_mod.dumps({"path": path, "content": val, "binary": binary}))
+        elif binary:
             sys.stdout.buffer.write(content)
         else:
             click.echo(content)
+
+    @main.command()
+    @click.argument("path")
+    @click.argument("content", required=False, default=None)
+    @click.option("--root", default=".", help="Root directory for file backend.")
+    @click.option(
+        "--stdin", "from_stdin", is_flag=True, help="Read content from stdin."
+    )
+    @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+    @click.option(
+        "--dry-run", is_flag=True, help="Show what would be written without writing."
+    )
+    def write(path, content, root, from_stdin, as_json, dry_run):
+        """Write content to a file through the SDK backend.
+
+        Examples:
+            scitex-app write output.txt "hello world"
+            echo "data" | scitex-app write output.txt --stdin
+            scitex-app write output.txt "test" --dry-run
+        """
+        import json as json_mod
+
+        from scitex_app.sdk import get_files
+
+        if from_stdin:
+            content = sys.stdin.read()
+        if content is None:
+            raise click.UsageError("Provide CONTENT argument or use --stdin.")
+        if dry_run:
+            result = {
+                "action": "write",
+                "path": path,
+                "size": len(content),
+                "dry_run": True,
+            }
+            if as_json:
+                click.echo(json_mod.dumps(result))
+            else:
+                click.echo(f"[dry-run] Would write {len(content)} bytes to {path}")
+            return
+        files = get_files(root)
+        files.write(path, content)
+        if as_json:
+            click.echo(
+                json_mod.dumps({"path": path, "size": len(content), "written": True})
+            )
+        else:
+            click.echo(f"Written {len(content)} bytes to {path}")
 
     @main.command("list")
     @click.argument("directory", default="")
     @click.option("--root", default=".", help="Root directory for file backend.")
     @click.option("--ext", multiple=True, help="Filter by extension (e.g., .yaml).")
-    def list_files(directory, root, ext):
-        """List files in a directory through the SDK backend."""
+    @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+    def list_files(directory, root, ext, as_json):
+        """List files in a directory through the SDK backend.
+
+        Examples:
+            scitex-app list
+            scitex-app list data --ext .yaml
+            scitex-app list --json
+        """
+        import json as json_mod
+
         from scitex_app.sdk import get_files
 
         files = get_files(root)
         extensions = list(ext) if ext else None
-        for path in files.list(directory, extensions=extensions):
-            click.echo(path)
+        result = files.list(directory, extensions=extensions)
+        if as_json:
+            click.echo(json_mod.dumps({"directory": directory, "files": result}))
+        else:
+            for p in result:
+                click.echo(p)
 
     @main.command()
     @click.argument("path")
     @click.option("--root", default=".", help="Root directory for file backend.")
-    def exists(path, root):
-        """Check if a file exists through the SDK backend."""
+    @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+    def exists(path, root, as_json):
+        """Check if a file exists through the SDK backend.
+
+        Examples:
+            scitex-app exists config.yaml
+            scitex-app exists config.yaml --json
+        """
+        import json as json_mod
+
         from scitex_app.sdk import get_files
 
         files = get_files(root)
         result = files.exists(path)
-        click.echo("true" if result else "false")
+        if as_json:
+            click.echo(json_mod.dumps({"path": path, "exists": result}))
+        else:
+            click.echo("true" if result else "false")
         raise SystemExit(0 if result else 1)
+
+    @main.command()
+    @click.argument("path")
+    @click.option("--root", default=".", help="Root directory for file backend.")
+    @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+    @click.option(
+        "--dry-run", is_flag=True, help="Show what would be deleted without deleting."
+    )
+    def delete(path, root, as_json, dry_run):
+        """Delete a file through the SDK backend.
+
+        Examples:
+            scitex-app delete temp.txt
+            scitex-app delete temp.txt --dry-run
+        """
+        import json as json_mod
+
+        from scitex_app.sdk import get_files
+
+        if dry_run:
+            if as_json:
+                click.echo(
+                    json_mod.dumps({"action": "delete", "path": path, "dry_run": True})
+                )
+            else:
+                click.echo(f"[dry-run] Would delete {path}")
+            return
+        files = get_files(root)
+        files.delete(path)
+        if as_json:
+            click.echo(json_mod.dumps({"path": path, "deleted": True}))
+        else:
+            click.echo(f"Deleted {path}")
+
+    @main.command()
+    @click.argument("old_path")
+    @click.argument("new_path")
+    @click.option("--root", default=".", help="Root directory for file backend.")
+    @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+    @click.option(
+        "--dry-run", is_flag=True, help="Show what would be renamed without renaming."
+    )
+    def rename(old_path, new_path, root, as_json, dry_run):
+        """Rename/move a file through the SDK backend.
+
+        Examples:
+            scitex-app rename old.txt new.txt
+            scitex-app rename old.txt new.txt --dry-run
+        """
+        import json as json_mod
+
+        from scitex_app.sdk import get_files
+
+        if dry_run:
+            if as_json:
+                click.echo(
+                    json_mod.dumps(
+                        {
+                            "action": "rename",
+                            "old": old_path,
+                            "new": new_path,
+                            "dry_run": True,
+                        }
+                    )
+                )
+            else:
+                click.echo(f"[dry-run] Would rename {old_path} -> {new_path}")
+            return
+        files = get_files(root)
+        files.rename(old_path, new_path)
+        if as_json:
+            click.echo(
+                json_mod.dumps({"old": old_path, "new": new_path, "renamed": True})
+            )
+        else:
+            click.echo(f"Renamed {old_path} -> {new_path}")
+
+    @main.command()
+    @click.argument("src_path")
+    @click.argument("dest_path")
+    @click.option("--root", default=".", help="Root directory for file backend.")
+    @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+    @click.option(
+        "--dry-run", is_flag=True, help="Show what would be copied without copying."
+    )
+    def copy(src_path, dest_path, root, as_json, dry_run):
+        """Copy a file through the SDK backend.
+
+        Examples:
+            scitex-app copy src.txt dst.txt
+            scitex-app copy src.txt dst.txt --dry-run
+        """
+        import json as json_mod
+
+        from scitex_app.sdk import get_files
+
+        if dry_run:
+            if as_json:
+                click.echo(
+                    json_mod.dumps(
+                        {
+                            "action": "copy",
+                            "src": src_path,
+                            "dest": dest_path,
+                            "dry_run": True,
+                        }
+                    )
+                )
+            else:
+                click.echo(f"[dry-run] Would copy {src_path} -> {dest_path}")
+            return
+        files = get_files(root)
+        files.copy(src_path, dest_path)
+        if as_json:
+            click.echo(
+                json_mod.dumps({"src": src_path, "dest": dest_path, "copied": True})
+            )
+        else:
+            click.echo(f"Copied {src_path} -> {dest_path}")
 
     # -- App Development ----------------------------------------------------
     from ._app import app
@@ -178,4 +381,53 @@ else:
         main.add_command(docs_click_group(package="scitex-app"))
         main.add_command(skills_click_group(package="scitex-app"))
     except ImportError:
-        pass
+
+        @main.group()
+        def docs():
+            """Documentation (requires scitex-dev)."""
+
+        @docs.command("list")
+        def docs_list():
+            """List available documentation pages."""
+            click.echo(
+                "ERROR: scitex-dev is required for docs. "
+                "Install with: pip install scitex-dev",
+                err=True,
+            )
+            raise SystemExit(1)
+
+        @docs.command("get")
+        @click.argument("page_name", required=False)
+        def docs_get(page_name):
+            """Show documentation."""
+            click.echo(
+                "ERROR: scitex-dev is required for docs. "
+                "Install with: pip install scitex-dev",
+                err=True,
+            )
+            raise SystemExit(1)
+
+        @main.group()
+        def skills():
+            """View package skills (requires scitex-dev)."""
+
+        @skills.command("list")
+        def skills_list():
+            """List available skill pages."""
+            click.echo(
+                "ERROR: scitex-dev is required for skills. "
+                "Install with: pip install scitex-dev",
+                err=True,
+            )
+            raise SystemExit(1)
+
+        @skills.command("get")
+        @click.argument("skill_name", required=False)
+        def skills_get(skill_name):
+            """Show a specific skill page."""
+            click.echo(
+                "ERROR: scitex-dev is required for skills. "
+                "Install with: pip install scitex-dev",
+                err=True,
+            )
+            raise SystemExit(1)

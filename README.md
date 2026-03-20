@@ -120,11 +120,17 @@ files.copy("src.txt", "dst.txt")      # copy file
 ```bash
 scitex-app --help-recursive              # Show all commands
 scitex-app read <path>                   # Read a file
+scitex-app write <path> "content"        # Write to a file
 scitex-app list [directory]              # List files
 scitex-app exists <path>                 # Check existence
+scitex-app delete <path>                 # Delete a file
+scitex-app rename <old> <new>            # Rename/move a file
+scitex-app copy <src> <dest>             # Copy a file
 scitex-app list-python-apis              # List Python API tree
 scitex-app mcp list-tools                # List MCP tools
 ```
+
+All file commands support `--json` output. Destructive commands support `--dry-run`.
 
 > **[Full CLI reference](https://scitex-app.readthedocs.io/)**
 

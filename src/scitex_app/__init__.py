@@ -26,14 +26,38 @@ from __future__ import annotations
 
 from .sdk import FilesBackend, build_tree, get_files, register_backend
 
+
+def _resolve_version() -> str:
+    """Read version from importlib.metadata, fallback to pyproject.toml."""
+    try:
+        from importlib.metadata import version
+
+        return version("scitex-app")
+    except Exception:
+        pass
+    try:
+        from pathlib import Path
+        import re
+
+        toml = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
+        match = re.search(r'version\s*=\s*"([^"]+)"', toml.read_text())
+        if match:
+            return match.group(1)
+    except Exception:
+        pass
+    return "0.0.0"
+
+
+__version__ = _resolve_version()
+
 __all__ = [
+    "__version__",
     "FilesBackend",
     "get_files",
     "register_backend",
     "build_tree",
     "chat",
     "paths",
-    "_django",
     "validator",
 ]
 
@@ -48,10 +72,6 @@ def __getattr__(name: str):
         from . import paths as _paths
 
         return _paths
-    if name == "_django":
-        from . import _django as _dj
-
-        return _dj
     if name == "validator":
         from . import validator as _validator
 
