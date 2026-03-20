@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 
 import pytest
+
+click = pytest.importorskip("click")
 from click.testing import CliRunner
 
 from scitex_app._cli._main import main
