@@ -62,20 +62,29 @@ __all__ = [
 ]
 
 
+_LOADING = set()
+
+
 def __getattr__(name: str):
     """Lazy imports for optional modules (chat, paths, etc.)."""
-    if name == "chat":
-        from . import _chat
+    if name in _LOADING:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    _LOADING.add(name)
+    try:
+        if name == "chat":
+            from . import _chat
 
-        return _chat
-    if name == "paths":
-        from . import paths as _paths
+            return _chat
+        if name == "paths":
+            from . import paths as _paths
 
-        return _paths
-    if name == "validator":
-        from . import validator as _validator
+            return _paths
+        if name == "validator":
+            from . import validator as _validator
 
-        return _validator
+            return _validator
+    finally:
+        _LOADING.discard(name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
