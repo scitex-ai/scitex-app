@@ -6,6 +6,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Run all scitex-app examples.
+
+Options:
+    -h, --help    Show this help message
+EOF
+}
+
+case "${1:-}" in
+-h | --help)
+    usage
+    exit 0
+    ;;
+esac
+
 echo "=== Running all scitex-app examples ==="
 echo
 
