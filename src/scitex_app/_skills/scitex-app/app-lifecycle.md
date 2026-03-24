@@ -1,235 +1,215 @@
 ---
 name: app-lifecycle
-description: End-to-end guide for creating a SciTeX app — scaffold, develop, validate, dev-install, test, submit. Use when creating a new app from scratch.
+description: App scaffolding, validation, dev-install, and submission API. init_app(), validate(), AppValidator, ValidationResult, and the full end-to-end workflow.
 ---
 
-# App Lifecycle — From Scaffold to Published
+# App Lifecycle
 
-Complete walkthrough for creating a SciTeX workspace app.
+Full lifecycle for SciTeX workspace apps: scaffold → validate → dev-install → submit.
 
-## Prerequisites
+## init_app()
 
-```bash
-pip install scitex-app scitex-ui
+```python
+from scitex_app.appmaker import init_app
+
+def init_app(
+    target_dir: str | Path,
+    name: str,
+    *,
+    label: str = "",
+    icon: str = "fas fa-puzzle-piece",
+    description: str = "",
+    manifest: Optional[dict] = None,
+    license_id: str = "AGPL-3.0",
+    overwrite: bool = False,
+    frontend_type: str = "html",   # "html" or "react"
+) -> list[str]
 ```
 
-## Step 1: Scaffold
+Generates complete app boilerplate. Returns list of relative paths created. Skips existing files unless `overwrite=True`.
 
-```bash
-mkdir my-app && cd my-app
-scitex-app app init . --name my_app --frontend react
+```python
+from scitex_app.appmaker import init_app
+from pathlib import Path
+
+created = init_app(
+    target_dir=Path("./my_awesome_app"),
+    name="my_awesome_app",          # must end with _app or -app
+    label="My Awesome App",
+    icon="fas fa-flask",
+    description="A SciTeX workspace app.",
+    frontend_type="html",           # or "react" for React+Vite+Zustand
+)
+print(f"Created {len(created)} files")
 ```
 
-This creates ~20 files:
+### Generated files (HTML frontend, ~17 files)
+
 ```
-my_app/
-  _django/
-    __init__.py
-    apps.py          # MyAppConfig(ScitexAppConfig)
-    views.py         # editor_page + api_dispatch
-    urls.py          # scitex_urlpatterns(views)
-    manifest.json    # App metadata
-    frontend/
-      src/
-        bridge/
-          bridge-init.ts    # Entry point (auto-discovered)
-          MountPoint.ts     # React root mount
-        components/         # Your React components
-        store/              # Zustand state
-        api/                # Fetch wrappers
-  src/                      # Python core logic (no Django)
-  tests/
-  pyproject.toml
-  README.md
+__init__.py
+apps.py
+views.py
+urls.py
+tests.py
+skill.py
+manifest.json
+templates/<name>/index.html
+templates/<name>/index_partial.html
+static/<name>/css/<name>.css
+.agents/agents.json
+AGENTS.md
+docs/PLATFORM.md
+README.md
+LICENSE
+.gitignore
+pyproject.toml
+_cli.py
 ```
 
-## Step 2: Edit manifest.json
+React frontend (`frontend_type="react"`) adds additional files: `package.json`, `vite.config.js`, `src/bridge/bridge-init.ts`, `src/components/`, `src/store/`.
+
+### manifest.json required fields
 
 ```json
 {
-  "name": "My App",
-  "slug": "my_app",
-  "label": "My App",
+  "name": "my_awesome_app",
+  "slug": "my-awesome-app",
+  "label": "My Awesome App",
   "version": "0.1.0",
   "icon": "fas fa-flask",
-  "standalone": false,
-  "frontend_type": "react",
-  "privileges": [
-    {"type": "filesystem", "scope": "project"},
-    {"type": "network", "scope": "none"},
-    {"type": "api", "scope": "scitex"}
-  ],
-  "dependencies": ["scitex>=1.0"],
-  "bridge": {
-    "entry": "src/bridge/bridge-init.ts",
-    "source_root": "src"
-  }
+  "description": "...",
+  "privileges": []
 }
 ```
 
-Required: `name`, `slug`, `label`, `version`, `icon`
+Required fields: `name`, `slug`, `label`, `version`, `icon`.
 
-## Step 3: Implement
+### Privilege types
 
-### Backend (views.py)
+```json
+"privileges": [
+  {"type": "filesystem", "scope": "project"},
+  {"type": "network",    "scope": "none"},
+  {"type": "api",        "scope": "scitex"}
+]
+```
+
+| Type | Valid scopes |
+|------|-------------|
+| `filesystem` | `project`, `readonly`, `none` |
+| `network` | `none`, `allowlist` |
+| `api` | `scitex`, `llm`, `none` |
+
+## validate()
 
 ```python
-from scitex_app._django import scitex_editor_page, scitex_api_dispatch
+from scitex_app.appmaker import validate
 
-editor_page = scitex_editor_page(static_dir=STATIC_DIR)
-
-def _get_editor(request):
-    # Return your app's context object
-    return {"project": request.project}
-
-api_dispatch = scitex_api_dispatch(
-    handlers={
-        "load": lambda req, editor: JsonResponse({"data": "..."}),
-        "save": lambda req, editor: JsonResponse({"ok": True}),
-    },
-    get_editor=_get_editor,
-)
+errors = validate(app_dir)   # list[str], empty = passed
+if not errors:
+    print("Ready for submission")
+else:
+    for e in errors:
+        print(f"ERROR: {e}")
 ```
 
-### Frontend (bridge-init.ts)
+Thin wrapper around `AppValidator` — returns error strings directly.
 
-```typescript
-import "scitex-ui/css/app.css";
-import { mountMyApp } from "./MountPoint";
+## AppValidator
 
-function init(): void {
-  const mount = document.getElementById("app-mount");
-  if (!mount) return;
-  mountMyApp(mount);
-}
-
-// Auto-init
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
-} else {
-  init();
-}
-```
-
-### Use scitex-ui components
-
-```typescript
-import { DataTable } from "scitex-ui/react/app";
-import { usePanelResize } from "scitex-ui/react/app";
-import { FileBrowser } from "scitex-ui/react/app";
-```
-
-### Use scitex-app file SDK
+Full validation pipeline. Pure Python, no Django dependency.
 
 ```python
-from scitex_app.sdk import get_files
+from scitex_app.validator import AppValidator
 
-files = get_files("./project")
-content = files.read("data/config.yaml")
-files.write("output/result.csv", csv_text)
+validator = AppValidator("/path/to/myapp")
+result = validator.validate()
+
+print(result.passed)    # bool
+for err in result.errors:
+    print(f"ERROR: {err}")
+for warn in result.warnings:
+    print(f"WARN:  {warn}")
 ```
 
-## Step 4: Validate
+```python
+class AppValidator:
+    def __init__(
+        self,
+        app_path: str | Path,
+        max_bundle_size: int = 50 * 1024 * 1024,  # 50 MB default
+    )
+
+    def validate(self) -> ValidationResult
+    def validate_manifest(self) -> None
+    def validate_structure(self) -> None
+    def validate_css(self) -> None
+    def validate_js(self) -> None
+    def validate_bundle_size(self) -> None
+    def validate_privileges(self) -> None
+```
+
+### What each check validates
+
+| Check | What it does |
+|-------|-------------|
+| `validate_manifest` | manifest.json exists, has required fields, valid semver version |
+| `validate_structure` | `_django/views.py` and `_django/urls.py` exist |
+| `validate_css` | CSS does not target reserved shell selectors |
+| `validate_js` | JS/TS/JSX/TSX has no dangerous patterns |
+| `validate_bundle_size` | Total file size is under `max_bundle_size` |
+| `validate_privileges` | Declared privileges use valid types and scopes |
+
+### ValidationResult
+
+```python
+@dataclass
+class ValidationResult:
+    passed: bool
+    errors: List[str]
+    warnings: List[str]
+    privileges: List[dict]
+    manifest: Optional[dict]
+```
+
+`result.add_error(msg)` — appends to errors and sets `passed = False`.
+`result.add_warning(msg)` — appends to warnings, does not fail.
+
+### Forbidden CSS selectors
+
+Apps must not target: `#scitex-ai-panel`, `#main-content`, `.ws-module-pane`, `.workspace-header`, `.workspace-sidebar`, `.stx-shell-*`, `#workspace-container`, `.ws-app-sidebar`.
+
+### Forbidden JS patterns
+
+`eval(`, `Function(`, `document.cookie`, `window.parent`, `window.top`, `__import__`, `os.system`, `subprocess`, `exec(`.
+
+## End-to-end workflow
 
 ```bash
+# 1. Scaffold
+scitex-app app init . --name my_app
+
+# 2. Develop (edit views.py, templates/, etc.)
+
+# 3. Validate
 scitex-app app validate .
-```
 
-Checks:
-- manifest.json has required fields
-- `_django/views.py` and `_django/urls.py` exist
-- No CSS targeting shell selectors (`#scitex-ai-panel`, `.stx-shell-*`, etc.)
-- No dangerous JS (`eval(`, `document.cookie`, etc.)
-- Bundle size < 50 MB
-- Privilege types and scopes are valid
-
-## Step 5: Dev-Install
-
-```bash
+# 4. Dev-install on running SciTeX Cloud instance
+export SCITEX_API_TOKEN="your-jwt-token"
 scitex-app app dev-install . --server http://127.0.0.1:8000
-```
 
-This:
-1. Creates a `DevInstallation` record in the database
-2. Copies your app to the server's dev apps directory
-3. Registers it in the workspace sidebar (for your user only)
+# 5. Test in browser at http://127.0.0.1:8000/
 
-## Step 6: Test in Browser
-
-1. Navigate to `http://127.0.0.1:8000/`
-2. Your app should appear in the sidebar
-3. Click it — the module pane loads your app's content
-4. Test all functionality: API calls, file operations, UI components
-
-## Step 7: Submit for Publication
-
-```bash
+# 6. Submit for public review
 scitex-app app submit .
 ```
 
-This creates a PR to the SciTeX app registry. After review + approval:
-- App appears in the public catalog
-- Users can install it from the Apps page
-- It gets its own sidebar tab when installed
+## Reference implementation
 
-## Reference Implementation
-
-Study figrecipe for a complete working example:
+Study `figrecipe` for a complete working example:
 
 ```
-~/proj/figrecipe/src/figrecipe/_django/          # Django patterns
+~/proj/figrecipe/src/figrecipe/_django/           # Django views + urls
 ~/proj/figrecipe/src/figrecipe/_django/frontend/  # React + bridge
-~/proj/figrecipe/src/figrecipe/_django/manifest.json  # Manifest example
+~/proj/figrecipe/src/figrecipe/_django/manifest.json
 ```
-
-## Common Patterns
-
-### Embedded vs Standalone
-
-```typescript
-// bridge-init.ts
-const isEmbedded = !!document.getElementById("workspace-content");
-if (isEmbedded) {
-  // Running inside scitex-cloud workspace
-  mountApp(document.getElementById("app-mount"));
-} else {
-  // Running standalone (scitex-app serve)
-  mountApp(document.getElementById("root"));
-}
-```
-
-### Panel Resize (scitex-ui)
-
-```typescript
-import { usePanelResize } from "scitex-ui/react/app";
-
-function MyEditor() {
-  const { leftWidth, rightWidth, resizerProps } = usePanelResize({
-    storageKey: "myapp-panel",
-    defaultLeftPercent: 30,
-  });
-  return (
-    <div style={{ display: "flex" }}>
-      <div style={{ width: leftWidth }}>Sidebar</div>
-      <div {...resizerProps} />
-      <div style={{ width: rightWidth }}>Main</div>
-    </div>
-  );
-}
-```
-
-### Bridge Events (cross-component communication)
-
-```typescript
-import { emitBridgeEvent, onBridgeEvent } from "scitex-ui";
-
-// Send
-emitBridgeEvent("myapp", "file-opened", { path: "/data/config.yaml" });
-
-// Listen
-onBridgeEvent("myapp", "file-opened", (detail) => {
-  console.log("Opened:", detail.path);
-});
-```
-
-# EOF
