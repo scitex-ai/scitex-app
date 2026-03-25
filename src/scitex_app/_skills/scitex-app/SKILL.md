@@ -1,5 +1,4 @@
 ---
-name: scitex-app
 description: App developer SDK — scaffold, validate, dev-install, standalone shell, file operations, and cloud SDK for building SciTeX workspace apps. Use when creating, testing, or deploying SciTeX apps.
 allowed-tools: mcp__scitex__app_*
 ---
