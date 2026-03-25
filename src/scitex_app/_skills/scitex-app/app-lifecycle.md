@@ -1,5 +1,4 @@
 ---
-name: app-lifecycle
 description: App scaffolding, validation, dev-install, and submission API. init_app(), validate(), AppValidator, ValidationResult, and the full end-to-end workflow.
 ---
 

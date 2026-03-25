@@ -1,5 +1,4 @@
 ---
-name: app-registration
 description: How a SciTeX app registers with the workspace sidebar — manifest.json to ModuleConfig to sidebar tab. Use when building apps that need to appear in the workspace.
 ---
 
