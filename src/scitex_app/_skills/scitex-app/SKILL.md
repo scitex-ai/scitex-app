@@ -16,6 +16,13 @@ Toolkit for building SciTeX workspace apps with scaffold, validation, standalone
 * [cli](cli.md) — `scitex-app` CLI: file commands, app commands, MCP, introspection
 * [environment-vars](environment-vars.md) — All environment variable configuration
 
+## References
+
+* [references/app-lifecycle](references/app-lifecycle.md) — End-to-end guide: scaffold → develop → validate → dev-install → test → submit. CLI commands with expected outputs, complete manifest schema, file structure.
+* [references/app-develop](references/app-develop.md) — Development patterns: views.py, urls.py, templates (AJAX partial), CSS scoping, React bridge setup.
+* [references/app-validate-install](references/app-validate-install.md) — Validate, dev-install, browser testing, environment variables, troubleshooting.
+* [references/app-registration](references/app-registration.md) — How apps register with the workspace sidebar: manifest.json → ModuleConfig → sidebar tab. Dev-install vs published paths, frontend integration points, troubleshooting.
+
 ## Quick Start
 
 ```bash
