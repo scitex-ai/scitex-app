@@ -2,11 +2,18 @@
 description: App-developer SDK for SciTeX workspace apps — write-once for local + cloud, zero-dep stdlib. Python API — `get_files(root)` (returns `FilesBackend` that auto-detects local vs cloud), `files.read / write / exists / delete / rename / copy / list`, `build_tree(files, max_depth=)`, `register_backend(name, factory)` (plug in S3/NAS), lazy submodules `chat`, `paths`, `validator`, and `scitex_app._standalone.run_standalone(app_module=, port=)` (run an app without the Django workspace shell). 11 MCP tools — project-file ops (`app_read_file`, `app_write_file`, `app_list_files`, `app_file_exists`, `app_delete_file`, `app_rename_file`, `app_copy_file`) + app-lifecycle (`app_scaffold`, `app_validate`) + skills meta (`skills_list`, `skills_get`). Further lifecycle steps — `dev-install`, `submit`, bump/version, slug/icon — live in the CLI (`scitex-app app dev-install / submit`) and Python appmaker internals, not as standalone MCP tools. Drop-in replacement for copy-pasting Django starter apps, hand-rolled `manifest.json`, per-app `startproject` scaffolds, and direct `pathlib`/`boto3` scattered through app code. Use whenever the user asks to "scaffold a SciTeX app", "init a new workspace app", "validate my app manifest", "dev-install this app" (→ CLI), "submit the app to the cloud" (→ CLI), "read/write files in an app with auto local/cloud backend", "register an S3 file backend", "run this app standalone without the shell", "build a file tree", or mentions `manifest.json`, `ModuleConfig`, workspace sidebar registration, scitex-app SDK.
 allowed-tools: mcp__scitex__app_*
 primary_interface: cli
+interfaces:
+  python: 2
+  cli: 3
+  mcp: 2
+  skills: 2
+  hook: 0
+  http: 0
 ---
 
 # scitex-app — App Developer SDK
 
-> **Primary interface: CLI.** Reach for `scitex-app scaffold` first. Python API + MCP wrap the same commands for scripting / agent use.
+> **Interfaces:** Python ⭐⭐ · CLI ⭐⭐⭐ (primary) · MCP ⭐⭐ · Skills ⭐⭐ · Hook — · HTTP —
 
 Toolkit for building SciTeX workspace apps with scaffold, validation,
 standalone mode, and cloud integration.
