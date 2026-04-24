@@ -27,6 +27,15 @@
 
 ---
 
+## Problem and Solution
+
+
+| # | Problem | Solution |
+|---|---------|----------|
+| 1 | **Every lab reinvents its Django "lab tools" webapp** -- three months of plumbing before the first domain feature ships | **App scaffold** -- `scitex-app init <name>` produces a working Django app with auth, file browser, session logging, routes, manifest |
+| 2 | **Apps don't compose** -- each lab's app is a snowflake; can't install B into A's workspace | **FilesBackend plugin registry** -- apps declare a `manifest.json`; `scitex-app dev-install` registers them into any SciTeX Cloud workspace |
+| 3 | **Local-vs-cloud storage fork** -- `pathlib` everywhere; cloud integration means rewriting every app | **Auto-backend `get_files(root)`** -- returns a FilesBackend that transparently uses local disk or cloud storage; same read/write API |
+
 ## Problem
 
 SciTeX apps (like FigRecipe, Writer, Stats) need to work in three environments: standalone local (`pip install`), cloud (scitex.ai), and self-hosted. Today, each environment requires different file I/O code — `pathlib` locally, HTTP REST calls on cloud. This means maintaining two codebases or tightly coupling apps to one deployment mode.

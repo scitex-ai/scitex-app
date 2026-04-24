@@ -1,5 +1,4 @@
 ---
-name: standalone
 description: run_standalone() — launch a SciTeX app locally with the full workspace shell (Django + sidebar + file tree + AI panel) without scitex-cloud.
 ---
 

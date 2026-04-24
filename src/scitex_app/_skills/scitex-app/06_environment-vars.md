@@ -1,5 +1,4 @@
 ---
-name: environment-vars
 description: All environment variables used by scitex-app — storage, cloud API, standalone Django, and LLM configuration.
 ---
 

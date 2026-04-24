@@ -1,5 +1,4 @@
 ---
-name: files-sdk
 description: Core file operations SDK — get_files(), FilesBackend protocol, FileSystemBackend, build_tree(). Write-once API for local and cloud storage.
 ---
 

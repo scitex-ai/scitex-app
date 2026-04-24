@@ -1,5 +1,4 @@
 ---
-name: backend-sdk
 description: Backend SDK reference — FilesBackend protocol, Django integration, manifest schema, app validation, path resolution
 ---
 

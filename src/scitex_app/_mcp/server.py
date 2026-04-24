@@ -21,7 +21,7 @@ def _json(obj):
 
 @mcp.tool()
 def app_read_file(path: str, root: str = ".", binary: bool = False) -> str:
-    """Read a file through the SDK backend.
+    """Read a file inside a SciTeX app project via the auto-detecting FilesBackend — same call works for local paths AND cloud-backed workspaces (S3 / NAS / registered custom backends). Drop-in replacement for raw `open(path).read()` or `boto3.get_object` scattered through app code. Use when the user asks to "read this app's config.yaml", "get the contents of path X in my app", "load a file through the SDK", or is writing app code that must work both locally and on the cloud. Set `binary=True` for base64-encoded binary content.
 
     Parameters
     ----------
@@ -45,7 +45,7 @@ def app_read_file(path: str, root: str = ".", binary: bool = False) -> str:
 
 @mcp.tool()
 def app_write_file(path: str, content: str, root: str = ".") -> str:
-    """Write content to a file through the SDK backend.
+    """Write content to a file inside a SciTeX app project via the auto-detecting FilesBackend — routes to local disk OR the active cloud backend automatically. Drop-in replacement for `open(path, 'w').write(...)` or `boto3.put_object`. Use when the user asks to "save this to my app", "write config.yaml in the app folder", "persist this result", or is producing outputs from app code that must work both locally and in the cloud workspace.
 
     Parameters
     ----------
@@ -69,7 +69,7 @@ def app_list_files(
     root: str = ".",
     extensions: list[str] | None = None,
 ) -> list[str]:
-    """List files in a directory through the SDK backend.
+    """List files inside a SciTeX app project through the FilesBackend — works on local directories AND cloud-backed workspaces. Drop-in replacement for `os.listdir` / `pathlib.Path.glob` / `s3.list_objects_v2`. Use when the user asks to "list files in my app", "show YAML configs", "what's in this app's data/ dir?", or before iterating over app inputs. Filter with `extensions=['.yaml', '.png']`.
 
     Parameters
     ----------
@@ -88,7 +88,7 @@ def app_list_files(
 
 @mcp.tool()
 def app_file_exists(path: str, root: str = ".") -> bool:
-    """Check if a file exists through the SDK backend.
+    """Check whether a file exists inside a SciTeX app project via the FilesBackend. Works identically for local and cloud backends. Drop-in replacement for `pathlib.Path.exists()` / `s3.head_object`. Use when the user asks "does this file exist in the app?", "has the app written its output yet?", "check for X before writing", or guards a read.
 
     Parameters
     ----------
@@ -105,7 +105,7 @@ def app_file_exists(path: str, root: str = ".") -> bool:
 
 @mcp.tool()
 def app_delete_file(path: str, root: str = ".") -> str:
-    """Delete a file through the SDK backend.
+    """Delete a file inside a SciTeX app project via the FilesBackend — local or cloud. Destructive. Drop-in replacement for `os.remove` / `pathlib.Path.unlink` / `s3.delete_object`. Use when the user asks to "delete this file from my app", "remove stale outputs", "clean up the app's temp/", or is tidying before a fresh run.
 
     Parameters
     ----------
@@ -123,7 +123,7 @@ def app_delete_file(path: str, root: str = ".") -> str:
 
 @mcp.tool()
 def app_copy_file(src_path: str, dest_path: str, root: str = ".") -> str:
-    """Copy a file through the SDK backend.
+    """Copy a file inside a SciTeX app project via the FilesBackend — local or cloud, including cross-backend copies (e.g. local → S3) if both are configured. Drop-in replacement for `shutil.copy` / `s3.copy_object`. Use when the user asks to "copy config.yaml to backup.yaml", "duplicate this input as a variant", "snapshot this file before editing", or is preparing a "known-good" baseline.
 
     Parameters
     ----------
@@ -143,7 +143,7 @@ def app_copy_file(src_path: str, dest_path: str, root: str = ".") -> str:
 
 @mcp.tool()
 def app_rename_file(old_path: str, new_path: str, root: str = ".") -> str:
-    """Rename/move a file through the SDK backend.
+    """Rename or move a file inside a SciTeX app project via the FilesBackend — atomic on local, best-effort on cloud backends. Drop-in replacement for `os.rename` / `pathlib.Path.rename`. Use when the user asks to "rename X to Y in my app", "move this file to a different folder", "fix a typo in a filename", or is reorganizing the app's data layout.
 
     Parameters
     ----------
@@ -176,7 +176,7 @@ def app_scaffold(
     frontend: str = "html",
     overwrite: bool = False,
 ) -> str:
-    """Scaffold a complete SciTeX app in a directory.
+    """Generate a brand-new SciTeX workspace app in a directory — full Django starter (manifest.json, urls.py, views.py, templates, CSS, static/, tests/) + optional React bridge. Auto-appends `_app` to the name. Drop-in replacement for `django-admin startapp` + hand-copying boilerplate + writing manifest.json by hand. Use whenever the user asks to "scaffold a SciTeX app", "init a new workspace app", "create a new app called X", "start a new scitex-app module", "make a React-frontend app", or is beginning a fresh workspace module. Set `frontend='react'` for React bridge, `icon='fas fa-chart-bar'` for a Font Awesome icon.
 
     Parameters
     ----------
@@ -232,7 +232,7 @@ def app_scaffold(
 
 @mcp.tool()
 def app_validate(app_dir: str = ".") -> str:
-    """Validate a SciTeX app for submission readiness.
+    """Audit a SciTeX app for cloud-submission readiness — checks `manifest.json` schema + fields, directory structure, CSS scoping (no global leaks), JS safety (no cross-app DOM access), bundle size limits, and required privileges. Drop-in replacement for running ad-hoc lint scripts before every submission. Use whenever the user asks to "validate my app", "is my app ready to submit?", "check the manifest", "audit CSS safety", or before `scitex-app app submit`. Returns a list of errors or an empty list on pass.
 
     Checks manifest, structure, CSS safety, JS safety, bundle size, privileges.
 
@@ -267,7 +267,7 @@ def app_validate(app_dir: str = ".") -> str:
 
 @mcp.tool()
 def skills_list() -> str:
-    """List available skill pages for scitex-app.
+    """Use when you need to see what detailed docs exist for scitex-app (SciTeX workspace app SDK, FilesBackend auto-detect local/cloud, app-lifecycle scaffold/validate/dev-install/submit, manifest.json, standalone mode).
 
     Examples
     --------
@@ -284,7 +284,7 @@ def skills_list() -> str:
 
 @mcp.tool()
 def skills_get(name: Optional[str] = None) -> str:
-    """Get a skill page for scitex-app. Without name, returns main SKILL.md.
+    """Use when you need to read a specific scitex-app skill page covering the workspace app SDK, FilesBackend (local/cloud auto-detect), app lifecycle (scaffold/validate/dev-install/submit), manifest.json, or standalone mode. Without name, returns main SKILL.md.
 
     Parameters
     ----------
