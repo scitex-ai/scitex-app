@@ -98,7 +98,24 @@ def app_validate(app_dir):
         raise SystemExit(1)
 
 
-@app.command("dev-install")
+@app.command(
+    "dev-install",
+    hidden=True,
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def app_dev_install_deprecated(ctx):
+    """(deprecated) Renamed to `install-dev`."""
+    click.echo(
+        "error: `scitex-app app dev-install` was renamed to "
+        "`scitex-app app install-dev`.\n"
+        "Re-run with: scitex-app app install-dev [...]",
+        err=True,
+    )
+    ctx.exit(2)
+
+
+@app.command("install-dev")
 @click.argument("app_dir", default=".", type=click.Path(exists=True))
 @click.option(
     "--server",
@@ -110,7 +127,7 @@ def app_validate(app_dir):
 @click.option("--token", "-t", envvar="SCITEX_API_TOKEN", help="JWT access token")
 @click.option("--owner", "-o", default=None, help="Gitea username (auto-detected)")
 @click.option("--repo", "-r", default=None, help="Gitea repo name (from manifest)")
-def app_dev_install(app_dir, server, token, owner, repo):
+def app_install_dev(app_dir, server, token, owner, repo):
     """Dev-install an app on SciTeX Cloud server.
 
     Validates locally, then calls the dev install API.

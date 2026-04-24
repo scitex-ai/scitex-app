@@ -120,13 +120,43 @@ else:
         elif ctx.invoked_subcommand is None:
             click.echo(ctx.get_help())
 
-    # -- File commands -------------------------------------------------------
-    @main.command()
+    # -- File commands (nested under `file` group per §1 tree form) ----------
+    @main.group("file")
+    def file_group():
+        """File operations through the SDK backend."""
+
+    def _deprecated_file_redirect(old: str, verb: str):
+        """old at top level → file <verb>."""
+
+        @click.pass_context
+        def _impl(ctx, **_):
+            click.echo(
+                f"error: `scitex-app {old}` was renamed to `scitex-app file {verb}`.\n"
+                f"Re-run with: scitex-app file {verb} <args>",
+                err=True,
+            )
+            ctx.exit(2)
+
+        return click.command(
+            old,
+            hidden=True,
+            context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+        )(_impl)
+
+    main.add_command(_deprecated_file_redirect("read", "read"))
+    main.add_command(_deprecated_file_redirect("write", "write"))
+    main.add_command(_deprecated_file_redirect("list", "list"))
+    main.add_command(_deprecated_file_redirect("exists", "exists"))
+    main.add_command(_deprecated_file_redirect("delete", "delete"))
+    main.add_command(_deprecated_file_redirect("rename", "rename"))
+    main.add_command(_deprecated_file_redirect("copy", "copy"))
+
+    @file_group.command("read")
     @click.argument("path")
     @click.option("--root", default=".", help="Root directory for file backend.")
     @click.option("--binary", is_flag=True, help="Read as binary.")
     @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
-    def read(path, root, binary, as_json):
+    def file_read(path, root, binary, as_json):
         """Read a file through the SDK backend.
 
         Examples:
@@ -150,7 +180,7 @@ else:
         else:
             click.echo(content)
 
-    @main.command()
+    @file_group.command("write")
     @click.argument("path")
     @click.argument("content", required=False, default=None)
     @click.option("--root", default=".", help="Root directory for file backend.")
@@ -161,7 +191,7 @@ else:
     @click.option(
         "--dry-run", is_flag=True, help="Show what would be written without writing."
     )
-    def write(path, content, root, from_stdin, as_json, dry_run):
+    def file_write(path, content, root, from_stdin, as_json, dry_run):
         """Write content to a file through the SDK backend.
 
         Examples:
@@ -198,12 +228,12 @@ else:
         else:
             click.echo(f"Written {len(content)} bytes to {path}")
 
-    @main.command("list")
+    @file_group.command("list")
     @click.argument("directory", default="")
     @click.option("--root", default=".", help="Root directory for file backend.")
     @click.option("--ext", multiple=True, help="Filter by extension (e.g., .yaml).")
     @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
-    def list_files(directory, root, ext, as_json):
+    def file_list(directory, root, ext, as_json):
         """List files in a directory through the SDK backend.
 
         Examples:
@@ -224,11 +254,11 @@ else:
             for p in result:
                 click.echo(p)
 
-    @main.command()
+    @file_group.command("exists")
     @click.argument("path")
     @click.option("--root", default=".", help="Root directory for file backend.")
     @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
-    def exists(path, root, as_json):
+    def file_exists(path, root, as_json):
         """Check if a file exists through the SDK backend.
 
         Examples:
@@ -247,14 +277,14 @@ else:
             click.echo("true" if result else "false")
         raise SystemExit(0 if result else 1)
 
-    @main.command()
+    @file_group.command("delete")
     @click.argument("path")
     @click.option("--root", default=".", help="Root directory for file backend.")
     @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
     @click.option(
         "--dry-run", is_flag=True, help="Show what would be deleted without deleting."
     )
-    def delete(path, root, as_json, dry_run):
+    def file_delete(path, root, as_json, dry_run):
         """Delete a file through the SDK backend.
 
         Examples:
@@ -280,7 +310,7 @@ else:
         else:
             click.echo(f"Deleted {path}")
 
-    @main.command()
+    @file_group.command("rename")
     @click.argument("old_path")
     @click.argument("new_path")
     @click.option("--root", default=".", help="Root directory for file backend.")
@@ -288,7 +318,7 @@ else:
     @click.option(
         "--dry-run", is_flag=True, help="Show what would be renamed without renaming."
     )
-    def rename(old_path, new_path, root, as_json, dry_run):
+    def file_rename(old_path, new_path, root, as_json, dry_run):
         """Rename/move a file through the SDK backend.
 
         Examples:
@@ -323,7 +353,7 @@ else:
         else:
             click.echo(f"Renamed {old_path} -> {new_path}")
 
-    @main.command()
+    @file_group.command("copy")
     @click.argument("src_path")
     @click.argument("dest_path")
     @click.option("--root", default=".", help="Root directory for file backend.")
@@ -331,7 +361,7 @@ else:
     @click.option(
         "--dry-run", is_flag=True, help="Show what would be copied without copying."
     )
-    def copy(src_path, dest_path, root, as_json, dry_run):
+    def file_copy(src_path, dest_path, root, as_json, dry_run):
         """Copy a file through the SDK backend.
 
         Examples:

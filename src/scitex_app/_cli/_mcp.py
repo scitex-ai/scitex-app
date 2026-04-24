@@ -108,8 +108,25 @@ def start_server() -> None:
     mcp_server.run()
 
 
-@mcp.command("installation")
-def installation() -> None:
+@mcp.command(
+    "installation",
+    hidden=True,
+    context_settings={"ignore_unknown_options": True},
+)
+@click.pass_context
+def installation_deprecated(ctx) -> None:
+    """(deprecated) Renamed to `show-installation`."""
+    click.echo(
+        "error: `scitex-app mcp installation` was renamed to "
+        "`scitex-app mcp show-installation`.\n"
+        "Re-run with: scitex-app mcp show-installation",
+        err=True,
+    )
+    ctx.exit(2)
+
+
+@mcp.command("show-installation")
+def show_installation() -> None:
     """Show installation instructions for MCP server integration."""
     click.echo("Install scitex-app with MCP support:")
     click.echo()
