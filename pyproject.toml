@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "scitex-app"
-version = "0.2.4"
+version = "0.2.5"
 description = "SciTeX App SDK — write-once interface for local + cloud apps"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -67,6 +67,9 @@ scitex-app = "scitex_app"
 Homepage = "https://github.com/ywatanabe1989/scitex-app"
 Repository = "https://github.com/ywatanabe1989/scitex-app"
 Documentation = "https://scitex-app.readthedocs.io/"
+
+[project.entry-points."scitex_dev.skills"]
+scitex-app = "scitex_app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/scitex_app"]
