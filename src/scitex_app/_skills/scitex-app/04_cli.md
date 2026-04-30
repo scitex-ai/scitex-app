@@ -1,5 +1,7 @@
 ---
 description: scitex-app CLI — file operations, app lifecycle (init/validate/dev-install/submit), MCP server, and Python API introspection.
+name: cli
+tags: [scitex-app, scitex-package]
 ---
 
 # CLI Reference
