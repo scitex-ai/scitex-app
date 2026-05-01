@@ -107,7 +107,7 @@ files.rename("old.txt", "new.txt")    # rename/move
 files.copy("src.txt", "dst.txt")      # copy file
 ```
 
-> **[Full API reference](https://scitex-app.readthedocs.io/)**
+> **[Full API reference](https://scitex-app.readthedocs.io/en/latest/api/scitex_app.html)**
 
 </details>
 
@@ -131,7 +131,7 @@ scitex-app mcp list-tools                # List MCP tools
 
 All file commands support `--json` output. Destructive commands support `--dry-run`.
 
-> **[Full CLI reference](https://scitex-app.readthedocs.io/)**
+> **[Full CLI reference](https://scitex-app.readthedocs.io/en/latest/quickstart.html)**
 
 </details>
 
@@ -158,7 +158,7 @@ AI agents can read, write, and manage files through the unified SDK.
 scitex-app mcp start
 ```
 
-> **[Full MCP specification](https://scitex-app.readthedocs.io/)**
+> **[Full MCP specification](https://scitex-app.readthedocs.io/en/latest/api/scitex_app._mcp.html)**
 
 </details>
 
