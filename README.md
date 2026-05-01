@@ -17,6 +17,12 @@
 <!-- scitex-badges:end -->
 
 <p align="center">
+  <a href="https://scitex.ai">
+    <img src="docs/scitex-logo-blue-cropped.png" alt="SciTeX" width="400">
+  </a>
+</p>
+
+<p align="center">
   <a href="https://scitex-app.readthedocs.io/">Full Documentation</a> · <code>pip install scitex-app</code>
 </p>
 
