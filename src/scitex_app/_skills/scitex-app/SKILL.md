@@ -58,6 +58,8 @@ rule and empirical verification table.
 - [11_app-registration](11_app-registration.md) — Workspace sidebar registration via manifest.json → ModuleConfig.
 - [12_app-develop](12_app-develop.md) — Development patterns: views, urls, templates, CSS scoping, React bridge.
 - [13_app-validate-install](13_app-validate-install.md) — Validate, dev-install, browser testing, troubleshooting.
+- [14_app-lifecycle-deploy](14_app-lifecycle-deploy.md) — Lifecycle Steps 3-6 (validate/dev-install/test/submit) + figrecipe reference (split from 10 for SK401).
+- [15_manifest-schema](15_manifest-schema.md) — Complete manifest.json schema reference (split from 10 for SK401).
 
 ## Quick Start
 

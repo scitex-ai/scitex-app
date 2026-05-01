@@ -26,7 +26,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install pytest pytest-cov pytest-timeout
-          pip install -e ".[dev]" || pip install -e .
+          pip install -e ".[dev,cli]" || pip install -e ".[dev]" || pip install -e .
       - name: Detect import name
         id: pkg
         run: |
