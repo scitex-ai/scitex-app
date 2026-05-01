@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-# Timestamp: 2026-03-13
-# File: tests/test__sdk.py
+# -*- coding: utf-8 -*-
+"""Integration tests for scitex_app.sdk's backend-registry surface.
 
-"""Tests for SDK entry point (get_files, register_backend)."""
+Exercises the public entry points exposed by `scitex_app.sdk.__init__`
+(``get_files``, ``register_backend``, the ``_registry`` dict, and the
+``SCITEX_API_TOKEN`` cloud auto-detection path). Lives under
+`tests/custom/` because it crosses three modules (`__init__`,
+`_filesystem`, `_cloud_files`) and the registry has no single src
+counterpart — `__init__.py` is not a per-file mirror target under
+audit-project §2.
+"""
 
+from __future__ import annotations
 
 import pytest
 

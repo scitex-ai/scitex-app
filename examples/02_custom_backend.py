@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Registering and using a custom backend.
 
 Defines a minimal in-memory backend, registers it via ``register_backend``,
@@ -8,12 +9,9 @@ Usage:
     python 02_custom_backend.py
 """
 
-import logging
+import scitex as stx
 
 from scitex_app.sdk import get_files, register_backend
-
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger(__name__)
 
 
 class InMemoryBackend:
@@ -61,7 +59,12 @@ class InMemoryBackend:
         self._store[dest_path] = self._store[src_path]
 
 
-def main() -> int:
+@stx.session
+def main(
+    CONFIG=stx.session.INJECTED,
+    logger=stx.session.INJECTED,
+):
+    """Register an in-memory backend and round-trip through the SDK."""
     # Register the custom backend
     register_backend("memory", InMemoryBackend)
 
