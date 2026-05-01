@@ -16,32 +16,13 @@
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 <!-- scitex-badges:end -->
 
-
-<p align="center">
-  <a href="https://scitex.ai">
-    <img src="docs/scitex-logo-blue-cropped.png" alt="SciTeX" width="400">
-  </a>
-</p>
-
-<p align="center"><b>Write-once interface for local + cloud SciTeX apps</b></p>
-
-<p align="center">
-  <a href="https://badge.fury.io/py/scitex-app"><img src="https://badge.fury.io/py/scitex-app.svg" alt="PyPI version"></a>
-  <a href="https://scitex-app.readthedocs.io/"><img src="https://readthedocs.org/projects/scitex-app/badge/?version=latest" alt="Documentation"></a>
-  <a href="https://github.com/ywatanabe1989/scitex-app/actions/workflows/test.yml"><img src="https://github.com/ywatanabe1989/scitex-app/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
-  <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
-</p>
-
 <p align="center">
   <a href="https://scitex-app.readthedocs.io/">Full Documentation</a> · <code>pip install scitex-app</code>
 </p>
 
 ---
 
-> **Interfaces:** Python ⭐⭐ · CLI ⭐⭐⭐ (primary) · MCP ⭐⭐ · Skills ⭐⭐ · Hook — · HTTP —
-
 ## Problem and Solution
-
 
 | # | Problem | Solution |
 |---|---------|----------|
@@ -49,13 +30,7 @@
 | 2 | **Apps don't compose** -- each lab's app is a snowflake; can't install B into A's workspace | **FilesBackend plugin registry** -- apps declare a `manifest.json`; `scitex-app dev-install` registers them into any SciTeX Cloud workspace |
 | 3 | **Local-vs-cloud storage fork** -- `pathlib` everywhere; cloud integration means rewriting every app | **Auto-backend `get_files(root)`** -- returns a FilesBackend that transparently uses local disk or cloud storage; same read/write API |
 
-## Problem
-
-SciTeX apps (like FigRecipe, Writer, Stats) need to work in three environments: standalone local (`pip install`), cloud (scitex.ai), and self-hosted. Today, each environment requires different file I/O code — `pathlib` locally, HTTP REST calls on cloud. This means maintaining two codebases or tightly coupling apps to one deployment mode.
-
-## Solution
-
-SciTeX App provides a **unified file storage SDK** with a single `FilesBackend` protocol. Apps call `get_files()` and get back a backend that works identically regardless of environment. Write your app once — it runs everywhere.
+## Backends and Operations
 
 | Environment | Backend | How it works |
 |-------------|---------|--------------|
@@ -64,8 +39,6 @@ SciTeX App provides a **unified file storage SDK** with a single `FilesBackend` 
 | **Custom** | `register_backend()` | S3, GCS, or any storage you need |
 
 <p align="center"><sub><b>Table 1.</b> Three deployment modes. The SDK auto-detects cloud when <code>SCITEX_API_TOKEN</code> is set; otherwise defaults to local filesystem.</sub></p>
-
-### Seven Operations
 
 Every backend implements the same 7-method protocol:
 
