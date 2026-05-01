@@ -62,8 +62,6 @@ Requires Python >= 3.10. **Zero dependencies** — pure stdlib.
 pip install scitex-app
 ```
 
-> **SciTeX users**: `pip install scitex` already includes App SDK. Access via `scitex.app`.
-
 ## Quickstart
 
 ```python
@@ -212,7 +210,9 @@ scitex (orchestrator, core compute, CLI, MCP)
 
 ## Part of SciTeX
 
-App SDK is part of [**SciTeX**](https://scitex.ai). When used inside the SciTeX framework, the SDK is available via `scitex.app`:
+`scitex-app` is part of [**SciTeX**](https://scitex.ai). Install via
+the umbrella with `pip install scitex[app]` to use as
+`scitex.app` (Python) or `scitex app ...` (CLI).
 
 ```python
 import scitex
