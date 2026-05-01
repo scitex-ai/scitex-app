@@ -89,7 +89,7 @@ cloud_files = get_files()  # routes through cloud REST API
 
 ## Three Interfaces
 
-<details>
+<details open>
 <summary><strong>Python API</strong></summary>
 
 <br>
