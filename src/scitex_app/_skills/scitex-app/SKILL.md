@@ -51,6 +51,7 @@ rule and empirical verification table.
 - [04_cli](04_cli.md)
 - [05_standalone](05_standalone.md)
 - [06_environment-vars](06_environment-vars.md)
+- [07_backend-validation](07_backend-validation.md) — App validation pipeline + minimal-app checklist (split from 02_backend-sdk for SK401)
 
 ### Workflows / references
 - [10_app-lifecycle](10_app-lifecycle.md) — End-to-end: scaffold → develop → validate → dev-install → test → submit.
