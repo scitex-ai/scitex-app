@@ -31,7 +31,13 @@ def app():
     help="Frontend type: html (default) or react",
 )
 @click.option("--overwrite", is_flag=True, help="Overwrite existing files")
-def app_init(target_dir, name, label, icon, description, frontend, overwrite):
+@click.option("--dry-run", is_flag=True, help="Print plan without writing files.")
+@click.option(
+    "-y", "--yes", is_flag=True, help="Suppress interactive confirmation (assume yes)."
+)
+def app_init(
+    target_dir, name, label, icon, description, frontend, overwrite, dry_run, yes
+):
     """Scaffold a complete SciTeX app in a directory.
 
     \b
@@ -39,7 +45,14 @@ def app_init(target_dir, name, label, icon, description, frontend, overwrite):
         scitex-app app init .
         scitex-app app init /path/to/my_app --name my_awesome_app
         scitex-app app init . -n demo_app -l "Demo" -i "fas fa-flask"
+        scitex-app app init . --dry-run
     """
+    if dry_run:
+        click.echo(
+            f"DRY RUN — would scaffold app at {Path(target_dir).resolve()} "
+            f"(name={name or '(auto)'}, frontend={frontend}, overwrite={overwrite})"
+        )
+        return
     from scitex_app.appmaker import init_app
 
     target = Path(target_dir).resolve()
@@ -127,7 +140,13 @@ def app_dev_install_deprecated(ctx):
 @click.option("--token", "-t", envvar="SCITEX_API_TOKEN", help="JWT access token")
 @click.option("--owner", "-o", default=None, help="Gitea username (auto-detected)")
 @click.option("--repo", "-r", default=None, help="Gitea repo name (from manifest)")
-def app_install_dev(app_dir, server, token, owner, repo):
+@click.option(
+    "--dry-run", is_flag=True, help="Print install plan without contacting server."
+)
+@click.option(
+    "-y", "--yes", is_flag=True, help="Suppress interactive confirmation (assume yes)."
+)
+def app_install_dev(app_dir, server, token, owner, repo, dry_run, yes):
     """Dev-install an app on SciTeX Cloud server.
 
     Validates locally, then calls the dev install API.
@@ -135,9 +154,15 @@ def app_install_dev(app_dir, server, token, owner, repo):
 
     \b
     Examples:
-        scitex-app app dev-install .
-        scitex-app app dev-install . --server http://my-server:8000
+        scitex-app app install-dev .
+        scitex-app app install-dev . --server http://my-server:8000
+        scitex-app app install-dev . --dry-run
     """
+    if dry_run:
+        click.echo(
+            f"DRY RUN — would dev-install app at {Path(app_dir).resolve()} to {server}"
+        )
+        return
     if not token:
         console.print(
             "[red]Error:[/red] No API token. Set SCITEX_API_TOKEN or use --token."
