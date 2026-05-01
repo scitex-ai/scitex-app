@@ -15,8 +15,6 @@ tags: [scitex-app, scitex-package]
 
 # scitex-app — App Developer SDK
 
-> **Interfaces:** Python ⭐⭐ · CLI ⭐⭐⭐ (primary) · MCP ⭐⭐ · Skills ⭐⭐ · Hook — · HTTP —
-
 Toolkit for building SciTeX workspace apps with scaffold, validation,
 standalone mode, and cloud integration.
 
@@ -35,12 +33,9 @@ import scitex.app
 scitex.app.get_files(...)
 ```
 
-`pip install scitex-app` alone does NOT expose the `scitex` namespace;
-`import scitex.app` raises `ModuleNotFoundError`. To use the
-`scitex.app` form, also `pip install scitex`.
-
-See [../../general/02_interface-python-api.md] for the ecosystem-wide
-rule and empirical verification table.
+`pip install scitex-app` alone does NOT expose `scitex.app` — also
+`pip install scitex` for the umbrella form. See
+[../../general/02_interface-python-api.md] for the ecosystem-wide rule.
 
 ## Leaves
 
@@ -51,15 +46,17 @@ rule and empirical verification table.
 - [04_cli](04_cli.md)
 - [05_standalone](05_standalone.md)
 - [06_environment-vars](06_environment-vars.md)
-- [07_backend-validation](07_backend-validation.md) — App validation pipeline + minimal-app checklist (split from 02_backend-sdk for SK401)
-
+- [07_backend-validation](07_backend-validation.md) — App validation pipeline + minimal-app checklist
 ### Workflows / references
 - [10_app-lifecycle](10_app-lifecycle.md) — End-to-end: scaffold → develop → validate → dev-install → test → submit.
 - [11_app-registration](11_app-registration.md) — Workspace sidebar registration via manifest.json → ModuleConfig.
 - [12_app-develop](12_app-develop.md) — Development patterns: views, urls, templates, CSS scoping, React bridge.
 - [13_app-validate-install](13_app-validate-install.md) — Validate, dev-install, browser testing, troubleshooting.
-- [14_app-lifecycle-deploy](14_app-lifecycle-deploy.md) — Lifecycle Steps 3-6 (validate/dev-install/test/submit) + figrecipe reference (split from 10 for SK401).
-- [15_manifest-schema](15_manifest-schema.md) — Complete manifest.json schema reference (split from 10 for SK401).
+- [14_app-lifecycle-deploy](14_app-lifecycle-deploy.md) — Lifecycle Steps 3-6 (validate/dev-install/test/submit) + figrecipe reference.
+- [15_manifest-schema](15_manifest-schema.md) — Complete manifest.json schema reference.
+- [16_app-registration-internals](16_app-registration-internals.md) — Sidebar render, partial load, entry points, source files, troubleshooting.
+- [17_app-develop-frontend](17_app-develop-frontend.md) — CSS scoping, React frontend, Files SDK in views.
+- [18_app-test-troubleshoot](18_app-test-troubleshoot.md) — Browser testing, standalone mode, troubleshooting catalogue, env vars.
 
 ## Quick Start
 
@@ -69,13 +66,4 @@ scitex-app app validate .
 scitex-app app dev-install . --server http://127.0.0.1:8000
 ```
 
-```python
-from scitex_app.sdk import get_files, build_tree
-from scitex_app._standalone import run_standalone
-
-files = get_files("./my_project")
-content = files.read("config/settings.yaml")
-files.write("output/result.csv", csv_text)
-tree = build_tree(files, max_depth=2)
-run_standalone(app_module="my_app", port=8050)
-```
+Python API examples live in [01_files-sdk.md](01_files-sdk.md).
