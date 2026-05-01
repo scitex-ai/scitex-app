@@ -265,46 +265,68 @@ def app_validate(app_dir: str = ".") -> str:
 # =============================================================================
 
 
+# §5 — skills introspection tools (per audit-mcp-tools convention)
 @mcp.tool()
-def skills_list() -> str:
-    """Use when you need to see what detailed docs exist for scitex-app (SciTeX workspace app SDK, FilesBackend auto-detect local/cloud, app-lifecycle scaffold/validate/dev-install/submit, manifest.json, standalone mode).
+def app_skills_list() -> str:
+    """List the names of every skill page shipped by scitex-app.
 
-    Examples
-    --------
-    CLI equivalent: scitex-app skills list
+    Returns
+    -------
+        JSON string with `{"success": true, "package": "scitex-app",
+        "skills": ["01_files-sdk", "02_backend-sdk", ...]}`.
     """
     try:
-        from scitex_dev.skills import list_skills
+        from pathlib import Path
 
-        result = list_skills(package="scitex-app")
-        return _json({"success": True, "skills": result.get("scitex-app", [])})
-    except ImportError:
-        return _json({"success": False, "error": "scitex-dev not installed"})
+        skills_dir = Path(__file__).parent.parent / "_skills" / "scitex-app"
+        names = sorted(p.stem for p in skills_dir.glob("*.md") if p.name != "SKILL.md")
+        return _json_mod.dumps(
+            {"success": True, "package": "scitex-app", "skills": names},
+            indent=2,
+        )
+    except Exception as e:
+        return _json_mod.dumps({"success": False, "error": str(e)}, indent=2)
 
 
 @mcp.tool()
-def skills_get(name: Optional[str] = None) -> str:
-    """Use when you need to read a specific scitex-app skill page covering the workspace app SDK, FilesBackend (local/cloud auto-detect), app lifecycle (scaffold/validate/dev-install/submit), manifest.json, or standalone mode. Without name, returns main SKILL.md.
+def app_skills_get(name: str) -> str:
+    """Fetch the full Markdown content of one scitex-app skill page.
 
-    Parameters
-    ----------
-    name : str, optional
-        Reference name (e.g., 'backend-sdk'). If None, returns SKILL.md.
+    Args:
+        name: Skill page name without `.md`, e.g. `01_files-sdk`.
 
-    Examples
-    --------
-    CLI equivalent: scitex-app skills get backend-sdk
+    Returns
+    -------
+        JSON string with `{"success": true, "package": "scitex-app",
+        "name": <name>, "content": <markdown>}`, or an error envelope.
     """
     try:
-        from scitex_dev.skills import get_skill
+        from pathlib import Path
 
-        content = get_skill(package="scitex-app", name=name)
-        if content:
-            return _json({"success": True, "name": name, "content": content})
-        target = f"'{name}'" if name else "SKILL.md"
-        return _json({"success": False, "error": f"Skill {target} not found"})
-    except ImportError:
-        return _json({"success": False, "error": "scitex-dev not installed"})
+        skills_dir = Path(__file__).parent.parent / "_skills" / "scitex-app"
+        target = skills_dir / f"{name}.md"
+        if not target.exists():
+            available = sorted(
+                p.stem for p in skills_dir.glob("*.md") if p.name != "SKILL.md"
+            )
+            return _json_mod.dumps(
+                {
+                    "success": False,
+                    "error": f"unknown skill {name!r}; available: {available}",
+                },
+                indent=2,
+            )
+        return _json_mod.dumps(
+            {
+                "success": True,
+                "package": "scitex-app",
+                "name": name,
+                "content": target.read_text(encoding="utf-8"),
+            },
+            indent=2,
+        )
+    except Exception as e:
+        return _json_mod.dumps({"success": False, "error": str(e)}, indent=2)
 
 
 # EOF

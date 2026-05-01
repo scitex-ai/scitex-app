@@ -1,10 +1,19 @@
 #!/bin/bash
-# Timestamp: 2026-03-13
-# File: examples/00_run_all.sh
+# File: ./examples/00_run_all.sh
+# Run all scitex-app examples in sequence.
 
-set -euo pipefail
+set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_PATH="$THIS_DIR/$(basename "$0").log"
+echo >"$LOG_PATH"
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+log() { echo -e "$1" | tee -a "$LOG_PATH"; }
 
 usage() {
     cat <<EOF
@@ -24,14 +33,47 @@ case "${1:-}" in
     ;;
 esac
 
-echo "=== Running all scitex-app examples ==="
-echo
+main() {
+    cd "$THIS_DIR"
 
-for script in "$SCRIPT_DIR"/[0-9][0-9]_*.py; do
-    [ -f "$script" ] || continue
-    echo "--- Running: $(basename "$script") ---"
-    python "$script"
-    echo
-done
+    log "========================================"
+    log "scitex-app Examples Runner"
+    log "========================================"
+    log ""
 
-echo "=== All examples completed ==="
+    # Find all numbered .py files
+    local -a SCRIPTS
+    mapfile -t SCRIPTS < <(find . -maxdepth 1 -name '[0-9][0-9]_*.py' | sort)
+    local TOTAL=${#SCRIPTS[@]}
+    local COUNT=0
+    local PASSED=0
+    local FAILED=0
+
+    for script in "${SCRIPTS[@]}"; do
+        local name
+        name=$(basename "$script")
+
+        COUNT=$((COUNT + 1))
+        log ""
+        log "[$COUNT/$TOTAL] Running $name..."
+
+        if python "$name" >>"$LOG_PATH" 2>&1; then
+            log "${GREEN}[PASS]${NC} $name"
+            PASSED=$((PASSED + 1))
+        else
+            log "${RED}[FAIL]${NC} $name (see $LOG_PATH)"
+            FAILED=$((FAILED + 1))
+        fi
+    done
+
+    log ""
+    log "========================================"
+    log "Results: $PASSED passed, $FAILED failed"
+    log "========================================"
+    log ""
+    log "Log: $LOG_PATH"
+}
+
+main "$@"
+
+# EOF

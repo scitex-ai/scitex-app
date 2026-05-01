@@ -1,52 +1,65 @@
 #!/usr/bin/env python3
-# Timestamp: 2026-03-13
-# File: examples/01_basic_file_operations.py
+# -*- coding: utf-8 -*-
+"""Basic file operations with the App SDK.
 
-"""Basic file operations with the App SDK."""
+Covers write/list/read/exists/copy/rename/delete against the default
+filesystem backend, scoped to the session's auto-managed SDIR_RUN.
 
-import tempfile
+Usage:
+    python 01_basic_file_operations.py
+"""
+
 from pathlib import Path
+
+import scitex as stx
 
 from scitex_app.sdk import get_files
 
 
-def main():
-    # Create a temporary project directory
-    with tempfile.TemporaryDirectory() as tmpdir:
-        files = get_files(tmpdir)
-        print(f"Backend: {files}")
+@stx.session
+def main(
+    CONFIG=stx.session.INJECTED,
+    logger=stx.session.INJECTED,
+):
+    """Exercise every FilesBackend method against a session-managed dir."""
+    project_dir = Path(CONFIG.SDIR_RUN) / "project"
+    project_dir.mkdir(parents=True, exist_ok=True)
 
-        # Write files
-        files.write("data/config.yaml", "key: value\ncount: 42\n")
-        files.write("data/notes.txt", "Research notes here.")
-        files.write("output/result.csv", "x,y\n1,2\n3,4\n")
-        print("Written 3 files")
+    files = get_files(project_dir)
+    logger.info(f"Backend: {files}")
 
-        # List files
-        all_files = files.list("data")
-        print(f"Files in data/: {all_files}")
+    # Write files
+    files.write("data/config.yaml", "key: value\ncount: 42\n")
+    files.write("data/notes.txt", "Research notes here.")
+    files.write("output/result.csv", "x,y\n1,2\n3,4\n")
+    logger.info("Written 3 files")
 
-        yaml_files = files.list("data", extensions=[".yaml"])
-        print(f"YAML files: {yaml_files}")
+    # List files
+    all_files = files.list("data")
+    logger.info(f"Files in data/: {all_files}")
 
-        # Read file
-        content = files.read("data/config.yaml")
-        print(f"Config content:\n{content}")
+    yaml_files = files.list("data", extensions=[".yaml"])
+    logger.info(f"YAML files: {yaml_files}")
 
-        # Check existence
-        print(f"config.yaml exists: {files.exists('data/config.yaml')}")
-        print(f"missing.txt exists: {files.exists('missing.txt')}")
+    # Read file
+    content = files.read("data/config.yaml")
+    logger.info(f"Config content:\n{content}")
 
-        # Copy and rename
-        files.copy("data/config.yaml", "data/config_backup.yaml")
-        files.rename("data/notes.txt", "data/research_notes.txt")
-        print(f"After copy+rename: {files.list('data')}")
+    # Check existence
+    logger.info(f"config.yaml exists: {files.exists('data/config.yaml')}")
+    logger.info(f"missing.txt exists: {files.exists('missing.txt')}")
 
-        # Delete
-        files.delete("data/config_backup.yaml")
-        print(f"After delete: {files.list('data')}")
+    # Copy and rename
+    files.copy("data/config.yaml", "data/config_backup.yaml")
+    files.rename("data/notes.txt", "data/research_notes.txt")
+    logger.info(f"After copy+rename: {files.list('data')}")
 
-    print("\nDone!")
+    # Delete
+    files.delete("data/config_backup.yaml")
+    logger.info(f"After delete: {files.list('data')}")
+
+    logger.info("\nDone!")
+    return 0
 
 
 if __name__ == "__main__":

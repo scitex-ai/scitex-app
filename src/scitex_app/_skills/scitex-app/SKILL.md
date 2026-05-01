@@ -9,6 +9,8 @@ interfaces:
   skills: 2
   hook: 0
   http: 0
+name: scitex-app
+tags: [scitex-app, scitex-package]
 ---
 
 # scitex-app — App Developer SDK
@@ -74,5 +76,3 @@ files.write("output/result.csv", csv_text)
 tree = build_tree(files, max_depth=2)
 run_standalone(app_module="my_app", port=8050)
 ```
-
-<!-- EOF -->

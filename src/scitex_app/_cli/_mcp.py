@@ -51,6 +51,12 @@ def list_tools(verbose: int, as_json: bool) -> None:
       -v      Full signatures
       -vv     Signatures + first line of description
       -vvv    Signatures + full description
+
+    \b
+    Example:
+      $ scitex-app mcp list-tools
+      $ scitex-app mcp list-tools -vv
+      $ scitex-app mcp list-tools --json
     """
     try:
         from .._mcp.server import mcp as mcp_server
@@ -94,8 +100,21 @@ def list_tools(verbose: int, as_json: bool) -> None:
 
 
 @mcp.command("start")
-def start_server() -> None:
-    """Start the scitex-app MCP server."""
+@click.option("--dry-run", is_flag=True, help="Print launch plan without starting.")
+@click.option(
+    "-y", "--yes", is_flag=True, help="Suppress interactive confirmation (assume yes)."
+)
+def start_server(dry_run: bool, yes: bool) -> None:
+    """Start the scitex-app MCP server.
+
+    \b
+    Example:
+      $ scitex-app mcp start
+      $ scitex-app mcp start --dry-run
+    """
+    if dry_run:
+        click.echo("DRY RUN — would start scitex-app MCP server (stdio transport)")
+        return
     try:
         from .._mcp.server import mcp as mcp_server
     except ImportError as e:
@@ -126,22 +145,47 @@ def installation_deprecated(ctx) -> None:
 
 
 @mcp.command("show-installation")
-def show_installation() -> None:
-    """Show installation instructions for MCP server integration."""
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+def show_installation(as_json: bool) -> None:
+    """Show installation instructions for MCP server integration.
+
+    \b
+    Example:
+      $ scitex-app mcp show-installation
+      $ scitex-app mcp show-installation --json
+    """
+    config = {
+        "mcpServers": {
+            "scitex-app": {
+                "command": "scitex-app",
+                "args": ["mcp", "start"],
+            }
+        }
+    }
+    if as_json:
+        import json as _json
+
+        click.echo(
+            _json.dumps(
+                {
+                    "success": True,
+                    "install_command": "pip install scitex-app[mcp]",
+                    "config": config,
+                },
+                indent=2,
+            )
+        )
+        return
     click.echo("Install scitex-app with MCP support:")
     click.echo()
     click.echo("  pip install scitex-app[mcp]")
     click.echo()
     click.echo("Add to your MCP client configuration:")
     click.echo()
-    click.echo("  {")
-    click.echo('    "mcpServers": {')
-    click.echo('      "scitex-app": {')
-    click.echo('        "command": "scitex-app",')
-    click.echo('        "args": ["mcp", "start"]')
-    click.echo("      }")
-    click.echo("    }")
-    click.echo("  }")
+    import json as _json
+
+    for line in _json.dumps(config, indent=2).split("\n"):
+        click.echo(f"  {line}")
     click.echo()
     click.echo("Verify with:")
     click.echo("  scitex-app mcp doctor")
@@ -150,7 +194,12 @@ def show_installation() -> None:
 
 @mcp.command("doctor")
 def doctor() -> None:
-    """Check MCP server dependencies and configuration."""
+    """Check MCP server dependencies and configuration.
+
+    \b
+    Example:
+      $ scitex-app mcp doctor
+    """
     click.echo("Checking MCP dependencies...")
 
     try:

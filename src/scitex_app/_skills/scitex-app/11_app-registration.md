@@ -1,5 +1,7 @@
 ---
 description: How a SciTeX app registers with the workspace sidebar — manifest.json to ModuleConfig to sidebar tab. Covers dev-install path, published app path, ModuleConfig fields, frontend integration points, and troubleshooting.
+name: app-registration
+tags: [scitex-app, scitex-package]
 ---
 
 # App Registration — How Apps Appear in the Workspace

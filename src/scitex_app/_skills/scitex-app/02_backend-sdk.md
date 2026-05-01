@@ -1,5 +1,7 @@
 ---
 description: Backend SDK reference — FilesBackend protocol, Django integration, manifest schema, app validation, path resolution
+name: backend-sdk
+tags: [scitex-app, scitex-package]
 ---
 
 #!/usr/bin/env python3

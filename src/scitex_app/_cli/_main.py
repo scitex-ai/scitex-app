@@ -111,9 +111,22 @@ else:
     @click.option(
         "--help-recursive", is_flag=True, help="Show help for all subcommands."
     )
+    @click.option(
+        "--json",
+        "as_json",
+        is_flag=True,
+        help="Emit structured JSON output (propagates to subcommands that honour it).",
+    )
     @click.pass_context
-    def main(ctx, help_recursive):
-        """SciTeX App SDK — write-once interface for local + cloud apps."""
+    def main(ctx, help_recursive, as_json):
+        """SciTeX App SDK — write-once interface for local + cloud apps.
+
+        \b
+        Config is loaded with the SciTeX precedence chain:
+          config.yaml -> $SCITEX_APP_CONFIG -> ~/.scitex/app/config.yaml -> defaults
+        """
+        ctx.ensure_object(dict)
+        ctx.obj["as_json"] = as_json
         if help_recursive:
             _show_recursive_help(ctx)
             ctx.exit(0)
@@ -191,7 +204,13 @@ else:
     @click.option(
         "--dry-run", is_flag=True, help="Show what would be written without writing."
     )
-    def file_write(path, content, root, from_stdin, as_json, dry_run):
+    @click.option(
+        "-y",
+        "--yes",
+        is_flag=True,
+        help="Suppress interactive confirmation (assume yes).",
+    )
+    def file_write(path, content, root, from_stdin, as_json, dry_run, yes):
         """Write content to a file through the SDK backend.
 
         Examples:
@@ -284,7 +303,13 @@ else:
     @click.option(
         "--dry-run", is_flag=True, help="Show what would be deleted without deleting."
     )
-    def file_delete(path, root, as_json, dry_run):
+    @click.option(
+        "-y",
+        "--yes",
+        is_flag=True,
+        help="Suppress interactive confirmation (assume yes).",
+    )
+    def file_delete(path, root, as_json, dry_run, yes):
         """Delete a file through the SDK backend.
 
         Examples:
@@ -318,7 +343,13 @@ else:
     @click.option(
         "--dry-run", is_flag=True, help="Show what would be renamed without renaming."
     )
-    def file_rename(old_path, new_path, root, as_json, dry_run):
+    @click.option(
+        "-y",
+        "--yes",
+        is_flag=True,
+        help="Suppress interactive confirmation (assume yes).",
+    )
+    def file_rename(old_path, new_path, root, as_json, dry_run, yes):
         """Rename/move a file through the SDK backend.
 
         Examples:
@@ -361,7 +392,13 @@ else:
     @click.option(
         "--dry-run", is_flag=True, help="Show what would be copied without copying."
     )
-    def file_copy(src_path, dest_path, root, as_json, dry_run):
+    @click.option(
+        "-y",
+        "--yes",
+        is_flag=True,
+        help="Suppress interactive confirmation (assume yes).",
+    )
+    def file_copy(src_path, dest_path, root, as_json, dry_run, yes):
         """Copy a file through the SDK backend.
 
         Examples:

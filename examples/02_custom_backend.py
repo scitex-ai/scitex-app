@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
-# Timestamp: 2026-03-13
-# File: examples/02_custom_backend.py
+# -*- coding: utf-8 -*-
+"""Registering and using a custom backend.
 
-"""Registering and using a custom backend."""
+Defines a minimal in-memory backend, registers it via ``register_backend``,
+then exercises read/write/list/exists through ``get_files(backend=...)``.
+
+Usage:
+    python 02_custom_backend.py
+"""
+
+import scitex as stx
 
 from scitex_app.sdk import get_files, register_backend
 
@@ -52,18 +59,24 @@ class InMemoryBackend:
         self._store[dest_path] = self._store[src_path]
 
 
-def main():
+@stx.session
+def main(
+    CONFIG=stx.session.INJECTED,
+    logger=stx.session.INJECTED,
+):
+    """Register an in-memory backend and round-trip through the SDK."""
     # Register the custom backend
     register_backend("memory", InMemoryBackend)
 
     # Use it
     files = get_files(backend="memory")
     files.write("hello.txt", "Hello from in-memory backend!")
-    print(f"Read: {files.read('hello.txt')}")
-    print(f"Files: {files.list()}")
-    print(f"Exists: {files.exists('hello.txt')}")
+    logger.info(f"Read: {files.read('hello.txt')}")
+    logger.info(f"Files: {files.list()}")
+    logger.info(f"Exists: {files.exists('hello.txt')}")
 
-    print("\nCustom backend works!")
+    logger.info("\nCustom backend works!")
+    return 0
 
 
 if __name__ == "__main__":
