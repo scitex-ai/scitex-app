@@ -72,14 +72,14 @@ class TestMainGroup:
 
 class TestListCommand:
     def test_list_empty_directory(self, runner, temp_dir):
-        result = runner.invoke(main, ["list", "--root", str(temp_dir)])
+        result = runner.invoke(main, ["file", "list", "--root", str(temp_dir)])
         assert result.exit_code == 0
         assert result.output.strip() == ""
 
     def test_list_shows_files(self, runner, temp_dir):
         (temp_dir / "hello.txt").write_text("world", encoding="utf-8")
         (temp_dir / "config.yaml").write_text("key: value", encoding="utf-8")
-        result = runner.invoke(main, ["list", "--root", str(temp_dir)])
+        result = runner.invoke(main, ["file", "list", "--root", str(temp_dir)])
         assert result.exit_code == 0
         assert "hello.txt" in result.output
         assert "config.yaml" in result.output
@@ -88,7 +88,7 @@ class TestListCommand:
         (temp_dir / "a.txt").write_text("a")
         (temp_dir / "b.yaml").write_text("b: 1")
         result = runner.invoke(
-            main, ["list", "--root", str(temp_dir), "--ext", ".yaml"]
+            main, ["file", "list", "--root", str(temp_dir), "--ext", ".yaml"]
         )
         assert result.exit_code == 0
         assert "b.yaml" in result.output
@@ -98,12 +98,12 @@ class TestListCommand:
         subdir = temp_dir / "sub"
         subdir.mkdir()
         (subdir / "note.md").write_text("# Notes")
-        result = runner.invoke(main, ["list", "sub", "--root", str(temp_dir)])
+        result = runner.invoke(main, ["file", "list", "sub", "--root", str(temp_dir)])
         assert result.exit_code == 0
         assert "note.md" in result.output
 
     def test_list_help(self, runner):
-        result = runner.invoke(main, ["list", "--help"])
+        result = runner.invoke(main, ["file", "list", "--help"])
         assert result.exit_code == 0
         assert "directory" in result.output.lower() or "List" in result.output
 
@@ -116,17 +116,21 @@ class TestListCommand:
 class TestExistsCommand:
     def test_exists_true(self, runner, temp_dir):
         (temp_dir / "present.txt").write_text("here")
-        result = runner.invoke(main, ["exists", "present.txt", "--root", str(temp_dir)])
+        result = runner.invoke(
+            main, ["file", "exists", "present.txt", "--root", str(temp_dir)]
+        )
         assert "true" in result.output
         assert result.exit_code == 0
 
     def test_exists_false(self, runner, temp_dir):
-        result = runner.invoke(main, ["exists", "absent.txt", "--root", str(temp_dir)])
+        result = runner.invoke(
+            main, ["file", "exists", "absent.txt", "--root", str(temp_dir)]
+        )
         assert "false" in result.output
         assert result.exit_code == 1
 
     def test_exists_help(self, runner):
-        result = runner.invoke(main, ["exists", "--help"])
+        result = runner.invoke(main, ["file", "exists", "--help"])
         assert result.exit_code == 0
 
 
@@ -138,16 +142,20 @@ class TestExistsCommand:
 class TestReadCommand:
     def test_read_text_file(self, runner, temp_dir):
         (temp_dir / "data.txt").write_text("hello world", encoding="utf-8")
-        result = runner.invoke(main, ["read", "data.txt", "--root", str(temp_dir)])
+        result = runner.invoke(
+            main, ["file", "read", "data.txt", "--root", str(temp_dir)]
+        )
         assert result.exit_code == 0
         assert "hello world" in result.output
 
     def test_read_missing_file_fails(self, runner, temp_dir):
-        result = runner.invoke(main, ["read", "missing.txt", "--root", str(temp_dir)])
+        result = runner.invoke(
+            main, ["file", "read", "missing.txt", "--root", str(temp_dir)]
+        )
         assert result.exit_code != 0
 
     def test_read_help(self, runner):
-        result = runner.invoke(main, ["read", "--help"])
+        result = runner.invoke(main, ["file", "read", "--help"])
         assert result.exit_code == 0
         assert "path" in result.output.lower() or "Read" in result.output
 
@@ -221,7 +229,7 @@ class TestMcpSubgroup:
         assert result.exit_code == 0
 
     def test_mcp_installation(self, runner):
-        result = runner.invoke(main, ["mcp", "installation"])
+        result = runner.invoke(main, ["mcp", "show-installation"])
         assert result.exit_code == 0
         assert "pip install" in result.output
 
