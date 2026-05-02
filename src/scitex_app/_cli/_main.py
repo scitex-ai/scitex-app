@@ -107,7 +107,7 @@ else:
         context_settings=CONTEXT_SETTINGS,
         invoke_without_command=True,
     )
-    @click.version_option(version=_get_version(), prog_name="scitex-app")
+    @click.version_option(_get_version(), "-V", "--version", prog_name="scitex-app")
     @click.option(
         "--help-recursive", is_flag=True, help="Show help for all subcommands."
     )
