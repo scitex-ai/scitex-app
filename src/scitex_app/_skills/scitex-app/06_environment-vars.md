@@ -1,7 +1,8 @@
 ---
-description: All environment variables used by scitex-app — storage, cloud API, standalone Django, and LLM configuration.
-name: environment-vars
-tags: [scitex-app, scitex-package]
+description: |
+  [TOPIC] Environment Variables
+  [DETAILS] All environment variables used by scitex-app — storage, cloud API, standalone Django, and LLM configuration..
+tags: [scitex-app-environment-vars]
 ---
 
 # Environment Variables

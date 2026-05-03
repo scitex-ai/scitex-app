@@ -1,7 +1,8 @@
 ---
-description: End-to-end guide for building a SciTeX app — scaffold, develop, validate, dev-install, test, and submit. Includes actual CLI commands with expected outputs, complete manifest schema, and file structure.
-name: app-lifecycle
-tags: [scitex-app, scitex-package]
+description: |
+  [TOPIC] App Lifecycle — End-to-End Guide
+  [DETAILS] End-to-end guide for building a SciTeX app — scaffold, develop, validate, dev-install, test, and submit. Includes actual CLI commands with expected outputs, complete manifest schema, and file structure..
+tags: [scitex-app-app-lifecycle]
 ---
 
 # App Lifecycle — End-to-End Guide

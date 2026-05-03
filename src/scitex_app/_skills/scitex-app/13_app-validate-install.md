@@ -1,7 +1,8 @@
 ---
-description: Validate, dev-install, browser testing, and troubleshooting for SciTeX apps. Steps 3–5 of the app lifecycle.
-name: app-validate-install
-tags: [scitex-app, scitex-package]
+description: |
+  [TOPIC] Validate, Dev-Install, and Test
+  [DETAILS] Validate, dev-install, browser testing, and troubleshooting for SciTeX apps. Steps 3–5 of the app lifecycle..
+tags: [scitex-app-app-validate-install]
 ---
 
 # Validate, Dev-Install, and Test

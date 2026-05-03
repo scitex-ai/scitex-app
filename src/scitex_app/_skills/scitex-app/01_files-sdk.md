@@ -1,7 +1,8 @@
 ---
-description: Core file operations SDK — get_files(), FilesBackend protocol, FileSystemBackend, build_tree(). Write-once API for local and cloud storage.
-name: files-sdk
-tags: [scitex-app, scitex-package]
+description: |
+  [TOPIC] Files SDK
+  [DETAILS] Core file operations SDK — get_files(), FilesBackend protocol, FileSystemBackend, build_tree(). Write-once API for local and cloud storage..
+tags: [scitex-app-files-sdk]
 ---
 
 # Files SDK

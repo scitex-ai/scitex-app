@@ -1,7 +1,8 @@
 ---
-description: Backend SDK reference — FilesBackend protocol, Django integration, manifest schema, app validation, path resolution
-name: backend-sdk
-tags: [scitex-app, scitex-package]
+description: |
+  [TOPIC] scitex_app — AI Agent Developer Guide
+  [DETAILS] Backend SDK reference — FilesBackend protocol, Django integration, manifest schema, app validation, path resolution.
+tags: [scitex-app-backend-sdk]
 ---
 
 #!/usr/bin/env python3

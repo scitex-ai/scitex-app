@@ -1,5 +1,10 @@
 ---
-description: App-developer SDK for SciTeX workspace apps — write-once for local + cloud, zero-dep stdlib. Python API — `get_files(root)` (returns `FilesBackend` auto-detecting local vs cloud), `files.read / write / exists / delete / rename / copy / list`, `build_tree(files, max_depth=)`, `register_backend(name, factory)` (plug in S3/NAS), lazy submodules `chat`, `paths`, `validator`, and `scitex_app._standalone.run_standalone(app_module=, port=)` (run an app without the Django shell). 11 MCP tools — project-file ops (`app_read_file`, `app_write_file`, `app_list_files`, `app_file_exists`, `app_delete_file`, `app_rename_file`, `app_copy_file`) + app-lifecycle (`app_scaffold`, `app_validate`) + skills meta (`skills_list`, `skills_get`). Further lifecycle — `dev-install`, `submit`, bump/version, slug/icon — live in the CLI (`scitex-app app dev-install / submit`) and appmaker internals, not as MCP tools. Replaces copy-pasting Django starter apps, hand-rolled `manifest.json`, per-app `startproject` scaffolds, and `pathlib`/`boto3` scattered through app code. Use when the user asks to "scaffold a SciTeX app", "init a workspace app", "validate my app manifest", "dev-install" (→ CLI), "submit the app" (→ CLI), "read/write files with auto local/cloud backend", "register an S3 backend", "run this app standalone", "build a file tree", or mentions `manifest.json`, `ModuleConfig`, workspace sidebar registration, scitex-app SDK.
+name: scitex-app
+description: |
+  [WHAT] App-developer SDK for SciTeX workspace apps — write-once for local + cloud, zero-dep stdlib.
+  [WHEN] Use when the user asks to "scaffold a SciTeX app", "init a workspace app", "validate my app manifest", "dev-install" (→ CLI), "submit the app" (→ CLI), "read/write files with auto local/cloud backend", "register an S3 backend", "run this app standalone", "build a file tree", or mentions `manifest.
+  [HOW] `pip install scitex-app` then `import scitex_app`; see leaf skills for details.
+tags: [scitex-app]
 allowed-tools: mcp__scitex__app_*
 primary_interface: cli
 interfaces:
@@ -7,10 +12,7 @@ interfaces:
   cli: 3
   mcp: 2
   skills: 2
-  hook: 0
   http: 0
-name: scitex-app
-tags: [scitex-app, scitex-package]
 ---
 
 # scitex-app — App Developer SDK

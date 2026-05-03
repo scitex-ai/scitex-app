@@ -1,7 +1,8 @@
 ---
-description: App lifecycle — Steps 3–6 (validate, dev-install, test, submit) plus the canonical reference implementation (figrecipe). Companion to 10_app-lifecycle.md.
-name: app-lifecycle-deploy
-tags: [scitex-app, scitex-package]
+description: |
+  [TOPIC] App Lifecycle — Validate, Install, Test, Submit
+  [DETAILS] App lifecycle — Steps 3–6 (validate, dev-install, test, submit) plus the canonical reference implementation (figrecipe). Companion to 10_app-lifecycle.md..
+tags: [scitex-app-app-lifecycle-deploy]
 ---
 
 # App Lifecycle — Validate, Install, Test, Submit

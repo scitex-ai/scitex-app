@@ -1,7 +1,8 @@
 ---
-description: App registration internals — how the sidebar renders the tab, how the partial gets loaded, pyproject entry points, server-side source files, and troubleshooting. Companion to 11_app-registration.md.
-name: app-registration-internals
-tags: [scitex-app, scitex-package]
+description: |
+  [TOPIC] App Registration — Internals
+  [DETAILS] App registration internals — how the sidebar renders the tab, how the partial gets loaded, pyproject entry points, server-side source files, and troubleshooting. Companion to 11_app-registration.md..
+tags: [scitex-app-app-registration-internals]
 ---
 
 # App Registration — Internals

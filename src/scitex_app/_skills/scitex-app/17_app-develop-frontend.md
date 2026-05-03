@@ -1,7 +1,8 @@
 ---
-description: App frontend patterns — CSS scoping rule (forbidden shell selectors), React frontend scaffold (bridge, store, vite config), and Files SDK usage in views.
-name: app-develop-frontend
-tags: [scitex-app, scitex-package]
+description: |
+  [TOPIC] App Development — Frontend & Files SDK
+  [DETAILS] App frontend patterns — CSS scoping rule (forbidden shell selectors), React frontend scaffold (bridge, store, vite config), and Files SDK usage in views..
+tags: [scitex-app-app-develop-frontend]
 ---
 
 # App Development — Frontend & Files SDK

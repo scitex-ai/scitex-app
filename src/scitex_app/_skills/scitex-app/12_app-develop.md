@@ -1,7 +1,8 @@
 ---
-description: Detailed development patterns for SciTeX apps — views.py, urls.py, templates (AJAX partial), CSS scoping, React bridge, and Django AppConfig.
-name: app-develop
-tags: [scitex-app, scitex-package]
+description: |
+  [TOPIC] App Development Patterns
+  [DETAILS] Detailed development patterns for SciTeX apps — views.py, urls.py, templates (AJAX partial), CSS scoping, React bridge, and Django AppConfig..
+tags: [scitex-app-app-develop]
 ---
 
 # App Development Patterns
