@@ -41,14 +41,17 @@ scitex.app.get_files(...)
 
 ## Leaves
 
+### Mandatory (SK105–108)
+- [01_installation](01_installation.md) — pip install + smoke verify
+- [02_quick-start](02_quick-start.md) — scaffold → validate → dev-install
+- [03_python-api](03_python-api.md) — top-level Python surface
+- [04_cli-reference](04_cli-reference.md) — full `scitex-app` subcommand surface
+
 ### Core SDK / interfaces
-- [01_files-sdk](01_files-sdk.md)
-- [02_backend-sdk](02_backend-sdk.md)
-- [03_paths](03_paths.md)
-- [04_cli](04_cli.md)
 - [05_standalone](05_standalone.md)
 - [06_environment-vars](06_environment-vars.md)
 - [07_backend-validation](07_backend-validation.md) — App validation pipeline + minimal-app checklist
+
 ### Workflows / references
 - [10_app-lifecycle](10_app-lifecycle.md) — End-to-end: scaffold → develop → validate → dev-install → test → submit.
 - [11_app-registration](11_app-registration.md) — Workspace sidebar registration via manifest.json → ModuleConfig.
@@ -60,6 +63,12 @@ scitex.app.get_files(...)
 - [17_app-develop-frontend](17_app-develop-frontend.md) — CSS scoping, React frontend, Files SDK in views.
 - [18_app-test-troubleshoot](18_app-test-troubleshoot.md) — Browser testing, standalone mode, troubleshooting catalogue, env vars.
 
+### Detailed SDK references (legacy 01–04)
+- [19_files-sdk](19_files-sdk.md) — Files SDK surface (was 01)
+- [30_backend-sdk](30_backend-sdk.md) — backend developer SDK (was 02)
+- [31_paths](31_paths.md) — `paths` submodule (was 03)
+- [32_cli](32_cli.md) — original CLI page (was 04)
+
 ## Quick Start
 
 ```bash
@@ -68,4 +77,5 @@ scitex-app app validate .
 scitex-app app dev-install . --server http://127.0.0.1:8000
 ```
 
-Python API examples live in [01_files-sdk.md](01_files-sdk.md).
+Python API examples live in [03_python-api.md](03_python-api.md) and
+the detailed [19_files-sdk.md](19_files-sdk.md).
