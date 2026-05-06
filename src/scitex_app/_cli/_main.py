@@ -443,6 +443,13 @@ else:
     main.add_command(list_python_apis)
 
     try:
+        from scitex_dev._cli._completion import attach_shell_completion
+
+        attach_shell_completion(main, prog_name="scitex-app")
+    except Exception:
+        pass
+
+    try:
         from scitex_dev.cli import docs_click_group, skills_click_group
 
         main.add_command(docs_click_group(package="scitex-app"))
