@@ -70,6 +70,32 @@ Requires Python >= 3.10. **Zero dependencies** — pure stdlib.
 pip install scitex-app
 ```
 
+## Architecture
+
+```
+src/scitex_app/
+├── appmaker/        # scaffold, validate, publish helpers
+├── sdk/             # FilesBackend protocol + implementations
+├── _cli/            # `scitex-app` Click CLI
+├── _mcp/            # MCP server entry
+├── _chat/           # AI backend interface
+├── _django.py       # ScitexAppConfig base class
+├── paths.py         # project path resolution
+├── validator.py     # AppValidator (security/privilege)
+└── _standalone.py   # umbrella↔standalone bridge
+```
+
+## Demo
+
+```mermaid
+flowchart LR
+    App[User App] --> SDK[scitex_app.sdk.get_files]
+    SDK -->|local| FS[FilesBackend - filesystem]
+    SDK -->|SCITEX_API_TOKEN| Cloud[FilesBackend - cloud REST]
+    SDK -->|custom| Plugin[FilesBackend - plugin]
+    CLI[scitex-app appmaker] --> Init[init / validate / submit]
+```
+
 ## Quickstart
 
 ```python
