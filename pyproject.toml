@@ -12,8 +12,14 @@ requires-python = ">=3.10"
 authors = [{name = "Yusuke Watanabe", email = "ywatanabe@scitex.ai"}]
 keywords = ["scitex", "app-sdk", "files", "storage", "cloud", "local"]
 
-# Zero runtime dependencies — stdlib only
-dependencies = []
+# click + rich are runtime deps for the canonical CLI surface
+# (scripts entry-point `scitex-app = "scitex_app._cli:main"` imports
+# them at module top). Importing scitex_app._cli without them blew
+# up CI when the [dev,cli] extra-install hit a resolver fallback.
+dependencies = [
+    "click>=8.0.0",
+    "rich>=13.0.0",
+]
 
 [project.optional-dependencies]
 chat = [
@@ -24,8 +30,9 @@ chat-all = [
     "litellm>=1.0.0",
 ]
 cli = [
-    "click>=8.0.0",
-    "rich>=13.0.0",
+    # click + rich are now in base `dependencies`; this extra is a
+    # backwards-compat alias so `pip install scitex-app[cli]` keeps
+    # working.
 ]
 cloud = [
     "requests>=2.28.0",
