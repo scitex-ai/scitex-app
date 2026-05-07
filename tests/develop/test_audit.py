@@ -17,4 +17,7 @@ def test_audit_all_clean():
         )
     from scitex_dev.testing import audit_all_for_package
 
-    audit_all_for_package('scitex-app')
+    audit_all_for_package(
+        "scitex-app",
+        skip_rules=("PS121",),  # _sphinx_html bundle — populated by docs.yml CI
+    )
