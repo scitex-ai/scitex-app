@@ -1,0 +1,14 @@
+INFO: Backend: FileSystemBackend(/home/ywatanabe/proj/scitex-app/examples/01_basic_file_operations_out/RUNNING/2026Y-05M-07D-12h00m00s_N1Dx-main/project)
+INFO: Written 3 files
+INFO: Files in data/: ['data/config.yaml', 'data/notes.txt']
+INFO: YAML files: ['data/config.yaml']
+INFO: Config content:
+INFO: key: value
+INFO: count: 42
+
+INFO: config.yaml exists: True
+INFO: missing.txt exists: False
+INFO: After copy+rename: ['data/config.yaml', 'data/config_backup.yaml', 'data/research_notes.txt']
+INFO: After delete: ['data/config.yaml', 'data/research_notes.txt']
+
+INFO: Done!

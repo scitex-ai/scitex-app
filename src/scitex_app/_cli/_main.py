@@ -107,7 +107,7 @@ else:
         context_settings=CONTEXT_SETTINGS,
         invoke_without_command=True,
     )
-    @click.version_option(version=_get_version(), prog_name="scitex-app")
+    @click.version_option(_get_version(), "-V", "--version", prog_name="scitex-app")
     @click.option(
         "--help-recursive", is_flag=True, help="Show help for all subcommands."
     )
@@ -441,6 +441,13 @@ else:
     # -- Integration ---------------------------------------------------------
     main.add_command(mcp)
     main.add_command(list_python_apis)
+
+    try:
+        from scitex_dev._cli._completion import attach_shell_completion
+
+        attach_shell_completion(main, prog_name="scitex-app")
+    except Exception:
+        pass
 
     try:
         from scitex_dev.cli import docs_click_group, skills_click_group

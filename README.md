@@ -6,16 +6,6 @@
 
 # SciTeX App (<code>scitex-app</code>)
 
-<!-- scitex-badges:start -->
-[![PyPI](https://img.shields.io/pypi/v/scitex-app.svg)](https://pypi.org/project/scitex-app/)
-[![Python](https://img.shields.io/pypi/pyversions/scitex-app.svg)](https://pypi.org/project/scitex-app/)
-[![Tests](https://github.com/ywatanabe1989/scitex-app/actions/workflows/test.yml/badge.svg)](https://github.com/ywatanabe1989/scitex-app/actions/workflows/test.yml)
-[![Install Test](https://github.com/ywatanabe1989/scitex-app/actions/workflows/install-test.yml/badge.svg)](https://github.com/ywatanabe1989/scitex-app/actions/workflows/install-test.yml)
-[![Coverage](https://codecov.io/gh/ywatanabe1989/scitex-app/graph/badge.svg)](https://codecov.io/gh/ywatanabe1989/scitex-app)
-[![Docs](https://readthedocs.org/projects/scitex-app/badge/?version=latest)](https://scitex-app.readthedocs.io/en/latest/)
-[![License: AGPL v3](https://img.shields.io/badge/license-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-<!-- scitex-badges:end -->
-
 <p align="center">
   <a href="https://scitex.ai">
     <img src="docs/scitex-logo-blue-cropped.png" alt="SciTeX" width="400">
@@ -25,6 +15,18 @@
 <p align="center">
   <a href="https://scitex-app.readthedocs.io/">Full Documentation</a> · <code>pip install scitex-app</code>
 </p>
+
+<!-- scitex-badges:start -->
+<p align="center">
+  <a href="https://pypi.org/project/scitex-app/"><img src="https://img.shields.io/pypi/v/scitex-app.svg" alt="PyPI"></a>
+  <a href="https://pypi.org/project/scitex-app/"><img src="https://img.shields.io/pypi/pyversions/scitex-app.svg" alt="Python"></a>
+  <a href="https://github.com/ywatanabe1989/scitex-app/actions/workflows/test.yml"><img src="https://github.com/ywatanabe1989/scitex-app/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/ywatanabe1989/scitex-app/actions/workflows/install-test.yml"><img src="https://github.com/ywatanabe1989/scitex-app/actions/workflows/install-test.yml/badge.svg" alt="Install Test"></a>
+  <a href="https://codecov.io/gh/ywatanabe1989/scitex-app"><img src="https://codecov.io/gh/ywatanabe1989/scitex-app/graph/badge.svg" alt="Coverage"></a>
+  <a href="https://scitex-app.readthedocs.io/en/latest/"><img src="https://readthedocs.org/projects/scitex-app/badge/?version=latest" alt="Docs"></a>
+  <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/license-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
+</p>
+<!-- scitex-badges:end -->
 
 ---
 
@@ -68,6 +70,32 @@ Requires Python >= 3.10. **Zero dependencies** — pure stdlib.
 pip install scitex-app
 ```
 
+## Architecture
+
+```
+src/scitex_app/
+├── appmaker/        # scaffold, validate, publish helpers
+├── sdk/             # FilesBackend protocol + implementations
+├── _cli/            # `scitex-app` Click CLI
+├── _mcp/            # MCP server entry
+├── _chat/           # AI backend interface
+├── _django.py       # ScitexAppConfig base class
+├── paths.py         # project path resolution
+├── validator.py     # AppValidator (security/privilege)
+└── _standalone.py   # umbrella↔standalone bridge
+```
+
+## Demo
+
+```mermaid
+flowchart LR
+    App[User App] --> SDK[scitex_app.sdk.get_files]
+    SDK -->|local| FS[FilesBackend - filesystem]
+    SDK -->|SCITEX_API_TOKEN| Cloud[FilesBackend - cloud REST]
+    SDK -->|custom| Plugin[FilesBackend - plugin]
+    CLI[scitex-app appmaker] --> Init[init / validate / submit]
+```
+
 ## Quickstart
 
 ```python
@@ -89,7 +117,7 @@ cloud_files = get_files()  # routes through cloud REST API
 
 ## Three Interfaces
 
-<details>
+<details open>
 <summary><strong>Python API</strong></summary>
 
 <br>
@@ -107,7 +135,7 @@ files.rename("old.txt", "new.txt")    # rename/move
 files.copy("src.txt", "dst.txt")      # copy file
 ```
 
-> **[Full API reference](https://scitex-app.readthedocs.io/)**
+> **[Full API reference](https://scitex-app.readthedocs.io/en/latest/api/scitex_app.html)**
 
 </details>
 
@@ -131,7 +159,7 @@ scitex-app mcp list-tools                # List MCP tools
 
 All file commands support `--json` output. Destructive commands support `--dry-run`.
 
-> **[Full CLI reference](https://scitex-app.readthedocs.io/)**
+> **[Full CLI reference](https://scitex-app.readthedocs.io/en/latest/quickstart.html)**
 
 </details>
 
@@ -158,7 +186,7 @@ AI agents can read, write, and manage files through the unified SDK.
 scitex-app mcp start
 ```
 
-> **[Full MCP specification](https://scitex-app.readthedocs.io/)**
+> **[Full MCP specification](https://scitex-app.readthedocs.io/en/latest/api/scitex_app._mcp.html)**
 
 </details>
 

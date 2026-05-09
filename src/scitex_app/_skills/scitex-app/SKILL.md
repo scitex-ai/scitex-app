@@ -1,5 +1,10 @@
 ---
-description: App-developer SDK for SciTeX workspace apps — write-once for local + cloud, zero-dep stdlib. Python API — `get_files(root)` (returns `FilesBackend` that auto-detects local vs cloud), `files.read / write / exists / delete / rename / copy / list`, `build_tree(files, max_depth=)`, `register_backend(name, factory)` (plug in S3/NAS), lazy submodules `chat`, `paths`, `validator`, and `scitex_app._standalone.run_standalone(app_module=, port=)` (run an app without the Django workspace shell). 11 MCP tools — project-file ops (`app_read_file`, `app_write_file`, `app_list_files`, `app_file_exists`, `app_delete_file`, `app_rename_file`, `app_copy_file`) + app-lifecycle (`app_scaffold`, `app_validate`) + skills meta (`skills_list`, `skills_get`). Further lifecycle steps — `dev-install`, `submit`, bump/version, slug/icon — live in the CLI (`scitex-app app dev-install / submit`) and Python appmaker internals, not as standalone MCP tools. Drop-in replacement for copy-pasting Django starter apps, hand-rolled `manifest.json`, per-app `startproject` scaffolds, and direct `pathlib`/`boto3` scattered through app code. Use whenever the user asks to "scaffold a SciTeX app", "init a new workspace app", "validate my app manifest", "dev-install this app" (→ CLI), "submit the app to the cloud" (→ CLI), "read/write files in an app with auto local/cloud backend", "register an S3 file backend", "run this app standalone without the shell", "build a file tree", or mentions `manifest.json`, `ModuleConfig`, workspace sidebar registration, scitex-app SDK.
+name: scitex-app
+description: |
+  [WHAT] App-developer SDK for SciTeX workspace apps — write-once for local + cloud, zero-dep stdlib.
+  [WHEN] Use when the user asks to "scaffold a SciTeX app", "init a workspace app", "validate my app manifest", "dev-install" (→ CLI), "submit the app" (→ CLI), "read/write files with auto local/cloud backend", "register an S3 backend", "run this app standalone", "build a file tree", or mentions `manifest.
+  [HOW] `pip install scitex-app` then `import scitex_app`; see leaf skills for details.
+tags: [scitex-app]
 allowed-tools: mcp__scitex__app_*
 primary_interface: cli
 interfaces:
@@ -7,15 +12,10 @@ interfaces:
   cli: 3
   mcp: 2
   skills: 2
-  hook: 0
   http: 0
-name: scitex-app
-tags: [scitex-app, scitex-package]
 ---
 
 # scitex-app — App Developer SDK
-
-> **Interfaces:** Python ⭐⭐ · CLI ⭐⭐⭐ (primary) · MCP ⭐⭐ · Skills ⭐⭐ · Hook — · HTTP —
 
 Toolkit for building SciTeX workspace apps with scaffold, validation,
 standalone mode, and cloud integration.
@@ -35,28 +35,39 @@ import scitex.app
 scitex.app.get_files(...)
 ```
 
-`pip install scitex-app` alone does NOT expose the `scitex` namespace;
-`import scitex.app` raises `ModuleNotFoundError`. To use the
-`scitex.app` form, also `pip install scitex`.
-
-See [../../general/02_interface-python-api.md] for the ecosystem-wide
-rule and empirical verification table.
+`pip install scitex-app` alone does NOT expose `scitex.app` — also
+`pip install scitex` for the umbrella form. See
+[../../general/02_interface-python-api.md] for the ecosystem-wide rule.
 
 ## Leaves
 
+### Mandatory (SK105–108)
+- [01_installation](01_installation.md) — pip install + smoke verify
+- [02_quick-start](02_quick-start.md) — scaffold → validate → dev-install
+- [03_python-api](03_python-api.md) — top-level Python surface
+- [04_cli-reference](04_cli-reference.md) — full `scitex-app` subcommand surface
+
 ### Core SDK / interfaces
-- [01_files-sdk](01_files-sdk.md)
-- [02_backend-sdk](02_backend-sdk.md)
-- [03_paths](03_paths.md)
-- [04_cli](04_cli.md)
 - [05_standalone](05_standalone.md)
 - [06_environment-vars](06_environment-vars.md)
+- [07_backend-validation](07_backend-validation.md) — App validation pipeline + minimal-app checklist
 
 ### Workflows / references
 - [10_app-lifecycle](10_app-lifecycle.md) — End-to-end: scaffold → develop → validate → dev-install → test → submit.
 - [11_app-registration](11_app-registration.md) — Workspace sidebar registration via manifest.json → ModuleConfig.
 - [12_app-develop](12_app-develop.md) — Development patterns: views, urls, templates, CSS scoping, React bridge.
 - [13_app-validate-install](13_app-validate-install.md) — Validate, dev-install, browser testing, troubleshooting.
+- [14_app-lifecycle-deploy](14_app-lifecycle-deploy.md) — Lifecycle Steps 3-6 (validate/dev-install/test/submit) + figrecipe reference.
+- [15_manifest-schema](15_manifest-schema.md) — Complete manifest.json schema reference.
+- [16_app-registration-internals](16_app-registration-internals.md) — Sidebar render, partial load, entry points, source files, troubleshooting.
+- [17_app-develop-frontend](17_app-develop-frontend.md) — CSS scoping, React frontend, Files SDK in views.
+- [18_app-test-troubleshoot](18_app-test-troubleshoot.md) — Browser testing, standalone mode, troubleshooting catalogue, env vars.
+
+### Detailed SDK references (legacy 01–04)
+- [19_files-sdk](19_files-sdk.md) — Files SDK surface (was 01)
+- [30_backend-sdk](30_backend-sdk.md) — backend developer SDK (was 02)
+- [31_paths](31_paths.md) — `paths` submodule (was 03)
+- [32_cli](32_cli.md) — original CLI page (was 04)
 
 ## Quick Start
 
@@ -66,13 +77,5 @@ scitex-app app validate .
 scitex-app app dev-install . --server http://127.0.0.1:8000
 ```
 
-```python
-from scitex_app.sdk import get_files, build_tree
-from scitex_app._standalone import run_standalone
-
-files = get_files("./my_project")
-content = files.read("config/settings.yaml")
-files.write("output/result.csv", csv_text)
-tree = build_tree(files, max_depth=2)
-run_standalone(app_module="my_app", port=8050)
-```
+Python API examples live in [03_python-api.md](03_python-api.md) and
+the detailed [19_files-sdk.md](19_files-sdk.md).
