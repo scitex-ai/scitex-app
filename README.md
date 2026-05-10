@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://scitex-app.readthedocs.io/">Full Documentation</a> · <code>pip install scitex-app</code>
+  <a href="https://scitex-app.readthedocs.io/">Full Documentation</a> · <code>uv pip install scitex-app[all]</code>
 </p>
 
 <!-- scitex-badges:start -->
