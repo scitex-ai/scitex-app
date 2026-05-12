@@ -46,6 +46,10 @@ mcp = [
 dev = [
     "anthropic>=0.25.0",
     "click>=8.0.0",
+    # django>=4.2 — required by tests/scitex_app/_chat/migrations/test_0001_initial.py
+    "django>=4.2",
+    # fastmcp>=2.0.0 — required by tests/scitex_app/_mcp/test_server.py
+    "fastmcp>=2.0.0",
     "litellm>=1.0.0",
     "pytest-cov>=4.0.0",
     "pytest>=7.0.0",
@@ -88,6 +92,11 @@ packages = ["src/scitex_app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+parallel = true
+source = ["scitex_app"]
+concurrency = ["multiprocessing", "thread"]
 
 [tool.scitex-linter]
 library_dirs = ["src", "tests", "examples"]

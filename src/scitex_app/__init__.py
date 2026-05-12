@@ -34,6 +34,17 @@ try:
 except ImportError:  # pragma: no cover — only on ancient Pythons
     __version__ = "0.0.0+local"
 
+from ._files_api import (
+    copy_file,
+    delete_file,
+    file_exists,
+    list_files,
+    read_file,
+    rename_file,
+    scaffold,
+    validate,
+    write_file,
+)
 from .sdk import FilesBackend, build_tree, get_files, register_backend
 
 
@@ -66,8 +77,22 @@ __all__ = [
     "get_files",
     "register_backend",
     "build_tree",
+    # Flat file-ops API (mirrors the MCP tool surface so the
+    # API/MCP parity stays balanced — see _files_api.py).
+    "read_file",
+    "write_file",
+    "list_files",
+    "file_exists",
+    "delete_file",
+    "copy_file",
+    "rename_file",
+    "scaffold",
+    "validate",
     "chat",
     "paths",
+    # `validator` is the legacy submodule re-export (still kept for
+    # back-compat); the function `validate` above is the flat-API
+    # alias for `appmaker.validate`. Different names → both coexist.
     "validator",
 ]
 
