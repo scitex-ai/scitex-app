@@ -19,21 +19,64 @@ pytest.importorskip("django")
 
 
 def test_migration_module_imports():
+    # Arrange
+    # Act
     mod = importlib.import_module("scitex_app._chat.migrations.0001_initial")
+    # Assert
     assert hasattr(mod, "Migration")
 
 
-def test_migration_creates_chat_models():
+def test_migration_creates_chat_models_chatsession_in_op_names():
+    # Arrange
+    # Arrange
     mod = importlib.import_module("scitex_app._chat.migrations.0001_initial")
+    # Act
     op_names = {
         getattr(op, "name", None) or type(op).__name__
         for op in mod.Migration.operations
     }
+    # Act
+    # Assert
+    # Assert
     assert "ChatSession" in op_names
+
+
+def test_migration_creates_chat_models_chatmessage_in_op_names():
+    # Arrange
+    # Arrange
+    mod = importlib.import_module("scitex_app._chat.migrations.0001_initial")
+    # Act
+    op_names = {
+        getattr(op, "name", None) or type(op).__name__
+        for op in mod.Migration.operations
+    }
+    # Act
+    # Assert
+    # Assert
     assert "ChatMessage" in op_names
 
 
-def test_migration_is_initial():
+
+
+def test_migration_is_initial_mod_migration_initial_is_true():
+    # Arrange
+    # Arrange
+    # Act
     mod = importlib.import_module("scitex_app._chat.migrations.0001_initial")
+    # Act
+    # Assert
+    # Assert
     assert mod.Migration.initial is True
+
+
+def test_migration_is_initial_mod_migration_dependencies():
+    # Arrange
+    # Arrange
+    # Act
+    mod = importlib.import_module("scitex_app._chat.migrations.0001_initial")
+    # Act
+    # Assert
+    # Assert
     assert mod.Migration.dependencies == []
+
+
