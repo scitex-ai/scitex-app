@@ -21,20 +21,32 @@ from scitex_app.sdk._filesystem import FileSystemBackend
 
 class TestGetFiles:
     def test_default_returns_filesystem(self, tmp_path):
+        # Arrange
+        # Act
         files = get_files(tmp_path)
+        # Assert
         assert isinstance(files, FileSystemBackend)
 
     def test_default_uses_cwd(self):
+        # Arrange
+        # Act
         files = get_files()
+        # Assert
         assert isinstance(files, FileSystemBackend)
 
     def test_explicit_backend_not_registered(self):
+        # Arrange
+        # Act
+        # Assert
         with pytest.raises(KeyError, match="not registered"):
             get_files(backend="nonexistent")
 
 
 class TestRegisterBackend:
     def test_register_and_use(self, tmp_path):
+        # Arrange
+        # Act
+        # Assert
         class MockBackend:
             def __init__(self, root, **kwargs):
                 self.root = root
@@ -73,6 +85,9 @@ class TestRegisterBackend:
     def test_cloud_auto_detection(self, tmp_path, monkeypatch):
         """When SCITEX_API_TOKEN is set and cloud backend registered, use cloud."""
 
+        # Arrange
+        # Act
+        # Assert
         class FakeCloud:
             def __init__(self, root, **kwargs):
                 self.kind = "cloud"
@@ -111,5 +126,8 @@ class TestRegisterBackend:
 
 class TestProtocol:
     def test_filesystem_satisfies_protocol(self, tmp_path):
+        # Arrange
+        # Act
         files = get_files(tmp_path)
+        # Assert
         assert isinstance(files, FilesBackend)

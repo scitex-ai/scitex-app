@@ -49,26 +49,54 @@ def patched_backend(monkeypatch):
 
 
 def test_stream_chat_appends_user_prompt(patched_backend):
+    # Arrange
+    # Act
     list(_stream.stream_chat("hello"))
+    # Assert
     assert patched_backend.calls[-1]["messages"] == [
         {"role": "user", "content": "hello"}
     ]
 
 
 def test_stream_chat_passes_through_system_prompt(patched_backend):
+    # Arrange
+    # Act
     list(_stream.stream_chat("hi", system_prompt="be terse"))
+    # Assert
     assert patched_backend.calls[-1]["system"] == "be terse"
 
 
-def test_stream_chat_truncates_history(patched_backend):
+def test_stream_chat_truncates_history_len_msgs_is_4(patched_backend):
+    # Arrange
+    # Arrange
     history = [{"role": "user", "content": str(i)} for i in range(20)]
     list(_stream.stream_chat("hi", history=history, max_history=3))
+    # Act
     msgs = patched_backend.calls[-1]["messages"]
-    # Last 3 history + 1 new prompt
+    # Act
+    # Assert
+    # Assert
     assert len(msgs) == 4
+
+
+def test_stream_chat_truncates_history_msgs_1_role_user_content_hi(patched_backend):
+    # Arrange
+    # Arrange
+    history = [{"role": "user", "content": str(i)} for i in range(20)]
+    list(_stream.stream_chat("hi", history=history, max_history=3))
+    # Act
+    msgs = patched_backend.calls[-1]["messages"]
+    # Act
+    # Assert
+    # Assert
     assert msgs[-1] == {"role": "user", "content": "hi"}
 
 
+
+
 def test_stream_chat_yields_backend_events(patched_backend):
+    # Arrange
+    # Act
     events = list(_stream.stream_chat("hi"))
+    # Assert
     assert events == [{"type": "chunk", "text": "hi"}, {"type": "done"}]
