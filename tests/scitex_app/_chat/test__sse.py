@@ -38,18 +38,11 @@ def test_sse_format_serializes_dict_out_endswith_n_n():
 
 def test_sse_format_serializes_dict_payload_equals_type_chunk_text_hello():
     # Arrange
-    # Arrange
-    # Act
     out = sse_format({"type": "chunk", "text": "hello"})
-    # Assert
-    assert out.startswith("data: ")
-    assert out.endswith("\n\n")
-    payload = json.loads(out[len("data: ") : -2])
     # Act
+    payload = json.loads(out[len("data: ") : -2])
     # Assert
     assert payload == {"type": "chunk", "text": "hello"}
-
-
 
 
 def test_sse_done_marker():
@@ -100,5 +93,3 @@ def test_sse_keepalive_wrap_emits_done_at_end_out_1_sse_done():
     # Assert
     # Assert
     assert out[-1] == sse_done()
-
-

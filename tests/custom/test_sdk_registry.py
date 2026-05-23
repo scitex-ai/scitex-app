@@ -13,10 +13,26 @@ audit-project §2.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from scitex_app.sdk import FilesBackend, get_files, register_backend
 from scitex_app.sdk._filesystem import FileSystemBackend
+
+
+@pytest.fixture
+def api_token_env():
+    """Set/restore SCITEX_API_TOKEN around a test (real env, no mock)."""
+    saved = os.environ.get("SCITEX_API_TOKEN")
+    os.environ["SCITEX_API_TOKEN"] = "test-token"
+    try:
+        yield
+    finally:
+        if saved is None:
+            os.environ.pop("SCITEX_API_TOKEN", None)
+        else:
+            os.environ["SCITEX_API_TOKEN"] = saved
 
 
 class TestGetFiles:
@@ -82,12 +98,10 @@ class TestRegisterBackend:
 
             _registry.pop("mock", None)
 
-    def test_cloud_auto_detection(self, tmp_path, monkeypatch):
+    def test_cloud_auto_detection(self, tmp_path, api_token_env):
         """When SCITEX_API_TOKEN is set and cloud backend registered, use cloud."""
 
         # Arrange
-        # Act
-        # Assert
         class FakeCloud:
             def __init__(self, root, **kwargs):
                 self.kind = "cloud"
@@ -114,14 +128,15 @@ class TestRegisterBackend:
                 pass
 
         register_backend("cloud", FakeCloud)
-        monkeypatch.setenv("SCITEX_API_TOKEN", "test-token")
+        # Act
         try:
             files = get_files(tmp_path)
-            assert hasattr(files, "kind") and files.kind == "cloud"
         finally:
             from scitex_app.sdk import _registry
 
             _registry.pop("cloud", None)
+        # Assert
+        assert getattr(files, "kind", None) == "cloud"
 
 
 class TestProtocol:

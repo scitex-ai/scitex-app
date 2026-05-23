@@ -15,6 +15,7 @@ def stream_chat(
     model: Optional[str] = None,
     max_tokens: int = 2048,
     max_history: int = 10,
+    backend: Optional[Any] = None,
 ) -> Iterator[Dict[str, Any]]:
     """Stream a chat response using the best available backend.
 
@@ -32,15 +33,20 @@ def stream_chat(
         Maximum response tokens.
     max_history : int
         Maximum history messages to include.
+    backend : object, optional
+        Chat backend to stream through. Defaults to the best available
+        backend from ``get_chat_backend(model=model)``. Injectable so
+        callers (and tests) can supply a concrete backend.
 
     Yields
     ------
     dict
         Event dicts: {"type": "chunk", "text": "..."}, {"type": "done"}, etc.
     """
-    from ._backends import get_chat_backend
+    if backend is None:
+        from ._backends import get_chat_backend
 
-    backend = get_chat_backend(model=model)
+        backend = get_chat_backend(model=model)
 
     messages = []
     if history:

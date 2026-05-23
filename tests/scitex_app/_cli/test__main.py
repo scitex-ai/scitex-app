@@ -58,7 +58,6 @@ class TestMainGroup:
         # Assert
         assert "SciTeX App SDK" in result.output
 
-
     def test_h_flag_alias_result_exit_code_equals_n_0(self, runner):
         # Arrange
         # Arrange
@@ -78,7 +77,6 @@ class TestMainGroup:
         # Assert
         # Assert
         assert "SciTeX App SDK" in result.output
-
 
     def test_version_flag_result_exit_code_equals_n_0(self, runner):
         # Arrange
@@ -100,7 +98,6 @@ class TestMainGroup:
         # Assert
         assert "scitex-app" in result.output.lower()
 
-
     def test_no_args_shows_help_result_exit_code_equals_n_0(self, runner):
         # Arrange
         # Arrange
@@ -111,7 +108,9 @@ class TestMainGroup:
         # Assert
         assert result.exit_code == 0
 
-    def test_no_args_shows_help_usage_in_result_output_or_scitex_in_result_output(self, runner):
+    def test_no_args_shows_help_usage_in_result_output_or_scitex_in_result_output(
+        self, runner
+    ):
         # Arrange
         # Arrange
         # Act
@@ -120,7 +119,6 @@ class TestMainGroup:
         # Assert
         # Assert
         assert "Usage" in result.output or "SciTeX" in result.output
-
 
     def test_help_recursive_flag_result_exit_code_equals_n_0(self, runner):
         # Arrange
@@ -132,7 +130,9 @@ class TestMainGroup:
         # Assert
         assert result.exit_code == 0
 
-    def test_help_recursive_flag_command_in_result_output_or_scitex_in_result_output(self, runner):
+    def test_help_recursive_flag_command_in_result_output_or_scitex_in_result_output(
+        self, runner
+    ):
         # Arrange
         # Arrange
         # Act
@@ -141,7 +141,6 @@ class TestMainGroup:
         # Assert
         # Assert
         assert "Command:" in result.output or "SciTeX" in result.output
-
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +168,6 @@ class TestListCommand:
         # Assert
         # Assert
         assert result.output.strip() == ""
-
 
     def test_list_shows_files_result_exit_code_equals_n_0(self, runner, temp_dir):
         # Arrange
@@ -207,8 +205,9 @@ class TestListCommand:
         # Assert
         assert "config.yaml" in result.output
 
-
-    def test_list_with_extension_filter_result_exit_code_equals_n_0(self, runner, temp_dir):
+    def test_list_with_extension_filter_result_exit_code_equals_n_0(
+        self, runner, temp_dir
+    ):
         # Arrange
         # Arrange
         (temp_dir / "a.txt").write_text("a")
@@ -236,7 +235,9 @@ class TestListCommand:
         # Assert
         assert "b.yaml" in result.output
 
-    def test_list_with_extension_filter_a_txt_not_in_result_output(self, runner, temp_dir):
+    def test_list_with_extension_filter_a_txt_not_in_result_output(
+        self, runner, temp_dir
+    ):
         # Arrange
         # Arrange
         (temp_dir / "a.txt").write_text("a")
@@ -249,7 +250,6 @@ class TestListCommand:
         # Assert
         # Assert
         assert "a.txt" not in result.output
-
 
     def test_list_subdirectory_result_exit_code_equals_n_0(self, runner, temp_dir):
         # Arrange
@@ -277,7 +277,6 @@ class TestListCommand:
         # Assert
         assert "note.md" in result.output
 
-
     def test_list_help_result_exit_code_equals_n_0(self, runner):
         # Arrange
         # Arrange
@@ -288,7 +287,9 @@ class TestListCommand:
         # Assert
         assert result.exit_code == 0
 
-    def test_list_help_directory_in_result_output_lower_or_list_in_result_output(self, runner):
+    def test_list_help_directory_in_result_output_lower_or_list_in_result_output(
+        self, runner
+    ):
         # Arrange
         # Arrange
         # Act
@@ -297,7 +298,6 @@ class TestListCommand:
         # Assert
         # Assert
         assert "directory" in result.output.lower() or "List" in result.output
-
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +332,6 @@ class TestExistsCommand:
         # Assert
         assert result.exit_code == 0
 
-
     def test_exists_false_false_in_result_output(self, runner, temp_dir):
         # Arrange
         # Arrange
@@ -356,7 +355,6 @@ class TestExistsCommand:
         # Assert
         # Assert
         assert result.exit_code == 1
-
 
     def test_exists_help_result_exit_code_equals_n_0(self, runner):
         # Arrange
@@ -398,7 +396,6 @@ class TestReadCommand:
         # Assert
         assert "hello world" in result.output
 
-
     def test_read_missing_file_fails(self, runner, temp_dir):
         # Arrange
         # Act
@@ -418,7 +415,9 @@ class TestReadCommand:
         # Assert
         assert result.exit_code == 0
 
-    def test_read_help_path_in_result_output_lower_or_read_in_result_output(self, runner):
+    def test_read_help_path_in_result_output_lower_or_read_in_result_output(
+        self, runner
+    ):
         # Arrange
         # Arrange
         # Act
@@ -427,7 +426,6 @@ class TestReadCommand:
         # Assert
         # Assert
         assert "path" in result.output.lower() or "Read" in result.output
-
 
 
 # ---------------------------------------------------------------------------
@@ -455,7 +453,6 @@ class TestAppSubgroup:
         # Assert
         # Assert
         assert "app" in result.output.lower()
-
 
     def test_app_validate_help(self, runner):
         # Arrange
@@ -552,7 +549,6 @@ class TestMcpSubgroup:
         # Assert
         assert "pip install" in result.output
 
-
     def test_mcp_doctor_result_exit_code_equals_n_0(self, runner):
         # Arrange
         # Arrange
@@ -563,7 +559,9 @@ class TestMcpSubgroup:
         # Assert
         assert result.exit_code == 0
 
-    def test_mcp_doctor_fastmcp_in_result_output_lower_or_mcp_in_result_output(self, runner):
+    def test_mcp_doctor_fastmcp_in_result_output_lower_or_mcp_in_result_output(
+        self, runner
+    ):
         # Arrange
         # Arrange
         # Act
@@ -572,7 +570,6 @@ class TestMcpSubgroup:
         # Assert
         # Assert
         assert "fastmcp" in result.output.lower() or "MCP" in result.output
-
 
     def test_mcp_list_tools_help(self, runner):
         # Arrange
@@ -608,7 +605,6 @@ class TestListPythonApis:
         # Assert
         assert "scitex" in result.output.lower()
 
-
     def test_list_python_apis_json_output_result_exit_code_equals_n_0(self, runner):
         # Arrange
         # Arrange
@@ -621,28 +617,19 @@ class TestListPythonApis:
 
     def test_list_python_apis_json_output_data_is_list(self, runner):
         # Arrange
-        # Arrange
-        # Act
         result = runner.invoke(main, ["list-python-apis", "--json"])
-        # Assert
-        assert result.exit_code == 0
-        data = json.loads(result.output)
         # Act
+        data = json.loads(result.output)
         # Assert
         assert isinstance(data, list)
 
     def test_list_python_apis_json_output_len_data_0(self, runner):
         # Arrange
-        # Arrange
-        # Act
         result = runner.invoke(main, ["list-python-apis", "--json"])
-        # Assert
-        assert result.exit_code == 0
-        data = json.loads(result.output)
         # Act
+        data = json.loads(result.output)
         # Assert
         assert len(data) > 0
-
 
     def test_list_python_apis_root_only(self, runner):
         # Arrange

@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 
+import os
+
 import pytest
 
 from scitex_app.paths import (
@@ -28,6 +30,30 @@ from scitex_app.paths import (
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def base_dir_env():
+    """Set/restore the SCITEX_BASE_DIR env var around a test.
+
+    Real env-var manipulation (not a mock): yields a setter; whatever
+    was there before is restored on teardown so tests don't leak state.
+    """
+    saved = os.environ.get("SCITEX_BASE_DIR")
+
+    def _set(value):
+        if value is None:
+            os.environ.pop("SCITEX_BASE_DIR", None)
+        else:
+            os.environ["SCITEX_BASE_DIR"] = str(value)
+
+    try:
+        yield _set
+    finally:
+        if saved is None:
+            os.environ.pop("SCITEX_BASE_DIR", None)
+        else:
+            os.environ["SCITEX_BASE_DIR"] = saved
+
+
 class TestGetBaseDir:
     def test_explicit_arg_get_base_dir_tmp_path_tmp_path_resolve(self, tmp_path):
         # Arrange
@@ -35,28 +61,31 @@ class TestGetBaseDir:
         # Assert
         assert get_base_dir(tmp_path) == tmp_path.resolve()
 
-    def test_env_var_get_base_dir_tmp_path_resolve(self, tmp_path, monkeypatch):
+    def test_env_var_get_base_dir_tmp_path_resolve(self, tmp_path, base_dir_env):
         # Arrange
+        base_dir_env(tmp_path)
         # Act
-        monkeypatch.setenv("SCITEX_BASE_DIR", str(tmp_path))
+        result = get_base_dir()
         # Assert
-        assert get_base_dir() == tmp_path.resolve()
+        assert result == tmp_path.resolve()
 
-    def test_explicit_arg_overrides_env(self, tmp_path, monkeypatch):
+    def test_explicit_arg_overrides_env(self, tmp_path, base_dir_env):
         # Arrange
         other = tmp_path / "other"
         other.mkdir()
+        base_dir_env(tmp_path)
         # Act
-        monkeypatch.setenv("SCITEX_BASE_DIR", str(tmp_path))
+        result = get_base_dir(other)
         # Assert
-        assert get_base_dir(other) == other.resolve()
+        assert result == other.resolve()
 
-    def test_raises_when_no_source(self, monkeypatch):
+    def test_raises_when_no_source(self, base_dir_env):
         # Arrange
+        base_dir_env(None)
         # Act
-        monkeypatch.delenv("SCITEX_BASE_DIR", raising=False)
+        ctx = pytest.raises(ValueError, match="No base directory")
         # Assert
-        with pytest.raises(ValueError, match="No base directory"):
+        with ctx:
             get_base_dir()
 
 
@@ -239,7 +268,6 @@ class TestParseDevModuleName:
         assert parse_dev_module_name("dev__a__b__c") is None
 
 
-
 # ---------------------------------------------------------------------------
 # safe_iterdir
 # ---------------------------------------------------------------------------
@@ -269,7 +297,6 @@ class TestSafeIterdir:
         # Assert
         # Assert
         assert result[0].name == "visible"
-
 
     def test_nonexistent_dir_result_equals_case(self, tmp_path):
         # Arrange
@@ -309,7 +336,6 @@ class TestValidateProjectStructure:
         # Assert
         assert msg == "ok"
 
-
     def test_missing_templates_ok_is_false(self, tmp_path):
         # Arrange
         # Arrange
@@ -329,7 +355,6 @@ class TestValidateProjectStructure:
         # Assert
         # Assert
         assert "templates" in msg
-
 
     def test_missing_partial_ok_is_false(self, tmp_path):
         # Arrange
@@ -352,7 +377,6 @@ class TestValidateProjectStructure:
         # Assert
         # Assert
         assert "index_partial" in msg
-
 
     def test_nonexistent_ok_is_false(self, tmp_path):
         # Arrange

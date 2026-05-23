@@ -39,64 +39,53 @@ class _RecordingBackend:
 
 
 @pytest.fixture
-def patched_backend(monkeypatch):
-    backend = _RecordingBackend()
-    monkeypatch.setattr(
-        "scitex_app._chat._backends.get_chat_backend",
-        lambda model=None: backend,
-    )
-    return backend
+def recording_backend():
+    """A concrete recording backend injected via stream_chat(backend=...)."""
+    return _RecordingBackend()
 
 
-def test_stream_chat_appends_user_prompt(patched_backend):
+def test_stream_chat_appends_user_prompt(recording_backend):
     # Arrange
+    backend = recording_backend
     # Act
-    list(_stream.stream_chat("hello"))
+    list(_stream.stream_chat("hello", backend=backend))
     # Assert
-    assert patched_backend.calls[-1]["messages"] == [
-        {"role": "user", "content": "hello"}
-    ]
+    assert backend.calls[-1]["messages"] == [{"role": "user", "content": "hello"}]
 
 
-def test_stream_chat_passes_through_system_prompt(patched_backend):
+def test_stream_chat_passes_through_system_prompt(recording_backend):
     # Arrange
+    backend = recording_backend
     # Act
-    list(_stream.stream_chat("hi", system_prompt="be terse"))
+    list(_stream.stream_chat("hi", system_prompt="be terse", backend=backend))
     # Assert
-    assert patched_backend.calls[-1]["system"] == "be terse"
+    assert backend.calls[-1]["system"] == "be terse"
 
 
-def test_stream_chat_truncates_history_len_msgs_is_4(patched_backend):
+def test_stream_chat_truncates_history_len_msgs_is_4(recording_backend):
     # Arrange
-    # Arrange
+    backend = recording_backend
     history = [{"role": "user", "content": str(i)} for i in range(20)]
-    list(_stream.stream_chat("hi", history=history, max_history=3))
     # Act
-    msgs = patched_backend.calls[-1]["messages"]
-    # Act
+    list(_stream.stream_chat("hi", history=history, max_history=3, backend=backend))
     # Assert
-    # Assert
-    assert len(msgs) == 4
+    assert len(backend.calls[-1]["messages"]) == 4
 
 
-def test_stream_chat_truncates_history_msgs_1_role_user_content_hi(patched_backend):
+def test_stream_chat_truncates_history_keeps_latest_user_prompt(recording_backend):
     # Arrange
-    # Arrange
+    backend = recording_backend
     history = [{"role": "user", "content": str(i)} for i in range(20)]
-    list(_stream.stream_chat("hi", history=history, max_history=3))
     # Act
-    msgs = patched_backend.calls[-1]["messages"]
-    # Act
+    list(_stream.stream_chat("hi", history=history, max_history=3, backend=backend))
     # Assert
-    # Assert
-    assert msgs[-1] == {"role": "user", "content": "hi"}
+    assert backend.calls[-1]["messages"][-1] == {"role": "user", "content": "hi"}
 
 
-
-
-def test_stream_chat_yields_backend_events(patched_backend):
+def test_stream_chat_yields_backend_events(recording_backend):
     # Arrange
+    backend = recording_backend
     # Act
-    events = list(_stream.stream_chat("hi"))
+    events = list(_stream.stream_chat("hi", backend=backend))
     # Assert
     assert events == [{"type": "chunk", "text": "hi"}, {"type": "done"}]
