@@ -1,8 +1,10 @@
 
 ### Source: /home/ywatanabe/.git-templates/.gitignore-templates/Custom/Specific.gitignore ###
 # Please add files here
-_sphinx_html/
-**/_sphinx_html/
+# Sphinx local build dir (transient). The in-wheel bundle
+# src/<pkg>/_sphinx_html/ is intentionally tracked — scitex-cloud serves
+# docs from it (general/04_docs_02_sphinx: do NOT gitignore _sphinx_html).
+docs/sphinx/_build/
 
 ### Source: /home/ywatanabe/.git-templates/.gitignore-templates/Custom/Claude.gitignore ###
 docs/to_claude

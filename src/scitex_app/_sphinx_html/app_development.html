@@ -1,0 +1,534 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>App Development Guide &mdash; SciTeX App 0.2.6 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=fc7d8818"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="CLI Reference" href="cli.html" />
+    <link rel="prev" title="Quickstart" href="quickstart.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            SciTeX App
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">App Development Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#role-of-each-package">Role of Each Package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#scaffold-a-new-app">Scaffold a New App</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#generated-structure-html-frontend">Generated Structure (HTML frontend)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#python-api-programmatic-scaffold">Python API (programmatic scaffold)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#validate-an-app">Validate an App</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#validation-checks">Validation Checks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#python-api-programmatic-validation">Python API (programmatic validation)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#dev-install-on-scitex-cloud">Dev-Install on SciTeX Cloud</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#environment-variables">Environment Variables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#python-api">Python API</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#submit-for-publication">Submit for Publication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#manifest-reference">Manifest Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#privilege-scopes">Privilege Scopes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#css-rules">CSS Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#typical-workflow">Typical Workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcp.html">MCP Server</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/scitex_app.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">SciTeX App</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">App Development Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/app_development.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="app-development-guide">
+<h1>App Development Guide<a class="headerlink" href="#app-development-guide" title="Link to this heading"></a></h1>
+<p>SciTeX apps are self-contained Django plugins that integrate into the
+SciTeX Cloud workspace. This guide covers the full lifecycle: scaffold,
+validate, dev-install, and submit.</p>
+<nav class="contents local" id="contents">
+<p class="topic-title">Contents</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#role-of-each-package" id="id1">Role of Each Package</a></p></li>
+<li><p><a class="reference internal" href="#scaffold-a-new-app" id="id2">Scaffold a New App</a></p>
+<ul>
+<li><p><a class="reference internal" href="#generated-structure-html-frontend" id="id3">Generated Structure (HTML frontend)</a></p></li>
+<li><p><a class="reference internal" href="#python-api-programmatic-scaffold" id="id4">Python API (programmatic scaffold)</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#validate-an-app" id="id5">Validate an App</a></p>
+<ul>
+<li><p><a class="reference internal" href="#validation-checks" id="id6">Validation Checks</a></p></li>
+<li><p><a class="reference internal" href="#python-api-programmatic-validation" id="id7">Python API (programmatic validation)</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#dev-install-on-scitex-cloud" id="id8">Dev-Install on SciTeX Cloud</a></p>
+<ul>
+<li><p><a class="reference internal" href="#environment-variables" id="id9">Environment Variables</a></p></li>
+<li><p><a class="reference internal" href="#python-api" id="id10">Python API</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#submit-for-publication" id="id11">Submit for Publication</a></p></li>
+<li><p><a class="reference internal" href="#manifest-reference" id="id12">Manifest Reference</a></p>
+<ul>
+<li><p><a class="reference internal" href="#privilege-scopes" id="id13">Privilege Scopes</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#css-rules" id="id14">CSS Rules</a></p></li>
+<li><p><a class="reference internal" href="#typical-workflow" id="id15">Typical Workflow</a></p></li>
+<li><p><a class="reference internal" href="#see-also" id="id16">See Also</a></p></li>
+</ul>
+</nav>
+<section id="role-of-each-package">
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">Role of Each Package</a><a class="headerlink" href="#role-of-each-package" title="Link to this heading"></a></h2>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>scitex-app  (this package) — developer SDK: scaffold, validate, install
+scitex-cloud               — platform: mounts apps, handles security, routing
+figrecipe                  — reference app: see how a real app is built
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">scitex-app</span></code> is the <strong>only</strong> package app developers need to install.
+<code class="docutils literal notranslate"><span class="pre">scitex-cloud</span></code> is the platform; developers interact with it only through
+the server URL and API token.</p>
+</section>
+<section id="scaffold-a-new-app">
+<h2><a class="toc-backref" href="#id2" role="doc-backlink">Scaffold a New App</a><a class="headerlink" href="#scaffold-a-new-app" title="Link to this heading"></a></h2>
+<p>Use <code class="docutils literal notranslate"><span class="pre">scitex-app</span> <span class="pre">app</span> <span class="pre">init</span></code> to generate a complete app skeleton:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Scaffold in current directory (uses directory name as app name)</span>
+scitex-app<span class="w"> </span>app<span class="w"> </span>init<span class="w"> </span>.
+
+<span class="c1"># Scaffold with explicit name, label, icon, and description</span>
+scitex-app<span class="w"> </span>app<span class="w"> </span>init<span class="w"> </span>/path/to/my_app<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--name<span class="w"> </span>my_awesome_app<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--label<span class="w"> </span><span class="s2">&quot;My Awesome App&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--icon<span class="w"> </span><span class="s2">&quot;fas fa-flask&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--description<span class="w"> </span><span class="s2">&quot;Analyses spectral data&quot;</span>
+
+<span class="c1"># Scaffold a React+Vite frontend instead of plain HTML</span>
+scitex-app<span class="w"> </span>app<span class="w"> </span>init<span class="w"> </span>.<span class="w"> </span>--frontend<span class="w"> </span>react
+
+<span class="c1"># Overwrite existing files</span>
+scitex-app<span class="w"> </span>app<span class="w"> </span>init<span class="w"> </span>.<span class="w"> </span>--overwrite
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The app module name must end with <code class="docutils literal notranslate"><span class="pre">_app</span></code> or <code class="docutils literal notranslate"><span class="pre">-app</span></code>.
+If it does not, the CLI appends the suffix automatically.</p>
+</div>
+<section id="generated-structure-html-frontend">
+<h3><a class="toc-backref" href="#id3" role="doc-backlink">Generated Structure (HTML frontend)</a><a class="headerlink" href="#generated-structure-html-frontend" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>my_awesome_app/
+├── __init__.py
+├── apps.py                          # AppConfig subclass
+├── views.py                         # Django view
+├── urls.py                          # URL patterns
+├── tests.py                         # Basic test stubs
+├── skill.py                         # MCP skill definition
+├── manifest.json                    # App metadata + privileges
+├── pyproject.toml                   # Dual-mode packaging
+├── README.md
+├── LICENSE
+├── .gitignore
+├── .agents/agents.json              # Agent integration config
+├── AGENTS.md                        # Developer docs for agents
+├── docs/PLATFORM.md                 # Platform integration notes
+├── templates/my_awesome_app/
+│   ├── index.html
+│   └── index_partial.html
+└── static/my_awesome_app/css/
+    └── my_awesome_app.css
+</pre></div>
+</div>
+<p>React frontend adds:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>├── package.json
+├── vite.config.ts
+├── tsconfig.json
+└── src/
+    ├── main.tsx
+    ├── App.tsx
+    └── store.ts                     # Zustand state store
+</pre></div>
+</div>
+</section>
+<section id="python-api-programmatic-scaffold">
+<h3><a class="toc-backref" href="#id4" role="doc-backlink">Python API (programmatic scaffold)</a><a class="headerlink" href="#python-api-programmatic-scaffold" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">scitex_app.appmaker</span><span class="w"> </span><span class="kn">import</span> <span class="n">init_app</span>
+
+<span class="n">created</span> <span class="o">=</span> <span class="n">init_app</span><span class="p">(</span>
+    <span class="n">target_dir</span><span class="o">=</span><span class="s2">&quot;/path/to/my_awesome_app&quot;</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;my_awesome_app&quot;</span><span class="p">,</span>
+    <span class="n">label</span><span class="o">=</span><span class="s2">&quot;My Awesome App&quot;</span><span class="p">,</span>
+    <span class="n">icon</span><span class="o">=</span><span class="s2">&quot;fas fa-flask&quot;</span><span class="p">,</span>
+    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Analyses spectral data&quot;</span><span class="p">,</span>
+    <span class="n">frontend_type</span><span class="o">=</span><span class="s2">&quot;html&quot;</span><span class="p">,</span>   <span class="c1"># or &quot;react&quot;</span>
+    <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Created </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">created</span><span class="p">)</span><span class="si">}</span><span class="s2"> files&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">created</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  + </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">init_app</span></code> returns the list of relative paths that were written.
+Files that already exist are skipped unless <code class="docutils literal notranslate"><span class="pre">overwrite=True</span></code>.</p>
+</section>
+</section>
+<section id="validate-an-app">
+<h2><a class="toc-backref" href="#id5" role="doc-backlink">Validate an App</a><a class="headerlink" href="#validate-an-app" title="Link to this heading"></a></h2>
+<p>Run the full validation pipeline before installing or submitting:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>scitex-app<span class="w"> </span>app<span class="w"> </span>validate<span class="w"> </span>.
+scitex-app<span class="w"> </span>app<span class="w"> </span>validate<span class="w"> </span>/path/to/my_awesome_app
+</pre></div>
+</div>
+<p>Exit code 0 on success, 1 on failure.</p>
+<section id="validation-checks">
+<h3><a class="toc-backref" href="#id6" role="doc-backlink">Validation Checks</a><a class="headerlink" href="#validation-checks" title="Link to this heading"></a></h3>
+<p>The validator runs these checks in order:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 75.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Check</p></th>
+<th class="head"><p>What it verifies</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Structure</strong></p></td>
+<td><p>Required files exist (<code class="docutils literal notranslate"><span class="pre">views.py</span></code>, <code class="docutils literal notranslate"><span class="pre">urls.py</span></code>, <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code>,
+<code class="docutils literal notranslate"><span class="pre">apps.py</span></code>, <code class="docutils literal notranslate"><span class="pre">LICENSE</span></code>, <code class="docutils literal notranslate"><span class="pre">README.md</span></code>, partial template,
+<code class="docutils literal notranslate"><span class="pre">.agents/agents.json</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Security</strong></p></td>
+<td><p>No forbidden Python patterns: <code class="docutils literal notranslate"><span class="pre">subprocess</span></code>, <code class="docutils literal notranslate"><span class="pre">os.system</span></code>,
+<code class="docutils literal notranslate"><span class="pre">eval()</span></code>, <code class="docutils literal notranslate"><span class="pre">exec()</span></code>, <code class="docutils literal notranslate"><span class="pre">__import__</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Manifest</strong></p></td>
+<td><p>Valid JSON, all required keys present (<code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">slug</span></code>,
+<code class="docutils literal notranslate"><span class="pre">label</span></code>, <code class="docutils literal notranslate"><span class="pre">version</span></code>, <code class="docutils literal notranslate"><span class="pre">icon</span></code>, <code class="docutils literal notranslate"><span class="pre">license</span></code>), semver version</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Templates</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">index.html</span></code> extends <code class="docutils literal notranslate"><span class="pre">global_base.html</span></code>, defines
+<code class="docutils literal notranslate"><span class="pre">{%</span> <span class="pre">block</span> <span class="pre">content</span> <span class="pre">%}</span></code>, does not override platform frame blocks</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>CSS</strong></p></td>
+<td><p>No <code class="docutils literal notranslate"><span class="pre">!important</span></code> on protected shell selectors, no hiding footer,
+no deprecated <code class="docutils literal notranslate"><span class="pre">--color-*</span></code> variables</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Dependencies</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> has a well-formed <code class="docutils literal notranslate"><span class="pre">dependencies</span></code> object</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="python-api-programmatic-validation">
+<h3><a class="toc-backref" href="#id7" role="doc-backlink">Python API (programmatic validation)</a><a class="headerlink" href="#python-api-programmatic-validation" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">scitex_app.appmaker</span><span class="w"> </span><span class="kn">import</span> <span class="n">validate</span>
+
+<span class="n">errors</span> <span class="o">=</span> <span class="n">validate</span><span class="p">(</span><span class="s2">&quot;/path/to/my_awesome_app&quot;</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="ow">not</span> <span class="n">errors</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;App is valid&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">err</span> <span class="ow">in</span> <span class="n">errors</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">validate</span></code> returns an empty list when all checks pass.</p>
+</section>
+</section>
+<section id="dev-install-on-scitex-cloud">
+<h2><a class="toc-backref" href="#id8" role="doc-backlink">Dev-Install on SciTeX Cloud</a><a class="headerlink" href="#dev-install-on-scitex-cloud" title="Link to this heading"></a></h2>
+<p>After local validation passes, install the app directly on a running
+SciTeX Cloud server for development testing:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Install using environment variables for credentials</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SCITEX_API_TOKEN</span><span class="o">=</span><span class="s2">&quot;your-jwt-token&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SCITEX_SERVER_URL</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:8000&quot;</span>
+
+scitex-app<span class="w"> </span>app<span class="w"> </span>dev-install<span class="w"> </span>.
+
+<span class="c1"># Or pass options explicitly</span>
+scitex-app<span class="w"> </span>app<span class="w"> </span>dev-install<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--server<span class="w"> </span>http://my-server:8000<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--token<span class="w">  </span><span class="s2">&quot;</span><span class="nv">$SCITEX_API_TOKEN</span><span class="s2">&quot;</span>
+</pre></div>
+</div>
+<p>On success the app appears immediately in the workspace sidebar.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The server must have access to the app source files (shared volume,
+NFS mount, or cloned repo). Dev-install registers the local path;
+it does not upload files.</p>
+</div>
+<section id="environment-variables">
+<h3><a class="toc-backref" href="#id9" role="doc-backlink">Environment Variables</a><a class="headerlink" href="#environment-variables" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 70.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Variable</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SCITEX_API_TOKEN</span></code></p></td>
+<td><p>JWT Bearer token (obtain from <em>Settings → API Tokens</em> in the UI)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SCITEX_SERVER_URL</span></code></p></td>
+<td><p>Base URL of the SciTeX Cloud server (default: <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8000</span></code>)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="python-api">
+<h3><a class="toc-backref" href="#id10" role="doc-backlink">Python API</a><a class="headerlink" href="#python-api" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">scitex_app.appmaker._dev_install</span><span class="w"> </span><span class="kn">import</span> <span class="n">dev_install</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">dev_install</span><span class="p">(</span>
+    <span class="n">app_dir</span><span class="o">=</span><span class="s2">&quot;.&quot;</span><span class="p">,</span>
+    <span class="n">server_url</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:8000&quot;</span><span class="p">,</span>
+    <span class="n">token</span><span class="o">=</span><span class="s2">&quot;your-jwt-token&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Installed:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;module_name&quot;</span><span class="p">))</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Failed:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;errors&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">dev_install</span></code> runs local validation first and returns early with
+<code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">False,</span> <span class="pre">&quot;errors&quot;:</span> <span class="pre">[...]}</span></code> if validation fails.</p>
+</section>
+</section>
+<section id="submit-for-publication">
+<h2><a class="toc-backref" href="#id11" role="doc-backlink">Submit for Publication</a><a class="headerlink" href="#submit-for-publication" title="Link to this heading"></a></h2>
+<p>Once the app is ready for public release, submit it for review:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>scitex-app<span class="w"> </span>app<span class="w"> </span>submit<span class="w"> </span>.
+
+<span class="c1"># Or with explicit server and token</span>
+scitex-app<span class="w"> </span>app<span class="w"> </span>submit<span class="w"> </span>/path/to/my_awesome_app<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--server<span class="w"> </span>https://scitex.example.com<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--token<span class="w">  </span><span class="s2">&quot;</span><span class="nv">$SCITEX_API_TOKEN</span><span class="s2">&quot;</span>
+</pre></div>
+</div>
+<p>This validates the app locally, then opens a pull-request on the
+<code class="docutils literal notranslate"><span class="pre">scitex-apps</span></code> registry repository for maintainer review.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">scitex_app.appmaker._publish</span><span class="w"> </span><span class="kn">import</span> <span class="n">publish</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">publish</span><span class="p">(</span>
+    <span class="n">app_dir</span><span class="o">=</span><span class="s2">&quot;.&quot;</span><span class="p">,</span>
+    <span class="n">server_url</span><span class="o">=</span><span class="s2">&quot;https://scitex.example.com&quot;</span><span class="p">,</span>
+    <span class="n">token</span><span class="o">=</span><span class="s2">&quot;your-jwt-token&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">if</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;PR URL:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;pr_url&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="manifest-reference">
+<h2><a class="toc-backref" href="#id12" role="doc-backlink">Manifest Reference</a><a class="headerlink" href="#manifest-reference" title="Link to this heading"></a></h2>
+<p>Every app must include a <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> at its root:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w">        </span><span class="s2">&quot;my_awesome_app&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;slug&quot;</span><span class="p">:</span><span class="w">        </span><span class="s2">&quot;my-awesome-app&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w">       </span><span class="s2">&quot;My Awesome App&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w">     </span><span class="s2">&quot;0.1.0&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;icon&quot;</span><span class="p">:</span><span class="w">        </span><span class="s2">&quot;fas fa-flask&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Analyses spectral data&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;license&quot;</span><span class="p">:</span><span class="w">     </span><span class="s2">&quot;AGPL-3.0&quot;</span><span class="p">,</span>
+
+<span class="w">  </span><span class="nt">&quot;frontend_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;html&quot;</span><span class="p">,</span>
+
+<span class="w">  </span><span class="nt">&quot;privileges&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;filesystem&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;scope&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;project&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;network&quot;</span><span class="p">,</span><span class="w">    </span><span class="nt">&quot;scope&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;none&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;api&quot;</span><span class="p">,</span><span class="w">        </span><span class="nt">&quot;scope&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;scitex&quot;</span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+
+<span class="w">  </span><span class="nt">&quot;dependencies&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;python&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;numpy&gt;=1.24&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pandas&gt;=2.0&quot;</span><span class="p">],</span>
+<span class="w">    </span><span class="nt">&quot;system&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">    </span><span class="nt">&quot;node&quot;</span><span class="p">:</span><span class="w">   </span><span class="p">[],</span>
+<span class="w">    </span><span class="nt">&quot;r&quot;</span><span class="p">:</span><span class="w">      </span><span class="p">[]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Required fields: <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">slug</span></code>, <code class="docutils literal notranslate"><span class="pre">label</span></code>, <code class="docutils literal notranslate"><span class="pre">version</span></code>, <code class="docutils literal notranslate"><span class="pre">icon</span></code>, <code class="docutils literal notranslate"><span class="pre">license</span></code>.</p>
+<section id="privilege-scopes">
+<h3><a class="toc-backref" href="#id13" role="doc-backlink">Privilege Scopes</a><a class="headerlink" href="#privilege-scopes" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Type</p></th>
+<th class="head"><p>Valid scopes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">filesystem</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">project</span></code>, <code class="docutils literal notranslate"><span class="pre">readonly</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">network</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">none</span></code>, <code class="docutils literal notranslate"><span class="pre">allowlist</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">api</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">scitex</span></code>, <code class="docutils literal notranslate"><span class="pre">llm</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="css-rules">
+<h2><a class="toc-backref" href="#id14" role="doc-backlink">CSS Rules</a><a class="headerlink" href="#css-rules" title="Link to this heading"></a></h2>
+<p>App CSS is isolated from the platform shell. Follow these rules:</p>
+<ul>
+<li><p><strong>Use</strong> <code class="docutils literal notranslate"><span class="pre">--workspace-*</span></code> and <code class="docutils literal notranslate"><span class="pre">--text-*</span></code> CSS custom properties</p></li>
+<li><p><strong>Do not use</strong> deprecated <code class="docutils literal notranslate"><span class="pre">--color-*</span></code> variables</p></li>
+<li><p><strong>Do not apply</strong> <code class="docutils literal notranslate"><span class="pre">!important</span></code> to platform shell selectors:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>.stx-shell-sidebar, .stx-shell-sidebar__title,
+.panel-resizer, footer
+</pre></div>
+</div>
+</li>
+<li><p><strong>Do not hide</strong> the footer (<code class="docutils literal notranslate"><span class="pre">footer</span> <span class="pre">{</span> <span class="pre">display:</span> <span class="pre">none</span> <span class="pre">}</span></code> is blocked)</p></li>
+<li><p><strong>Do not override</strong> workspace frame template blocks:
+<code class="docutils literal notranslate"><span class="pre">workspace_worktree_pane</span></code>, <code class="docutils literal notranslate"><span class="pre">workspace_ai_pane</span></code>,
+<code class="docutils literal notranslate"><span class="pre">workspace_viewer_pane</span></code>, <code class="docutils literal notranslate"><span class="pre">workspace_apps_pane</span></code></p></li>
+</ul>
+</section>
+<section id="typical-workflow">
+<h2><a class="toc-backref" href="#id15" role="doc-backlink">Typical Workflow</a><a class="headerlink" href="#typical-workflow" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1. Scaffold</span>
+mkdir<span class="w"> </span>~/proj/my_awesome_app
+scitex-app<span class="w"> </span>app<span class="w"> </span>init<span class="w"> </span>~/proj/my_awesome_app<span class="w"> </span>--name<span class="w"> </span>my_awesome_app
+
+<span class="c1"># 2. Edit source files in your editor</span>
+<span class="nb">cd</span><span class="w"> </span>~/proj/my_awesome_app
+<span class="c1"># ... implement views.py, templates, etc. ...</span>
+
+<span class="c1"># 3. Validate locally</span>
+scitex-app<span class="w"> </span>app<span class="w"> </span>validate<span class="w"> </span>.
+
+<span class="c1"># 4. Dev-install on a running server for live testing</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">SCITEX_API_TOKEN</span><span class="o">=</span><span class="s2">&quot;...&quot;</span>
+scitex-app<span class="w"> </span>app<span class="w"> </span>dev-install<span class="w"> </span>.<span class="w"> </span>--server<span class="w"> </span>http://127.0.0.1:8000
+
+<span class="c1"># 5. Iterate: edit → validate → dev-install</span>
+<span class="c1"># (The server hot-reloads on file changes)</span>
+
+<span class="c1"># 6. Submit when ready</span>
+scitex-app<span class="w"> </span>app<span class="w"> </span>submit<span class="w"> </span>.
+</pre></div>
+</div>
+</section>
+<section id="see-also">
+<h2><a class="toc-backref" href="#id16" role="doc-backlink">See Also</a><a class="headerlink" href="#see-also" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a> — SDK usage (file I/O, backends)</p></li>
+<li><p><a class="reference internal" href="cli.html"><span class="doc">CLI Reference</span></a> — Full CLI reference</p></li>
+<li><p><a class="reference internal" href="api/scitex_app.html"><span class="doc">API Reference</span></a> — Python API reference</p></li>
+<li><p><a class="reference external" href="https://github.com/ywatanabe1989/scitex-app/blob/main/docs/APP_DEVELOPER_GUIDE.md">APP_DEVELOPER_GUIDE.md</a> — Detailed guide for AI coding agents</p></li>
+<li><p><a class="reference external" href="https://figrecipe.readthedocs.io/">figrecipe</a> — Reference app built on this SDK</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="quickstart.html" class="btn btn-neutral float-left" title="Quickstart" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="cli.html" class="btn btn-neutral float-right" title="CLI Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024-2026, Yusuke Watanabe.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

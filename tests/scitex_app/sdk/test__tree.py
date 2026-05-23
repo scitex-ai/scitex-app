@@ -36,6 +36,7 @@ class TestListEntries:
                     {"path": "a.txt", "type": "file"},
                     {"path": "subdir", "type": "directory"},
                 ]
+
         # Act
         result = _list_entries(FakeBackend(), "")
         # Act
@@ -52,13 +53,13 @@ class TestListEntries:
                     {"path": "a.txt", "type": "file"},
                     {"path": "subdir", "type": "directory"},
                 ]
+
         # Act
         result = _list_entries(FakeBackend(), "")
         # Act
         # Assert
         # Assert
         assert result[0]["path"] == "a.txt"
-
 
     def test_falls_back_to_root_attr_file_txt_in_paths(self, tmp_path):
         # Arrange
@@ -120,7 +121,6 @@ class TestListEntries:
         # Assert
         assert types["subdir"] == "directory"
 
-
     def test_root_attr_nonexistent_directory(self, tmp_path):
         """Returns empty list when directory does not exist."""
         # Arrange
@@ -136,6 +136,7 @@ class TestListEntries:
         class MinimalBackend:
             def list(self, directory="", *, extensions=None):
                 return ["a.txt", "b.yaml"]
+
         # Act
         result = _list_entries(MinimalBackend(), "")
         # Act
@@ -143,19 +144,21 @@ class TestListEntries:
         # Assert
         assert all(e["type"] == "file" for e in result)
 
-    def test_last_resort_list_fallback_e_path_for_e_in_result_a_txt_b_yaml(self, tmp_path):
+    def test_last_resort_list_fallback_e_path_for_e_in_result_a_txt_b_yaml(
+        self, tmp_path
+    ):
         # Arrange
         # Arrange
         class MinimalBackend:
             def list(self, directory="", *, extensions=None):
                 return ["a.txt", "b.yaml"]
+
         # Act
         result = _list_entries(MinimalBackend(), "")
         # Act
         # Assert
         # Assert
         assert [e["path"] for e in result] == ["a.txt", "b.yaml"]
-
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +223,6 @@ class TestBuildTreeBasics:
         # Assert
         assert result[0]["path"] == "readme.txt"
 
-
     def test_directory_with_files_produces_nested_tree_data_in_names(self, tmp_path):
         # Arrange
         # Arrange
@@ -237,7 +239,9 @@ class TestBuildTreeBasics:
         # Assert
         assert "data" in names
 
-    def test_directory_with_files_produces_nested_tree_data_node_type_directory(self, tmp_path):
+    def test_directory_with_files_produces_nested_tree_data_node_type_directory(
+        self, tmp_path
+    ):
         # Arrange
         # Arrange
         subdir = tmp_path / "data"
@@ -245,36 +249,25 @@ class TestBuildTreeBasics:
         (subdir / "a.txt").write_text("a")
         backend = make_backend(tmp_path)
         result = build_tree(backend)
-        # Should contain directory 'data' with children
         # Act
-        names = {item["name"] for item in result}
-        # Assert
-        assert "data" in names
         data_node = next(item for item in result if item["name"] == "data")
-        # Act
         # Assert
         assert data_node["type"] == "directory"
 
-    def test_directory_with_files_produces_nested_tree_a_txt_in_children_names(self, tmp_path):
-        # Arrange
+    def test_directory_with_files_produces_nested_tree_a_txt_in_children_names(
+        self, tmp_path
+    ):
         # Arrange
         subdir = tmp_path / "data"
         subdir.mkdir()
         (subdir / "a.txt").write_text("a")
         backend = make_backend(tmp_path)
         result = build_tree(backend)
-        # Should contain directory 'data' with children
-        # Act
-        names = {item["name"] for item in result}
-        # Assert
-        assert "data" in names
         data_node = next(item for item in result if item["name"] == "data")
-        assert data_node["type"] == "directory"
-        children_names = {c["name"] for c in data_node["children"]}
         # Act
+        children_names = {c["name"] for c in data_node["children"]}
         # Assert
         assert "a.txt" in children_names
-
 
     def test_empty_subdirectory_excluded(self, tmp_path):
         """Empty directories must not appear in the tree."""
@@ -332,7 +325,6 @@ class TestSkipHidden:
         # Assert
         # Assert
         assert "visible.txt" in names
-
 
     def test_hidden_dirs_skipped_by_default(self, tmp_path):
         # Arrange
@@ -407,7 +399,6 @@ class TestExtensionFilter:
         # Assert
         assert "data.csv" not in names
 
-
     def test_filter_by_multiple_extensions_config_yaml_in_names(self, tmp_path):
         # Arrange
         # Arrange
@@ -453,7 +444,6 @@ class TestExtensionFilter:
         # Assert
         assert "data.csv" not in names
 
-
     def test_extension_filter_case_insensitive(self, tmp_path):
         # Arrange
         (tmp_path / "IMAGE.PNG").write_text("fake png")
@@ -464,7 +454,9 @@ class TestExtensionFilter:
         # Assert
         assert "IMAGE.PNG" in names
 
-    def test_directories_always_traversed_for_extension_filter_len_result_is_1(self, tmp_path):
+    def test_directories_always_traversed_for_extension_filter_len_result_is_1(
+        self, tmp_path
+    ):
         # Arrange
         # Arrange
         subdir = tmp_path / "assets"
@@ -478,7 +470,9 @@ class TestExtensionFilter:
         # Assert
         assert len(result) == 1
 
-    def test_directories_always_traversed_for_extension_filter_result_0_type_directory(self, tmp_path):
+    def test_directories_always_traversed_for_extension_filter_result_0_type_directory(
+        self, tmp_path
+    ):
         # Arrange
         # Arrange
         subdir = tmp_path / "assets"
@@ -492,7 +486,9 @@ class TestExtensionFilter:
         # Assert
         assert result[0]["type"] == "directory"
 
-    def test_directories_always_traversed_for_extension_filter_result_0_name_assets(self, tmp_path):
+    def test_directories_always_traversed_for_extension_filter_result_0_name_assets(
+        self, tmp_path
+    ):
         # Arrange
         # Arrange
         subdir = tmp_path / "assets"
@@ -506,7 +502,9 @@ class TestExtensionFilter:
         # Assert
         assert result[0]["name"] == "assets"
 
-    def test_directories_always_traversed_for_extension_filter_result_0_children_0_name_style_css(self, tmp_path):
+    def test_directories_always_traversed_for_extension_filter_result_0_children_0_name_style_css(
+        self, tmp_path
+    ):
         # Arrange
         # Arrange
         subdir = tmp_path / "assets"
@@ -519,7 +517,6 @@ class TestExtensionFilter:
         # Assert
         # Assert
         assert result[0]["children"][0]["name"] == "style.css"
-
 
     def test_no_filter_includes_all_files(self, tmp_path):
         # Arrange
@@ -565,7 +562,9 @@ class TestMaxDepth:
         # Assert
         assert len(result) == 1
 
-    def test_max_depth_one_excludes_grandchildren_shallow_txt_in_child_names(self, tmp_path):
+    def test_max_depth_one_excludes_grandchildren_shallow_txt_in_child_names(
+        self, tmp_path
+    ):
         # Arrange
         # Arrange
         subdir = tmp_path / "level1"
@@ -576,16 +575,12 @@ class TestMaxDepth:
         (subdir / "shallow.txt").write_text("shallow")
         backend = make_backend(tmp_path)
         # depth=1 means level1/ can have children but not level2/
-        # Act
         result = build_tree(backend, max_depth=2)
-        # Assert
-        assert len(result) == 1
         level1_node = result[0]
-        child_names = {c["name"] for c in level1_node["children"]}
         # Act
+        child_names = {c["name"] for c in level1_node["children"]}
         # Assert
         assert "shallow.txt" in child_names
-
 
     def test_default_max_depth_reaches_nested_content_len_result_is_1(self, tmp_path):
         # Arrange
@@ -601,7 +596,9 @@ class TestMaxDepth:
         # Assert
         assert len(result) == 1
 
-    def test_default_max_depth_reaches_nested_content_result_0_type_directory(self, tmp_path):
+    def test_default_max_depth_reaches_nested_content_result_0_type_directory(
+        self, tmp_path
+    ):
         # Arrange
         # Arrange
         deep = tmp_path / "a" / "b" / "c"
@@ -614,7 +611,6 @@ class TestMaxDepth:
         # Assert
         # Assert
         assert result[0]["type"] == "directory"
-
 
 
 # ---------------------------------------------------------------------------
@@ -638,6 +634,7 @@ class TestCustomBackend:
                         {"path": "docs/guide.md", "type": "file"},
                     ]
                 return []
+
         result = build_tree(FlatBackend())
         # docs/ should appear with children, readme.md at root
         # Act
@@ -662,6 +659,7 @@ class TestCustomBackend:
                         {"path": "docs/guide.md", "type": "file"},
                     ]
                 return []
+
         result = build_tree(FlatBackend())
         # docs/ should appear with children, readme.md at root
         # Act
@@ -686,15 +684,10 @@ class TestCustomBackend:
                         {"path": "docs/guide.md", "type": "file"},
                     ]
                 return []
+
         result = build_tree(FlatBackend())
-        # docs/ should appear with children, readme.md at root
         # Act
-        names = {item["name"] for item in result}
-        # Assert
-        assert "docs" in names
-        assert "readme.md" in names
         docs_node = next(item for item in result if item["name"] == "docs")
-        # Act
         # Assert
         assert docs_node["type"] == "directory"
 
@@ -713,20 +706,17 @@ class TestCustomBackend:
                         {"path": "docs/guide.md", "type": "file"},
                     ]
                 return []
+
         result = build_tree(FlatBackend())
-        # docs/ should appear with children, readme.md at root
-        # Act
-        names = {item["name"] for item in result}
-        # Assert
-        assert "docs" in names
-        assert "readme.md" in names
         docs_node = next(item for item in result if item["name"] == "docs")
         # Act
+        first_child_name = docs_node["children"][0]["name"]
         # Assert
-        assert docs_node["children"][0]["name"] == "guide.md"
+        assert first_child_name == "guide.md"
 
-
-    def test_permission_error_in_subdir_is_skipped_restricted_not_in_names(self, tmp_path):
+    def test_permission_error_in_subdir_is_skipped_restricted_not_in_names(
+        self, tmp_path
+    ):
         # Arrange
         # Arrange
         class BackendWithPermError:
@@ -737,6 +727,7 @@ class TestCustomBackend:
                         {"path": "ok.txt", "type": "file"},
                     ]
                 raise PermissionError("no access")
+
         result = build_tree(BackendWithPermError())
         # Act
         names = {item["name"] for item in result}
@@ -756,6 +747,7 @@ class TestCustomBackend:
                         {"path": "ok.txt", "type": "file"},
                     ]
                 raise PermissionError("no access")
+
         result = build_tree(BackendWithPermError())
         # Act
         names = {item["name"] for item in result}
@@ -763,7 +755,6 @@ class TestCustomBackend:
         # Assert
         # Assert
         assert "ok.txt" in names
-
 
 
 # EOF
