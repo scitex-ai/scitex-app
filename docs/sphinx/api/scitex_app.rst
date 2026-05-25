@@ -18,6 +18,7 @@ FilesBackend Protocol
 .. autoclass:: scitex_app.sdk._protocol.FilesBackend
    :members:
    :undoc-members:
+   :no-index:
 
 FileSystemBackend
 -----------------
