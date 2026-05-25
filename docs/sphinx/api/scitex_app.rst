@@ -4,6 +4,7 @@ API Reference
 .. automodule:: scitex_app
    :members:
    :undoc-members:
+   :exclude-members: FilesBackend
 
 SDK Module
 ----------
@@ -11,6 +12,7 @@ SDK Module
 .. automodule:: scitex_app.sdk
    :members:
    :undoc-members:
+   :exclude-members: FilesBackend
 
 FilesBackend Protocol
 ---------------------
@@ -18,7 +20,6 @@ FilesBackend Protocol
 .. autoclass:: scitex_app.sdk._protocol.FilesBackend
    :members:
    :undoc-members:
-   :no-index:
 
 FileSystemBackend
 -----------------
