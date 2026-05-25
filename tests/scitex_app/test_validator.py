@@ -640,7 +640,7 @@ class TestValidateBundleSize:
 
     def test_custom_max_bundle_size(self, tmp_path):
         # Arrange
-        (tmp_path / "data.bin").write_bytes(b"x" * 1000)
+        (tmp_path / "data.bin").write_bytes(b"x" * 1_000)
         validator = AppValidator(tmp_path, max_bundle_size=500)
         # Act
         validator.validate_bundle_size()
@@ -1069,7 +1069,7 @@ class TestConstants:
         # Arrange
         # Act
         # Assert
-        assert DEFAULT_MAX_BUNDLE_SIZE == 50 * 1024 * 1024
+        assert DEFAULT_MAX_BUNDLE_SIZE == 50 * 1_024 * 1_024
 
 
 # EOF
