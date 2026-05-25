@@ -95,25 +95,40 @@ def make_full_standalone_app(root: Path, app_name: str = "myapp") -> None:
 
 class TestIsEmbeddedPackage:
     def test_underscore_prefix_is_embedded(self, tmp_path):
+        # Arrange
         embedded_dir = tmp_path / "_django"
+        # Act
         embedded_dir.mkdir()
+        # Assert
         assert _is_embedded_package(embedded_dir) is True
 
     def test_normal_name_without_manifest_is_not_embedded(self, tmp_path):
+        # Arrange
         app_dir = tmp_path / "myapp"
+        # Act
         app_dir.mkdir()
+        # Assert
         assert _is_embedded_package(app_dir) is False
 
     def test_manifest_embedded_package_true(self, tmp_path):
+        # Arrange
+        # Act
         write_manifest(tmp_path, {"embedded_package": True})
+        # Assert
         assert _is_embedded_package(tmp_path) is True
 
     def test_manifest_embedded_package_false(self, tmp_path):
+        # Arrange
+        # Act
         write_manifest(tmp_path, {"embedded_package": False})
+        # Assert
         assert _is_embedded_package(tmp_path) is False
 
     def test_manifest_missing_embedded_package_key(self, tmp_path):
+        # Arrange
+        # Act
         write_manifest(tmp_path, {"name": "myapp"})
+        # Assert
         assert _is_embedded_package(tmp_path) is False
 
 
@@ -124,14 +139,23 @@ class TestIsEmbeddedPackage:
 
 class TestGetFrontendType:
     def test_returns_frontend_type_from_manifest(self, tmp_path):
+        # Arrange
+        # Act
         write_manifest(tmp_path, {"frontend_type": "react"})
+        # Assert
         assert _get_frontend_type(tmp_path) == "react"
 
     def test_returns_empty_string_when_not_set(self, tmp_path):
+        # Arrange
+        # Act
         write_manifest(tmp_path, {"name": "app"})
+        # Assert
         assert _get_frontend_type(tmp_path) == ""
 
     def test_returns_empty_string_when_no_manifest(self, tmp_path):
+        # Arrange
+        # Act
+        # Assert
         assert _get_frontend_type(tmp_path) == ""
 
 
@@ -142,15 +166,24 @@ class TestGetFrontendType:
 
 class TestGetAppName:
     def test_returns_name_from_manifest(self, tmp_path):
+        # Arrange
+        # Act
         write_manifest(tmp_path, {"name": "my_awesome_app"})
+        # Assert
         assert _get_app_name(tmp_path) == "my_awesome_app"
 
     def test_falls_back_to_dir_name(self, tmp_path):
         # No manifest — should return dir name
+        # Arrange
+        # Act
+        # Assert
         assert _get_app_name(tmp_path) == tmp_path.name
 
     def test_invalid_manifest_json_falls_back_to_dir_name(self, tmp_path):
+        # Arrange
+        # Act
         (tmp_path / "manifest.json").write_text("{broken", encoding="utf-8")
+        # Assert
         assert _get_app_name(tmp_path) == tmp_path.name
 
 
@@ -161,62 +194,90 @@ class TestGetAppName:
 
 class TestValidateStructure:
     def test_missing_directory_returns_error(self, tmp_path):
+        # Arrange
+        # Act
         errors = validate_structure(tmp_path / "nonexistent")
+        # Assert
         assert any("does not exist" in e for e in errors)
 
     def test_embedded_app_only_requires_core_files(self, tmp_path):
+        # Arrange
         make_minimal_embedded_app(tmp_path)
+        # Act
         errors = validate_structure(tmp_path)
+        # Assert
         assert errors == []
 
     def test_missing_views_py_adds_error(self, tmp_path):
+        # Arrange
         make_minimal_embedded_app(tmp_path)
         (tmp_path / "views.py").unlink()
+        # Act
         errors = validate_structure(tmp_path)
+        # Assert
         assert any("views.py" in e for e in errors)
 
     def test_missing_urls_py_adds_error(self, tmp_path):
+        # Arrange
         make_minimal_embedded_app(tmp_path)
         (tmp_path / "urls.py").unlink()
+        # Act
         errors = validate_structure(tmp_path)
+        # Assert
         assert any("urls.py" in e for e in errors)
 
     def test_standalone_app_requires_apps_py(self, tmp_path):
+        # Arrange
         make_full_standalone_app(tmp_path, "myapp")
         (tmp_path / "apps.py").unlink()
+        # Act
         errors = validate_structure(tmp_path)
+        # Assert
         assert any("apps.py" in e for e in errors)
 
     def test_standalone_app_requires_license(self, tmp_path):
+        # Arrange
         make_full_standalone_app(tmp_path, "myapp")
         (tmp_path / "LICENSE").unlink()
+        # Act
         errors = validate_structure(tmp_path)
+        # Assert
         assert any("LICENSE" in e for e in errors)
 
     def test_standalone_app_requires_readme(self, tmp_path):
+        # Arrange
         make_full_standalone_app(tmp_path, "myapp")
         (tmp_path / "README.md").unlink()
+        # Act
         errors = validate_structure(tmp_path)
+        # Assert
         assert any("README.md" in e for e in errors)
 
     def test_standalone_app_requires_partial_template(self, tmp_path):
+        # Arrange
         make_full_standalone_app(tmp_path, "myapp")
         partial = tmp_path / "templates" / "myapp" / "index_partial.html"
         partial.unlink()
+        # Act
         errors = validate_structure(tmp_path)
+        # Assert
         assert any("index_partial.html" in e for e in errors)
 
     def test_standalone_app_requires_agents_config(self, tmp_path):
+        # Arrange
         make_full_standalone_app(tmp_path, "myapp")
         (tmp_path / ".agents" / "agents.json").unlink()
         (tmp_path / ".agents" / "README.md").unlink() if (
             tmp_path / ".agents" / "README.md"
         ).exists() else None
+        # Act
         errors = validate_structure(tmp_path)
+        # Assert
         assert any(".agents" in e for e in errors)
 
     def test_react_frontend_skips_template_check(self, tmp_path):
         """React apps skip the template check."""
+        # Arrange
         write_manifest(
             tmp_path,
             {
@@ -238,8 +299,10 @@ class TestValidateStructure:
         agents_dir = tmp_path / ".agents"
         agents_dir.mkdir()
         (agents_dir / "agents.json").write_text("{}")
+        # Act
         errors = validate_structure(tmp_path)
         # No error about missing template
+        # Assert
         assert not any("index_partial.html" in e for e in errors)
 
 
@@ -250,61 +313,88 @@ class TestValidateStructure:
 
 class TestValidateSecurity:
     def test_clean_python_passes(self, tmp_path):
+        # Arrange
         (tmp_path / "views.py").write_text(
             "from django.http import HttpResponse\n\ndef index(request): pass\n",
             encoding="utf-8",
         )
+        # Act
         errors = validate_security(tmp_path)
+        # Assert
         assert errors == []
 
     def test_subprocess_in_python_adds_error(self, tmp_path):
+        # Arrange
         (tmp_path / "bad.py").write_text("import subprocess\n", encoding="utf-8")
+        # Act
         errors = validate_security(tmp_path)
+        # Assert
         assert any("subprocess" in e for e in errors)
 
     def test_os_system_in_python_adds_error(self, tmp_path):
+        # Arrange
         (tmp_path / "views.py").write_text("os.system('ls')\n", encoding="utf-8")
+        # Act
         errors = validate_security(tmp_path)
+        # Assert
         assert any("os.system" in e for e in errors)
 
     def test_eval_in_python_adds_error(self, tmp_path):
+        # Arrange
         (tmp_path / "utils.py").write_text(
             "result = eval(user_input)\n", encoding="utf-8"
         )
+        # Act
         errors = validate_security(tmp_path)
+        # Assert
         assert any("eval" in e for e in errors)
 
     def test_exec_in_python_adds_error(self, tmp_path):
+        # Arrange
         (tmp_path / "views.py").write_text("exec(some_code)\n", encoding="utf-8")
+        # Act
         errors = validate_security(tmp_path)
+        # Assert
         assert any("exec" in e for e in errors)
 
-    def test_pycache_excluded(self, tmp_path):
+    def test_pycache_excluded_errors_equals_case(self, tmp_path):
+        # Arrange
         pycache = tmp_path / "__pycache__"
         pycache.mkdir()
         (pycache / "bad.py").write_text("import subprocess\n", encoding="utf-8")
+        # Act
         errors = validate_security(tmp_path)
+        # Assert
         assert errors == []
 
-    def test_venv_excluded(self, tmp_path):
+    def test_venv_excluded_errors_equals_case(self, tmp_path):
+        # Arrange
         venv_dir = tmp_path / ".venv"
         venv_dir.mkdir()
         (venv_dir / "bad.py").write_text("import subprocess\n", encoding="utf-8")
+        # Act
         errors = validate_security(tmp_path)
+        # Assert
         assert errors == []
 
     def test_node_modules_excluded(self, tmp_path):
+        # Arrange
         nm = tmp_path / "node_modules"
         nm.mkdir()
         (nm / "bad.py").write_text("import subprocess\n", encoding="utf-8")
+        # Act
         errors = validate_security(tmp_path)
+        # Assert
         assert errors == []
 
     def test_multiple_forbidden_patterns_accumulate(self, tmp_path):
+        # Arrange
         (tmp_path / "views.py").write_text(
             "import subprocess\nos.system('ls')\neval(x)\n", encoding="utf-8"
         )
+        # Act
         errors = validate_security(tmp_path)
+        # Assert
         assert len(errors) >= 3
 
 
@@ -315,26 +405,39 @@ class TestValidateSecurity:
 
 class TestValidateManifest:
     def test_missing_manifest_returns_error(self, tmp_path):
+        # Arrange
+        # Act
         errors = validate_manifest(tmp_path)
+        # Assert
         assert any("not found" in e for e in errors)
 
     def test_invalid_json_returns_error(self, tmp_path):
+        # Arrange
         (tmp_path / "manifest.json").write_text("{bad json}", encoding="utf-8")
+        # Act
         errors = validate_manifest(tmp_path)
+        # Assert
         assert any("not valid JSON" in e for e in errors)
 
     def test_non_object_manifest_returns_error(self, tmp_path):
+        # Arrange
         (tmp_path / "manifest.json").write_text("[1, 2, 3]", encoding="utf-8")
+        # Act
         errors = validate_manifest(tmp_path)
+        # Assert
         assert any("must be a JSON object" in e for e in errors)
 
     def test_missing_required_keys_adds_errors(self, tmp_path):
+        # Arrange
         (tmp_path / "manifest.json").write_text(json.dumps({"name": "myapp"}))
+        # Act
         errors = validate_manifest(tmp_path)
         # All keys other than "name" should trigger errors
+        # Assert
         assert len(errors) > 0
 
     def test_all_required_keys_present(self, tmp_path):
+        # Arrange
         data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
         data["name"] = "my_app"
         data["version"] = "1.0.0"
@@ -343,41 +446,55 @@ class TestValidateManifest:
         data["icon"] = "fas fa-star"
         data["license"] = "MIT"
         write_manifest(tmp_path, data)
+        # Act
         errors = validate_manifest(tmp_path)
+        # Assert
         assert errors == []
 
     def test_name_without_app_suffix_adds_error(self, tmp_path):
+        # Arrange
         data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
         data["name"] = "mybadname"  # no _app suffix
         data["version"] = "1.0.0"
         write_manifest(tmp_path, data)
+        # Act
         errors = validate_manifest(tmp_path)
+        # Assert
         assert any("_app" in e or "-app" in e for e in errors)
 
     def test_name_with_app_suffix_accepted(self, tmp_path):
+        # Arrange
         data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
         data["name"] = "my_app"
         data["version"] = "1.0.0"
         write_manifest(tmp_path, data)
         errors = validate_manifest(tmp_path)
+        # Act
         name_errors = [e for e in errors if "_app" in e or "-app" in e]
+        # Assert
         assert name_errors == []
 
     def test_non_semver_version_adds_error(self, tmp_path):
+        # Arrange
         data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
         data["name"] = "my_app"
         data["version"] = "not-a-version"
         write_manifest(tmp_path, data)
+        # Act
         errors = validate_manifest(tmp_path)
+        # Assert
         assert any("semver" in e for e in errors)
 
     def test_valid_semver_version_passes(self, tmp_path):
+        # Arrange
         data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
         data["name"] = "my_app"
         data["version"] = "2.1.3"
         write_manifest(tmp_path, data)
         errors = validate_manifest(tmp_path)
+        # Act
         version_errors = [e for e in errors if "semver" in e]
+        # Assert
         assert version_errors == []
 
 
@@ -389,42 +506,58 @@ class TestValidateManifest:
 class TestValidateTemplates:
     def test_no_app_name_returns_no_errors(self, tmp_path):
         # No manifest and no directory name matching app
+        # Arrange
+        # Act
         errors = validate_templates(tmp_path)
+        # Assert
         assert isinstance(errors, list)
 
     def test_missing_index_html_is_fine(self, tmp_path):
         """If index.html doesn't exist, template checks are skipped."""
+        # Arrange
         write_manifest(tmp_path, {"name": "myapp"})
+        # Act
         errors = validate_templates(tmp_path)
+        # Assert
         assert errors == []
 
     def test_valid_template_passes(self, tmp_path):
+        # Arrange
         write_manifest(tmp_path, {"name": "myapp"})
         tmpl_dir = tmp_path / "templates" / "myapp"
         tmpl_dir.mkdir(parents=True)
         (tmpl_dir / "index.html").write_text(
             "{% extends 'global_base.html' %}{% block content %}hello{% endblock %}"
         )
+        # Act
         errors = validate_templates(tmp_path)
+        # Assert
         assert errors == []
 
     def test_missing_global_base_extend_adds_error(self, tmp_path):
+        # Arrange
         write_manifest(tmp_path, {"name": "myapp"})
         tmpl_dir = tmp_path / "templates" / "myapp"
         tmpl_dir.mkdir(parents=True)
         (tmpl_dir / "index.html").write_text("{% block content %}hello{% endblock %}")
+        # Act
         errors = validate_templates(tmp_path)
+        # Assert
         assert any("global_base.html" in e for e in errors)
 
     def test_missing_block_content_adds_error(self, tmp_path):
+        # Arrange
         write_manifest(tmp_path, {"name": "myapp"})
         tmpl_dir = tmp_path / "templates" / "myapp"
         tmpl_dir.mkdir(parents=True)
         (tmpl_dir / "index.html").write_text("{% extends 'global_base.html' %}")
+        # Act
         errors = validate_templates(tmp_path)
+        # Assert
         assert any("block content" in e for e in errors)
 
     def test_forbidden_block_override_adds_error(self, tmp_path):
+        # Arrange
         write_manifest(tmp_path, {"name": "myapp"})
         tmpl_dir = tmp_path / "templates" / "myapp"
         tmpl_dir.mkdir(parents=True)
@@ -434,7 +567,9 @@ class TestValidateTemplates:
             f"{{% block content %}}{{% endblock %}}"
             f"{{% block {forbidden_block} %}}{{% endblock %}}"
         )
+        # Act
         errors = validate_templates(tmp_path)
+        # Assert
         assert any(forbidden_block in e for e in errors)
 
 
@@ -445,32 +580,47 @@ class TestValidateTemplates:
 
 class TestValidateCss:
     def test_clean_css_passes(self, tmp_path):
+        # Arrange
         (tmp_path / "style.css").write_text("body { margin: 0; }")
+        # Act
         errors = validate_css(tmp_path)
+        # Assert
         assert errors == []
 
     def test_deprecated_color_variable_adds_error(self, tmp_path):
+        # Arrange
         (tmp_path / "style.css").write_text("color: var(--color-primary);")
+        # Act
         errors = validate_css(tmp_path)
+        # Assert
         assert any("--color-" in e or "--workspace-*" in e for e in errors)
 
     def test_important_on_protected_selector_adds_error(self, tmp_path):
+        # Arrange
         selector = PROTECTED_SELECTORS[0]
         css = f"{selector} {{ color: red !important; }}"
         (tmp_path / "bad.css").write_text(css)
+        # Act
         errors = validate_css(tmp_path)
+        # Assert
         assert any("!important" in e for e in errors)
 
     def test_footer_display_none_adds_error(self, tmp_path):
+        # Arrange
         (tmp_path / "bad.css").write_text("footer { display: none; }")
+        # Act
         errors = validate_css(tmp_path)
+        # Assert
         assert any("footer" in e for e in errors)
 
     def test_git_dir_excluded_from_css_scan(self, tmp_path):
+        # Arrange
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
         (git_dir / "hook.css").write_text("footer { display: none; }")
+        # Act
         errors = validate_css(tmp_path)
+        # Assert
         assert errors == []
 
 
@@ -481,48 +631,70 @@ class TestValidateCss:
 
 class TestValidateDependencies:
     def test_no_manifest_returns_no_errors(self, tmp_path):
+        # Arrange
+        # Act
         errors = validate_dependencies(tmp_path)
+        # Assert
         assert errors == []
 
     def test_missing_dependencies_field_adds_error(self, tmp_path):
+        # Arrange
         write_manifest(tmp_path, {"name": "myapp"})
+        # Act
         errors = validate_dependencies(tmp_path)
+        # Assert
         assert any("dependencies" in e for e in errors)
 
     def test_valid_dependencies_passes(self, tmp_path):
+        # Arrange
         write_manifest(
             tmp_path, {"name": "myapp", "dependencies": {"python": ["django>=4.0"]}}
         )
+        # Act
         errors = validate_dependencies(tmp_path)
+        # Assert
         assert errors == []
 
     def test_dependencies_not_dict_adds_error(self, tmp_path):
+        # Arrange
         write_manifest(tmp_path, {"name": "myapp", "dependencies": ["django"]})
+        # Act
         errors = validate_dependencies(tmp_path)
+        # Assert
         assert any("must be a JSON object" in e for e in errors)
 
     def test_unknown_dependency_type_adds_error(self, tmp_path):
+        # Arrange
         write_manifest(
             tmp_path, {"name": "myapp", "dependencies": {"alien": ["something"]}}
         )
+        # Act
         errors = validate_dependencies(tmp_path)
+        # Assert
         assert any("unknown dependency type" in e.lower() for e in errors)
 
     def test_dependency_value_not_list_adds_error(self, tmp_path):
+        # Arrange
         write_manifest(
             tmp_path, {"name": "myapp", "dependencies": {"python": "django"}}
         )
+        # Act
         errors = validate_dependencies(tmp_path)
+        # Assert
         assert any("must be a list" in e for e in errors)
 
     def test_dependency_items_not_strings_adds_error(self, tmp_path):
+        # Arrange
         write_manifest(
             tmp_path, {"name": "myapp", "dependencies": {"python": [1, 2, 3]}}
         )
+        # Act
         errors = validate_dependencies(tmp_path)
+        # Assert
         assert any("must be strings" in e for e in errors)
 
     def test_all_valid_dependency_types(self, tmp_path):
+        # Arrange
         write_manifest(
             tmp_path,
             {
@@ -536,7 +708,9 @@ class TestValidateDependencies:
                 },
             },
         )
+        # Act
         errors = validate_dependencies(tmp_path)
+        # Assert
         assert errors == []
 
 
@@ -547,28 +721,41 @@ class TestValidateDependencies:
 
 class TestFullValidate:
     def test_embedded_app_with_all_required_files_passes(self, tmp_path):
+        # Arrange
         make_minimal_embedded_app(tmp_path)
+        # Act
         errors = validate(tmp_path)
+        # Assert
         assert errors == []
 
     def test_missing_manifest_produces_errors(self, tmp_path):
+        # Arrange
         (tmp_path / "views.py").touch()
         (tmp_path / "urls.py").touch()
+        # Act
         errors = validate(tmp_path)
+        # Assert
         assert len(errors) > 0
 
     def test_nonexistent_directory_produces_error(self, tmp_path):
+        # Arrange
+        # Act
         errors = validate(tmp_path / "does_not_exist")
+        # Assert
         assert any("does not exist" in e for e in errors)
 
     def test_security_errors_included_in_full_validate(self, tmp_path):
+        # Arrange
         make_minimal_embedded_app(tmp_path)
         (tmp_path / "utils.py").write_text("import subprocess\n", encoding="utf-8")
+        # Act
         errors = validate(tmp_path)
+        # Assert
         assert any("subprocess" in e for e in errors)
 
     def test_embedded_skips_template_and_css_checks(self, tmp_path):
         """Embedded apps skip template and CSS validation."""
+        # Arrange
         make_minimal_embedded_app(tmp_path)
         # Add a CSS file that would fail standalone checks
         (tmp_path / "bad.css").write_text("footer { display: none; }")
@@ -576,7 +763,9 @@ class TestFullValidate:
         # CSS check is still run for embedded — only template check is skipped
         # But embedded=True means validate_templates/validate_css skipped
         # Actually _is_embedded_package=True skips those two checks
+        # Act
         css_errors = [e for e in errors if "footer" in e]
+        # Assert
         assert css_errors == []  # CSS skipped for embedded
 
 
@@ -586,26 +775,106 @@ class TestFullValidate:
 
 
 class TestConstants:
-    def test_required_files_list(self):
+    def test_required_files_list_views_py_in_required_files(self):
+        # Arrange
+        # Act
+        # Assert
+        # Arrange
+        # Act
+        # Assert
         assert "views.py" in REQUIRED_FILES
+
+    def test_required_files_list_urls_py_in_required_files(self):
+        # Arrange
+        # Act
+        # Assert
+        # Arrange
+        # Act
+        # Assert
         assert "urls.py" in REQUIRED_FILES
+
+    def test_required_files_list_manifest_json_in_required_files(self):
+        # Arrange
+        # Act
+        # Assert
+        # Arrange
+        # Act
+        # Assert
         assert "manifest.json" in REQUIRED_FILES
 
-    def test_forbidden_patterns_list(self):
+
+    def test_forbidden_patterns_list_subprocess_in_pattern_names(self):
+        # Arrange
+        # Arrange
+        # Act
         pattern_names = [name for _, name in FORBIDDEN_PATTERNS]
+        # Act
+        # Assert
+        # Assert
         assert "subprocess" in pattern_names
+
+    def test_forbidden_patterns_list_eval_in_pattern_names(self):
+        # Arrange
+        # Arrange
+        # Act
+        pattern_names = [name for _, name in FORBIDDEN_PATTERNS]
+        # Act
+        # Assert
+        # Assert
         assert "eval()" in pattern_names
 
-    def test_manifest_required_keys(self):
+
+    def test_manifest_required_keys_name_in_manifest_required_keys(self):
+        # Arrange
+        # Act
+        # Assert
+        # Arrange
+        # Act
+        # Assert
         assert "name" in MANIFEST_REQUIRED_KEYS
+
+    def test_manifest_required_keys_slug_in_manifest_required_keys(self):
+        # Arrange
+        # Act
+        # Assert
+        # Arrange
+        # Act
+        # Assert
         assert "slug" in MANIFEST_REQUIRED_KEYS
+
+    def test_manifest_required_keys_license_in_manifest_required_keys(self):
+        # Arrange
+        # Act
+        # Assert
+        # Arrange
+        # Act
+        # Assert
         assert "license" in MANIFEST_REQUIRED_KEYS
 
-    def test_protected_selectors(self):
+
+    def test_protected_selectors_len_protected_selectors_0(self):
+        # Arrange
+        # Act
+        # Assert
+        # Arrange
+        # Act
+        # Assert
         assert len(PROTECTED_SELECTORS) > 0
+
+    def test_protected_selectors_any_stx_shell_in_s_for_s_in_protected_selectors(self):
+        # Arrange
+        # Act
+        # Assert
+        # Arrange
+        # Act
+        # Assert
         assert any("stx-shell" in s for s in PROTECTED_SELECTORS)
 
+
     def test_forbidden_block_overrides(self):
+        # Arrange
+        # Act
+        # Assert
         assert len(FORBIDDEN_BLOCK_OVERRIDES) > 0
 
 

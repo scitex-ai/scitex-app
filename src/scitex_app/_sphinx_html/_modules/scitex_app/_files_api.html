@@ -1,0 +1,308 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>scitex_app._files_api &mdash; SciTeX App 0.2.6 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=fc7d8818"></script>
+      <script src="../../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            SciTeX App
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../app_development.html">App Development Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../mcp.html">MCP Server</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/scitex_app.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">SciTeX App</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">scitex_app._files_api</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for scitex_app._files_api</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># Timestamp: 2026-05-12</span>
+<span class="c1"># File: scitex_app/_files_api.py</span>
+
+<span class="sd">&quot;&quot;&quot;Flat module-level wrappers around `FilesBackend` operations.</span>
+
+<span class="sd">These mirror the package&#39;s MCP tool surface (`app_read_file`,</span>
+<span class="sd">`app_write_file`, …) so users have a single-call Python API that</span>
+<span class="sd">matches what MCP exposes — closing the API↔MCP parity check</span>
+<span class="sd">(§6) and giving users a more discoverable surface for one-off</span>
+<span class="sd">file operations than `get_files(root).read(path)`.</span>
+
+<span class="sd">Each wrapper resolves the backend via :func:`scitex_app.sdk.get_files`</span>
+<span class="sd">on every call, so it honours the same auto-detection rules</span>
+<span class="sd">(``SCITEX_API_TOKEN`` for cloud, filesystem otherwise) and stays</span>
+<span class="sd">in lock-step with whatever backend the caller has registered.</span>
+
+<span class="sd">Heavy file shims (binary handling, traversal safety) live on the</span>
+<span class="sd">backend; this module is intentionally thin.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_files</span>
+
+
+<div class="viewcode-block" id="read_file">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.read_file">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">read_file</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">root</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span>
+    <span class="n">binary</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Read a single file via the resolved :class:`FilesBackend`.</span>
+
+<span class="sd">    Equivalent to ``get_files(root).read(path, binary=binary)``;</span>
+<span class="sd">    mirrors the ``app_read_file`` MCP tool.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">get_files</span><span class="p">(</span><span class="n">root</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">binary</span><span class="o">=</span><span class="n">binary</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="write_file">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.write_file">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">write_file</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">content</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">root</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Write a file via the resolved :class:`FilesBackend`.</span>
+
+<span class="sd">    Mirrors the ``app_write_file`` MCP tool.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">get_files</span><span class="p">(</span><span class="n">root</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">content</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="list_files">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.list_files">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">list_files</span><span class="p">(</span>
+    <span class="n">directory</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">root</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span>
+    <span class="n">extensions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;List file paths under *directory*.</span>
+
+<span class="sd">    Mirrors the ``app_list_files`` MCP tool.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">get_files</span><span class="p">(</span><span class="n">root</span><span class="p">)</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">extensions</span><span class="o">=</span><span class="n">extensions</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="file_exists">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.file_exists">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">file_exists</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return whether *path* exists in the resolved backend.</span>
+
+<span class="sd">    Mirrors the ``app_file_exists`` MCP tool.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">get_files</span><span class="p">(</span><span class="n">root</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="delete_file">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.delete_file">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">delete_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Delete *path* in the resolved backend.</span>
+
+<span class="sd">    Mirrors the ``app_delete_file`` MCP tool.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">get_files</span><span class="p">(</span><span class="n">root</span><span class="p">)</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">path</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="copy_file">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.copy_file">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">copy_file</span><span class="p">(</span>
+    <span class="n">src_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">dest_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">root</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Copy *src_path* to *dest_path* within the resolved backend.</span>
+
+<span class="sd">    Mirrors the ``app_copy_file`` MCP tool.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">get_files</span><span class="p">(</span><span class="n">root</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">src_path</span><span class="p">,</span> <span class="n">dest_path</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="rename_file">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.rename_file">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">rename_file</span><span class="p">(</span>
+    <span class="n">old_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">new_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">root</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Rename *old_path* to *new_path* within the resolved backend.</span>
+
+<span class="sd">    Mirrors the ``app_rename_file`` MCP tool.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">get_files</span><span class="p">(</span><span class="n">root</span><span class="p">)</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">old_path</span><span class="p">,</span> <span class="n">new_path</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="scaffold">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.scaffold">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">scaffold</span><span class="p">(</span>
+    <span class="n">target_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">icon</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;fas fa-puzzle-piece&quot;</span><span class="p">,</span>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">frontend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;html&quot;</span><span class="p">,</span>
+    <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate a new SciTeX workspace app skeleton.</span>
+
+<span class="sd">    Mirrors the ``app_scaffold`` MCP tool. Auto-appends ``_app`` /</span>
+<span class="sd">    ``-app`` to *name* (matching the MCP tool&#39;s behaviour) so</span>
+<span class="sd">    Python and MCP callers see the same result for the same inputs.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.appmaker</span><span class="w"> </span><span class="kn">import</span> <span class="n">init_app</span>
+
+    <span class="n">target</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">target_dir</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+    <span class="n">app_name</span> <span class="o">=</span> <span class="n">name</span> <span class="ow">or</span> <span class="n">target</span><span class="o">.</span><span class="n">name</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">app_name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;_app&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">app_name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;-app&quot;</span><span class="p">)):</span>
+        <span class="n">sep</span> <span class="o">=</span> <span class="s2">&quot;-&quot;</span> <span class="k">if</span> <span class="s2">&quot;-&quot;</span> <span class="ow">in</span> <span class="n">app_name</span> <span class="k">else</span> <span class="s2">&quot;_&quot;</span>
+        <span class="n">app_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">app_name</span><span class="si">}{</span><span class="n">sep</span><span class="si">}</span><span class="s2">app&quot;</span>
+
+    <span class="k">return</span> <span class="n">init_app</span><span class="p">(</span>
+        <span class="n">target_dir</span><span class="o">=</span><span class="n">target</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">app_name</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="n">label</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">icon</span><span class="o">=</span><span class="n">icon</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
+        <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span><span class="p">,</span>
+        <span class="n">frontend_type</span><span class="o">=</span><span class="n">frontend</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="validate">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.validate">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span><span class="n">app_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Audit a SciTeX app for cloud-submission readiness.</span>
+
+<span class="sd">    Mirrors the ``app_validate`` MCP tool. Returns the list of</span>
+<span class="sd">    errors (empty when the app is ready).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.appmaker</span><span class="w"> </span><span class="kn">import</span> <span class="n">validate</span> <span class="k">as</span> <span class="n">_validate</span>
+
+    <span class="k">return</span> <span class="n">_validate</span><span class="p">(</span><span class="n">app_dir</span><span class="p">)</span></div>
+
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;read_file&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;write_file&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;list_files&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;file_exists&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;delete_file&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;copy_file&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;rename_file&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;scaffold&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;validate&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="c1"># EOF</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024-2026, Yusuke Watanabe.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

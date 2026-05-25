@@ -21,8 +21,18 @@ from scitex_app._mcp import server
 
 
 def _call_tool(_tool_name: str, **kwargs):
-    """Invoke a registered MCP tool by name and return its raw value."""
-    return asyncio.run(server.mcp.call_tool(_tool_name, kwargs))
+    """Invoke a registered MCP tool by name and return its raw value.
+
+    Uses the FastMCP tool registry: resolve the registered ``Tool`` then
+    run it with the given arguments. Exercises the real registered
+    dispatch path without standing up an MCP transport.
+    """
+
+    async def _run():
+        tool = await server.mcp.get_tool(_tool_name)
+        return await tool.run(kwargs)
+
+    return asyncio.run(_run())
 
 
 def _unwrap(result):
@@ -35,76 +45,212 @@ def _unwrap(result):
     return result
 
 
-def test_app_write_then_read_roundtrip(tmp_path):
+def test_app_write_then_read_roundtrip_hello_txt_in_str_write_msg(tmp_path):
+    # Arrange
+    # Arrange
+    # Act
     write_msg = _unwrap(
         _call_tool("app_write_file", path="hello.txt", content="hi", root=str(tmp_path))
     )
+    # Act
+    # Assert
+    # Assert
     assert "hello.txt" in str(write_msg)
 
+
+def test_app_write_then_read_roundtrip_content_equals_hi(tmp_path):
+    # Arrange
+    _unwrap(
+        _call_tool("app_write_file", path="hello.txt", content="hi", root=str(tmp_path))
+    )
+    # Act
     content = _unwrap(_call_tool("app_read_file", path="hello.txt", root=str(tmp_path)))
+    # Assert
     assert content == "hi"
 
 
-def test_app_list_files_filters_by_extension(tmp_path):
+def test_app_list_files_filters_by_extension_b_yaml_in_files(tmp_path):
+    # Arrange
+    # Arrange
     (tmp_path / "a.txt").write_text("x")
     (tmp_path / "b.yaml").write_text("y: 1")
+    # Act
     files = _unwrap(
         _call_tool(
             "app_list_files", directory="", root=str(tmp_path), extensions=[".yaml"]
         )
     )
+    # Act
+    # Assert
+    # Assert
     assert "b.yaml" in files
+
+
+def test_app_list_files_filters_by_extension_a_txt_not_in_files(tmp_path):
+    # Arrange
+    # Arrange
+    (tmp_path / "a.txt").write_text("x")
+    (tmp_path / "b.yaml").write_text("y: 1")
+    # Act
+    files = _unwrap(
+        _call_tool(
+            "app_list_files", directory="", root=str(tmp_path), extensions=[".yaml"]
+        )
+    )
+    # Act
+    # Assert
+    # Assert
     assert "a.txt" not in files
 
 
-def test_app_file_exists_true_and_false(tmp_path):
+def test_app_file_exists_true_and_false_unwrap_call_tool_app_file_exists_path_x_txt_root_str_tmp_pat(
+    tmp_path,
+):
+    # Arrange
+    # Arrange
+    # Act
     (tmp_path / "x.txt").write_text("here")
+    # Act
+    # Assert
+    # Assert
     assert (
         _unwrap(_call_tool("app_file_exists", path="x.txt", root=str(tmp_path))) is True
     )
+
+
+def test_app_file_exists_true_and_false_unwrap_call_tool_app_file_exists_path_missing_txt_root_str_t(
+    tmp_path,
+):
+    # Arrange
+    # Arrange
+    # Act
+    (tmp_path / "x.txt").write_text("here")
+    # Act
+    # Assert
+    # Assert
     assert (
         _unwrap(_call_tool("app_file_exists", path="missing.txt", root=str(tmp_path)))
         is False
     )
 
 
-def test_app_copy_then_delete(tmp_path):
+def test_app_copy_then_delete_tmp_path_dst_txt_read_text_data(tmp_path):
+    # Arrange
+    # Arrange
+    (tmp_path / "src.txt").write_text("data")
+    # Act
+    _call_tool(
+        "app_copy_file", src_path="src.txt", dest_path="dst.txt", root=str(tmp_path)
+    )
+    # Act
+    # Assert
+    # Assert
+    assert (tmp_path / "dst.txt").read_text() == "data"
+
+
+def test_app_delete_file_removes_target(tmp_path):
+    # Arrange
     (tmp_path / "src.txt").write_text("data")
     _call_tool(
         "app_copy_file", src_path="src.txt", dest_path="dst.txt", root=str(tmp_path)
     )
-    assert (tmp_path / "dst.txt").read_text() == "data"
+    # Act
     _call_tool("app_delete_file", path="dst.txt", root=str(tmp_path))
+    # Assert
     assert not (tmp_path / "dst.txt").exists()
 
 
-def test_app_rename_file(tmp_path):
+def test_app_rename_file_not_tmp_path_old_txt_exists(tmp_path):
+    # Arrange
+    # Arrange
     (tmp_path / "old.txt").write_text("data")
+    # Act
     _call_tool(
         "app_rename_file", old_path="old.txt", new_path="new.txt", root=str(tmp_path)
     )
+    # Act
+    # Assert
+    # Assert
     assert not (tmp_path / "old.txt").exists()
+
+
+def test_app_rename_file_tmp_path_new_txt_read_text_data(tmp_path):
+    # Arrange
+    # Arrange
+    (tmp_path / "old.txt").write_text("data")
+    # Act
+    _call_tool(
+        "app_rename_file", old_path="old.txt", new_path="new.txt", root=str(tmp_path)
+    )
+    # Act
+    # Assert
+    # Assert
     assert (tmp_path / "new.txt").read_text() == "data"
 
 
-def test_app_validate_returns_error_envelope_for_empty_dir(tmp_path):
+def test_app_validate_returns_error_envelope_for_empty_dir_payload_success_is_false(
+    tmp_path,
+):
+    # Arrange
+    # Arrange
     raw = _unwrap(_call_tool("app_validate", app_dir=str(tmp_path)))
+    # Act
     payload = json.loads(raw)
+    # Act
+    # Assert
+    # Assert
     assert payload["success"] is False
+
+
+def test_app_validate_returns_error_envelope_for_empty_dir_payload_errors(tmp_path):
+    # Arrange
+    # Arrange
+    raw = _unwrap(_call_tool("app_validate", app_dir=str(tmp_path)))
+    # Act
+    payload = json.loads(raw)
+    # Act
+    # Assert
+    # Assert
     assert payload["errors"]
 
 
-def test_app_skills_list_returns_envelope():
+def test_app_skills_list_returns_envelope_payload_package_scitex_app():
+    # Arrange
+    # Arrange
     raw = _unwrap(_call_tool("app_skills_list"))
+    # Act
     payload = json.loads(raw)
+    # Act
+    # Assert
+    # Assert
     assert payload["package"] == "scitex-app"
+
+
+def test_app_skills_list_returns_envelope_isinstance_payload_skills_list():
+    # Arrange
+    # Arrange
+    raw = _unwrap(_call_tool("app_skills_list"))
+    # Act
+    payload = json.loads(raw)
+    # Act
+    # Assert
+    # Assert
     assert isinstance(payload["skills"], list)
 
 
-def test_app_skills_get_unknown_skill_reports_error():
-    raw = asyncio.run(
-        server.mcp.call_tool("app_skills_get", {"name": "__definitely_missing__"})
-    )
+def test_app_skills_get_unknown_skill_reports_error_payload_success_is_false():
+    # Arrange
+    raw = _call_tool("app_skills_get", name="__definitely_missing__")
+    # Act
     payload = json.loads(_unwrap(raw))
+    # Assert
     assert payload["success"] is False
+
+
+def test_app_skills_get_unknown_skill_reports_error_unknown_skill_in_payload_error():
+    # Arrange
+    raw = _call_tool("app_skills_get", name="__definitely_missing__")
+    # Act
+    payload = json.loads(_unwrap(raw))
+    # Assert
     assert "unknown skill" in payload["error"]

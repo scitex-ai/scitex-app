@@ -1,0 +1,252 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>scitex_app.sdk &mdash; SciTeX App 0.2.6 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=fc7d8818"></script>
+      <script src="../../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            SciTeX App
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../app_development.html">App Development Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../mcp.html">MCP Server</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/scitex_app.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">SciTeX App</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">scitex_app.sdk</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for scitex_app.sdk</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># Timestamp: 2026-03-13</span>
+<span class="c1"># File: scitex_app/sdk/__init__.py</span>
+
+<span class="sd">&quot;&quot;&quot;App SDK — write-once interface for local + cloud SciTeX apps.</span>
+
+<span class="sd">Usage (standalone / local):</span>
+<span class="sd">    from scitex_app.sdk import get_files</span>
+
+<span class="sd">    files = get_files(&quot;./my_project&quot;)</span>
+<span class="sd">    content = files.read(&quot;recipes/my_recipe.yaml&quot;)</span>
+<span class="sd">    files.write(&quot;output/result.png&quot;, png_bytes)</span>
+
+<span class="sd">Usage (cloud, auto-detected via SCITEX_API_TOKEN):</span>
+<span class="sd">    files = get_files()  # routes through cloud REST API</span>
+
+<span class="sd">Usage (remote local, via SCITEX_API_URL):</span>
+<span class="sd">    import os</span>
+<span class="sd">    os.environ[&quot;SCITEX_API_TOKEN&quot;] = &quot;your-token&quot;</span>
+<span class="sd">    os.environ[&quot;SCITEX_API_URL&quot;] = &quot;https://scitex.ai&quot;</span>
+<span class="sd">    files = get_files()  # routes to remote cloud</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">._protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">FilesBackend</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_tree</span>
+
+<span class="c1"># Backend registry: name -&gt; factory callable</span>
+<span class="n">_registry</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">FilesBackend</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+<div class="viewcode-block" id="register_backend">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.register_backend">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">register_backend</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">FilesBackend</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Register a files backend factory.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Backend identifier (e.g., &quot;cloud&quot;, &quot;s3&quot;).</span>
+<span class="sd">    factory : callable</span>
+<span class="sd">        Callable(root, **kwargs) -&gt; FilesBackend instance.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_registry</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">factory</span></div>
+
+
+
+<div class="viewcode-block" id="get_files">
+<a class="viewcode-back" href="../../api/scitex_app.html#scitex_app.get_files">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_files</span><span class="p">(</span>
+    <span class="n">root</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FilesBackend</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a files backend instance.</span>
+
+<span class="sd">    Auto-detection logic:</span>
+<span class="sd">    1. If ``backend`` is specified, use that.</span>
+<span class="sd">    2. If ``SCITEX_API_TOKEN`` env var is set and &quot;cloud&quot; backend</span>
+<span class="sd">       is registered, use cloud.</span>
+<span class="sd">    3. Otherwise, use filesystem (default).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    root : str or Path, optional</span>
+<span class="sd">        Root directory for filesystem backend. Defaults to cwd.</span>
+<span class="sd">    backend : str, optional</span>
+<span class="sd">        Explicit backend name. If None, auto-detected.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    FilesBackend</span>
+<span class="sd">        A backend instance.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    KeyError</span>
+<span class="sd">        If the requested backend is not registered.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">backend</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_registry</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Backend </span><span class="si">{</span><span class="n">backend</span><span class="si">!r}</span><span class="s2"> not registered. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Available: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_registry</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_registry</span><span class="p">[</span><span class="n">backend</span><span class="p">](</span><span class="n">root</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;SCITEX_API_TOKEN&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s2">&quot;cloud&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_registry</span><span class="p">:</span>
+            <span class="c1"># Auto-register cloud backend when token is available</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">._cloud_files</span><span class="w"> </span><span class="kn">import</span> <span class="n">cloud_files_factory</span>
+
+            <span class="n">_registry</span><span class="p">[</span><span class="s2">&quot;cloud&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cloud_files_factory</span>
+        <span class="k">return</span> <span class="n">_registry</span><span class="p">[</span><span class="s2">&quot;cloud&quot;</span><span class="p">](</span><span class="n">root</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">._filesystem</span><span class="w"> </span><span class="kn">import</span> <span class="n">FileSystemBackend</span>
+
+    <span class="k">return</span> <span class="n">FileSystemBackend</span><span class="p">(</span><span class="n">root</span> <span class="ow">or</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">())</span></div>
+
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;FilesBackend&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_files&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;register_backend&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;build_tree&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="c1"># Internal cloud modules — accessible via scitex_app.sdk._client etc.</span>
+<span class="c1"># but NOT part of the public API contract. Use scitex_cloud.sdk for</span>
+<span class="c1"># cloud service access (data, files, jobs, scitex, external).</span>
+<span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Lazy-load cloud internals on demand (not in __all__).&quot;&quot;&quot;</span>
+    <span class="n">_lazy</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;PlatformClient&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;._client&quot;</span><span class="p">,</span> <span class="s2">&quot;PlatformClient&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;get_client&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;._client&quot;</span><span class="p">,</span> <span class="s2">&quot;get_client&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;reset_client&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;._client&quot;</span><span class="p">,</span> <span class="s2">&quot;reset_client&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;CloudFilesBackend&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;._cloud_files&quot;</span><span class="p">,</span> <span class="s2">&quot;CloudFilesBackend&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;_cloud_data&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;files&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;_cloud_files&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;jobs&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;_cloud_jobs&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;scitex&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;_cloud_scitex&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;external&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;_cloud_external&quot;</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_lazy</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
+        <span class="n">mod_path</span><span class="p">,</span> <span class="n">attr</span> <span class="o">=</span> <span class="n">_lazy</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">mod_path</span> <span class="o">==</span> <span class="s2">&quot;.&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;.</span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">__package__</span><span class="p">)</span>
+        <span class="n">mod</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">mod_path</span><span class="p">,</span> <span class="n">__package__</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">mod</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;module </span><span class="si">{</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2"> has no attribute </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="c1"># EOF</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024-2026, Yusuke Watanabe.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
