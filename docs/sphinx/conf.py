@@ -6,6 +6,13 @@
 
 import os
 import sys
+import warnings
+
+# sphinx-autodoc-typehints uses a deprecated Sphinx 10 API that emits
+# RemovedInSphinx10Warning. Suppress it here rather than pinning the
+# extension — the extension will update upstream in due course.
+warnings.filterwarnings("ignore", category=DeprecationWarning,
+                        module="sphinx_autodoc_typehints")
 
 sys.path.insert(0, os.path.abspath("../../src"))
 

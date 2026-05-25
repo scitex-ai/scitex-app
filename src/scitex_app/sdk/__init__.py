@@ -42,7 +42,7 @@ def register_backend(name: str, factory: Callable[..., FilesBackend]) -> None:
     name : str
         Backend identifier (e.g., "cloud", "s3").
     factory : callable
-        Callable(root, **kwargs) -> FilesBackend instance.
+        Callable(root, ``**kwargs``) -> ``FilesBackend`` instance.
     """
     _registry[name] = factory
 
@@ -56,6 +56,7 @@ def get_files(
     """Get a files backend instance.
 
     Auto-detection logic:
+
     1. If ``backend`` is specified, use that.
     2. If ``SCITEX_API_TOKEN`` env var is set and "cloud" backend
        is registered, use cloud.

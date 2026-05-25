@@ -42,13 +42,22 @@ class _MissingMethods:
 
 
 def test_filesystem_backend_satisfies_protocol(tmp_path):
+    # Arrange
+    # Act
     backend = FileSystemBackend(tmp_path)
+    # Assert
     assert isinstance(backend, FilesBackend)
 
 
 def test_full_stub_satisfies_protocol():
+    # Arrange
+    # Act
+    # Assert
     assert isinstance(_FullStub(), FilesBackend)
 
 
 def test_partial_implementation_fails_runtime_check():
+    # Arrange
+    # Act
+    # Assert
     assert not isinstance(_MissingMethods(), FilesBackend)
