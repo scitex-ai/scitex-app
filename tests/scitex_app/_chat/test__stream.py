@@ -22,7 +22,7 @@ class _RecordingBackend:
         messages: List[Dict[str, Any]],
         *,
         model: Optional[str] = None,
-        max_tokens: int = 2048,
+        max_tokens: int = 2_048,
         temperature: float = 0.7,
         system: Optional[str] = None,
     ) -> Iterator[Dict[str, Any]]:
