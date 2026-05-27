@@ -51,8 +51,8 @@ scitex-app app submit <DIR> --target prod    # ship to a SciTeX Cloud target
 | `file`  | Read / write / list files via the registered Files SDK backend   |
 
 ```bash
-scitex-app file put results/today.csv data.csv
-scitex-app file get results/today.csv ./local.csv
+scitex-app file read results/today.csv
+scitex-app file write results/today.csv "content"
 scitex-app file list results/
 ```
 

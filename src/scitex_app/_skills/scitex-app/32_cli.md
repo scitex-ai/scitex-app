@@ -63,13 +63,13 @@ scitex-app app validate .
 scitex-app app validate /path/to/my_app
 ```
 
-### app dev-install
+### app install-dev
 
 ```bash
-scitex-app app dev-install [APP_DIR] [OPTIONS]
+scitex-app app install-dev [APP_DIR] [OPTIONS]
 ```
 
-Validate locally, then call the SciTeX Cloud dev-install API. App appears in workspace sidebar immediately.
+Validate locally, then call the SciTeX Cloud install-dev API. App appears in workspace sidebar immediately.
 
 | Option | Default | Env var | Purpose |
 |--------|---------|---------|---------|
@@ -79,8 +79,8 @@ Validate locally, then call the SciTeX Cloud dev-install API. App appears in wor
 | `--repo`, `-r` | from manifest | — | Gitea repo name |
 
 ```bash
-scitex-app app dev-install .
-scitex-app app dev-install . --server http://my-server:8000
+scitex-app app install-dev .
+scitex-app app install-dev . --server http://my-server:8000
 ```
 
 ### app submit
@@ -103,40 +103,40 @@ scitex-app app submit /path/to/my_app --server https://scitex.example.com
 
 ## File Operations
 
-All file commands accept `--root` (default `.`) and `--json` for machine-readable output.
+All file commands are under the `file` subgroup and accept `--root` (default `.`) and `--json` for machine-readable output.
 
 ```bash
-scitex-app read <path> [--root DIR] [--binary] [--json]
-scitex-app write <path> [CONTENT] [--root DIR] [--stdin] [--json] [--dry-run]
-scitex-app list [DIRECTORY] [--root DIR] [--ext EXT]... [--json]
-scitex-app exists <path> [--root DIR] [--json]
-scitex-app delete <path> [--root DIR] [--json] [--dry-run]
-scitex-app rename <old-path> <new-path> [--root DIR] [--json] [--dry-run]
-scitex-app copy <src-path> <dest-path> [--root DIR] [--json] [--dry-run]
+scitex-app file read <path> [--root DIR] [--binary] [--json]
+scitex-app file write <path> [CONTENT] [--root DIR] [--stdin] [--json] [--dry-run]
+scitex-app file list [DIRECTORY] [--root DIR] [--ext EXT]... [--json]
+scitex-app file exists <path> [--root DIR] [--json]
+scitex-app file delete <path> [--root DIR] [--json] [--dry-run]
+scitex-app file rename <old-path> <new-path> [--root DIR] [--json] [--dry-run]
+scitex-app file copy <src-path> <dest-path> [--root DIR] [--json] [--dry-run]
 ```
 
 ```bash
 # Read a file
-scitex-app read config.yaml
-scitex-app read data.bin --binary
+scitex-app file read config.yaml
+scitex-app file read data.bin --binary
 
 # Write content
-scitex-app write output.txt "hello world"
-echo "data" | scitex-app write output.txt --stdin
-scitex-app write output.txt "test" --dry-run
+scitex-app file write output.txt "hello world"
+echo "data" | scitex-app file write output.txt --stdin
+scitex-app file write output.txt "test" --dry-run
 
 # List files
-scitex-app list
-scitex-app list data --ext .yaml --ext .json
-scitex-app list --json
+scitex-app file list
+scitex-app file list data --ext .yaml --ext .json
+scitex-app file list --json
 
 # Check existence (exit code 0=exists, 1=missing)
-scitex-app exists config.yaml
+scitex-app file exists config.yaml
 
 # Delete, rename, copy with dry-run preview
-scitex-app delete temp.txt --dry-run
-scitex-app rename old.txt new.txt
-scitex-app copy src.txt dst.txt --dry-run
+scitex-app file delete temp.txt --dry-run
+scitex-app file rename old.txt new.txt
+scitex-app file copy src.txt dst.txt --dry-run
 ```
 
 ## Integration
