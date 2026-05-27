@@ -3,20 +3,20 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" data-content_root="./">
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>App Development Guide &mdash; SciTeX App 0.2.6 documentation</title>
+  <title>App Development Guide &mdash; SciTeX App 0.2.8 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=fc7d8818"></script>
-      <script src="_static/doctools.js?v=9a2dae69"></script>
-      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/documentation_options.js?v=b01fafc3"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="_static/copybutton.js?v=f281be69"></script>
     <script src="_static/js/theme.js"></script>
@@ -109,7 +109,7 @@
 <h1>App Development Guide<a class="headerlink" href="#app-development-guide" title="Link to this heading"></a></h1>
 <p>SciTeX apps are self-contained Django plugins that integrate into the
 SciTeX Cloud workspace. This guide covers the full lifecycle: scaffold,
-validate, dev-install, and submit.</p>
+validate, install-dev, and submit.</p>
 <nav class="contents local" id="contents">
 <p class="topic-title">Contents</p>
 <ul class="simple">
@@ -310,10 +310,10 @@ SciTeX Cloud server for development testing:</p>
 <span class="nb">export</span><span class="w"> </span><span class="nv">SCITEX_API_TOKEN</span><span class="o">=</span><span class="s2">&quot;your-jwt-token&quot;</span>
 <span class="nb">export</span><span class="w"> </span><span class="nv">SCITEX_SERVER_URL</span><span class="o">=</span><span class="s2">&quot;http://127.0.0.1:8000&quot;</span>
 
-scitex-app<span class="w"> </span>app<span class="w"> </span>dev-install<span class="w"> </span>.
+scitex-app<span class="w"> </span>app<span class="w"> </span>install-dev<span class="w"> </span>.
 
 <span class="c1"># Or pass options explicitly</span>
-scitex-app<span class="w"> </span>app<span class="w"> </span>dev-install<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
+scitex-app<span class="w"> </span>app<span class="w"> </span>install-dev<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>--server<span class="w"> </span>http://my-server:8000<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>--token<span class="w">  </span><span class="s2">&quot;</span><span class="nv">$SCITEX_API_TOKEN</span><span class="s2">&quot;</span>
 </pre></div>
@@ -478,9 +478,9 @@ scitex-app<span class="w"> </span>app<span class="w"> </span>validate<span class
 
 <span class="c1"># 4. Dev-install on a running server for live testing</span>
 <span class="nb">export</span><span class="w"> </span><span class="nv">SCITEX_API_TOKEN</span><span class="o">=</span><span class="s2">&quot;...&quot;</span>
-scitex-app<span class="w"> </span>app<span class="w"> </span>dev-install<span class="w"> </span>.<span class="w"> </span>--server<span class="w"> </span>http://127.0.0.1:8000
+scitex-app<span class="w"> </span>app<span class="w"> </span>install-dev<span class="w"> </span>.<span class="w"> </span>--server<span class="w"> </span>http://127.0.0.1:8000
 
-<span class="c1"># 5. Iterate: edit → validate → dev-install</span>
+<span class="c1"># 5. Iterate: edit → validate → install-dev</span>
 <span class="c1"># (The server hot-reloads on file changes)</span>
 
 <span class="c1"># 6. Submit when ready</span>

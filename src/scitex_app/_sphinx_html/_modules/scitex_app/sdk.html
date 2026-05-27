@@ -5,17 +5,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>scitex_app.sdk &mdash; SciTeX App 0.2.6 documentation</title>
+  <title>scitex_app.sdk &mdash; SciTeX App 0.2.8 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=fc7d8818"></script>
-      <script src="../../_static/doctools.js?v=9a2dae69"></script>
-      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/documentation_options.js?v=b01fafc3"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="../../_static/copybutton.js?v=f281be69"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -123,7 +123,7 @@
 <span class="sd">    name : str</span>
 <span class="sd">        Backend identifier (e.g., &quot;cloud&quot;, &quot;s3&quot;).</span>
 <span class="sd">    factory : callable</span>
-<span class="sd">        Callable(root, **kwargs) -&gt; FilesBackend instance.</span>
+<span class="sd">        Callable(root, ``**kwargs``) -&gt; ``FilesBackend`` instance.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">_registry</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">factory</span></div>
 
@@ -140,6 +140,7 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a files backend instance.</span>
 
 <span class="sd">    Auto-detection logic:</span>
+
 <span class="sd">    1. If ``backend`` is specified, use that.</span>
 <span class="sd">    2. If ``SCITEX_API_TOKEN`` env var is set and &quot;cloud&quot; backend</span>
 <span class="sd">       is registered, use cloud.</span>

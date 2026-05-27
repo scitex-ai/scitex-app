@@ -3,20 +3,20 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" data-content_root="../">
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>API Reference &mdash; SciTeX App 0.2.6 documentation</title>
+  <title>API Reference &mdash; SciTeX App 0.2.8 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=fc7d8818"></script>
-      <script src="../_static/doctools.js?v=9a2dae69"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/documentation_options.js?v=b01fafc3"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/js/theme.js"></script>
@@ -52,16 +52,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../cli.html">CLI Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcp.html">MCP Server</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#scitex_app.FilesBackend"><code class="docutils literal notranslate"><span class="pre">FilesBackend</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#scitex_app.FilesBackend.read"><code class="docutils literal notranslate"><span class="pre">FilesBackend.read()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#scitex_app.FilesBackend.write"><code class="docutils literal notranslate"><span class="pre">FilesBackend.write()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#scitex_app.FilesBackend.list"><code class="docutils literal notranslate"><span class="pre">FilesBackend.list()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#scitex_app.FilesBackend.exists"><code class="docutils literal notranslate"><span class="pre">FilesBackend.exists()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#scitex_app.FilesBackend.delete"><code class="docutils literal notranslate"><span class="pre">FilesBackend.delete()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#scitex_app.FilesBackend.rename"><code class="docutils literal notranslate"><span class="pre">FilesBackend.rename()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#scitex_app.FilesBackend.copy"><code class="docutils literal notranslate"><span class="pre">FilesBackend.copy()</span></code></a></li>
-</ul>
-</li>
 <li class="toctree-l2"><a class="reference internal" href="#scitex_app.get_files"><code class="docutils literal notranslate"><span class="pre">get_files()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#scitex_app.register_backend"><code class="docutils literal notranslate"><span class="pre">register_backend()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#scitex_app.build_tree"><code class="docutils literal notranslate"><span class="pre">build_tree()</span></code></a></li>
@@ -75,16 +65,6 @@
 <li class="toctree-l2"><a class="reference internal" href="#scitex_app.scaffold"><code class="docutils literal notranslate"><span class="pre">scaffold()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#scitex_app.validate"><code class="docutils literal notranslate"><span class="pre">validate()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#module-scitex_app.sdk">SDK Module</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#scitex_app.sdk.FilesBackend"><code class="docutils literal notranslate"><span class="pre">FilesBackend</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#scitex_app.sdk.FilesBackend.read"><code class="docutils literal notranslate"><span class="pre">FilesBackend.read()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#scitex_app.sdk.FilesBackend.write"><code class="docutils literal notranslate"><span class="pre">FilesBackend.write()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#scitex_app.sdk.FilesBackend.list"><code class="docutils literal notranslate"><span class="pre">FilesBackend.list()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#scitex_app.sdk.FilesBackend.exists"><code class="docutils literal notranslate"><span class="pre">FilesBackend.exists()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#scitex_app.sdk.FilesBackend.delete"><code class="docutils literal notranslate"><span class="pre">FilesBackend.delete()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#scitex_app.sdk.FilesBackend.rename"><code class="docutils literal notranslate"><span class="pre">FilesBackend.rename()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#scitex_app.sdk.FilesBackend.copy"><code class="docutils literal notranslate"><span class="pre">FilesBackend.copy()</span></code></a></li>
-</ul>
-</li>
 <li class="toctree-l3"><a class="reference internal" href="#scitex_app.sdk.get_files"><code class="docutils literal notranslate"><span class="pre">get_files()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#scitex_app.sdk.register_backend"><code class="docutils literal notranslate"><span class="pre">register_backend()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#scitex_app.sdk.build_tree"><code class="docutils literal notranslate"><span class="pre">build_tree()</span></code></a></li>
@@ -164,164 +144,15 @@ When used with scitex, integration is automatic via scitex.app.</p>
 <span class="n">register_backend</span><span class="p">(</span><span class="s2">&quot;s3&quot;</span><span class="p">,</span> <span class="n">my_s3_factory</span><span class="p">)</span>
 </pre></div>
 </div>
-<dl class="py class">
-<dt class="sig sig-object py" id="scitex_app.FilesBackend">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">FilesBackend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.FilesBackend" title="Link to this definition"></a></dt>
-<dd><p>File storage backend protocol.</p>
-<p>Implementations must provide these 7 methods.
-Uses <code class="docutils literal notranslate"><span class="pre">typing.Protocol</span></code> for structural subtyping — backends
-just implement the methods, no inheritance required.</p>
-<section id="implementations">
-<h2>Implementations<a class="headerlink" href="#implementations" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">FileSystemBackend</span></code> — local pathlib (ships with scitex-app)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">CloudFilesBackend</span></code> — HTTP via scitex_cloud (provided at runtime)</p></li>
-</ul>
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.FilesBackend.read">
-<span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.read"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.FilesBackend.read" title="Link to this definition"></a></dt>
-<dd><p>Read file content.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Relative path within the backend’s namespace.</p></li>
-<li><p><strong>binary</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If True, return bytes; otherwise return str.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If the file does not exist.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bytes</span></code></a>]</span></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.FilesBackend.write">
-<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.write"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.FilesBackend.write" title="Link to this definition"></a></dt>
-<dd><p>Write content to a file, creating parent dirs as needed.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Relative path within the backend’s namespace.</p></li>
-<li><p><strong>content</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><em>bytes</em></a>) – Text or binary content.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.FilesBackend.list">
-<span class="sig-name descname"><span class="pre">list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.FilesBackend.list" title="Link to this definition"></a></dt>
-<dd><p>List file paths in a directory.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>directory</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Relative directory path (”” = root).</p></li>
-<li><p><strong>extensions</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Filter by extension, e.g. [“.yaml”, “.png”].</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Relative file paths.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a> of <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.FilesBackend.exists">
-<span class="sig-name descname"><span class="pre">exists</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.exists"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.FilesBackend.exists" title="Link to this definition"></a></dt>
-<dd><p>Check if a file exists.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
-</dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.FilesBackend.delete">
-<span class="sig-name descname"><span class="pre">delete</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.delete"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.FilesBackend.delete" title="Link to this definition"></a></dt>
-<dd><p>Delete a file.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If the file does not exist.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
-</dd>
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.FilesBackend.rename">
-<span class="sig-name descname"><span class="pre">rename</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">old_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.rename"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.FilesBackend.rename" title="Link to this definition"></a></dt>
-<dd><p>Rename/move a file within the namespace.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If old_path does not exist.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileExistsError" title="(in Python v3.14)"><strong>FileExistsError</strong></a> – If new_path already exists.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
-</dd>
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>old_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-<li><p><strong>new_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.FilesBackend.copy">
-<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.copy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.FilesBackend.copy" title="Link to this definition"></a></dt>
-<dd><p>Copy a file within the namespace.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If src_path does not exist.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
-</dd>
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>src_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-<li><p><strong>dest_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-</section>
-</dd></dl>
-
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.get_files">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">get_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk.html#get_files"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.get_files" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">get_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk.html#get_files"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.get_files" title="Link to this definition"></a></dt>
 <dd><p>Get a files backend instance.</p>
-<p>Auto-detection logic:
-1. If <code class="docutils literal notranslate"><span class="pre">backend</span></code> is specified, use that.
-2. If <code class="docutils literal notranslate"><span class="pre">SCITEX_API_TOKEN</span></code> env var is set and “cloud” backend</p>
-<blockquote>
-<div><p>is registered, use cloud.</p>
-</div></blockquote>
-<ol class="arabic simple" start="3">
+<p>Auto-detection logic:</p>
+<ol class="arabic simple">
+<li><p>If <code class="docutils literal notranslate"><span class="pre">backend</span></code> is specified, use that.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">SCITEX_API_TOKEN</span></code> env var is set and “cloud” backend
+is registered, use cloud.</p></li>
 <li><p>Otherwise, use filesystem (default).</p></li>
 </ol>
 <dl class="field-list simple">
@@ -336,7 +167,7 @@ just implement the methods, no inheritance required.</p>
 <dd class="field-even"><p>A backend instance.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="#scitex_app.FilesBackend" title="scitex_app.FilesBackend">FilesBackend</a></p>
+<dd class="field-odd"><p><a class="reference internal" href="#scitex_app.sdk._protocol.FilesBackend" title="scitex_app.sdk._protocol.FilesBackend">FilesBackend</a></p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#KeyError" title="(in Python v3.14)"><strong>KeyError</strong></a> – If the requested backend is not registered.</p>
@@ -352,7 +183,7 @@ just implement the methods, no inheritance required.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Backend identifier (e.g., “cloud”, “s3”).</p></li>
-<li><p><strong>factory</strong> (<em>callable</em>) – Callable(root, <a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs) -&gt; FilesBackend instance.</p></li>
+<li><p><strong>factory</strong> (<em>callable</em>) – Callable(root, <code class="docutils literal notranslate"><span class="pre">**kwargs</span></code>) -&gt; <code class="docutils literal notranslate"><span class="pre">FilesBackend</span></code> instance.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -363,12 +194,12 @@ just implement the methods, no inheritance required.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.build_tree">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">build_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">backend</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_tree.html#build_tree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.build_tree" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">build_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">backend</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_tree.html#build_tree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.build_tree" title="Link to this definition"></a></dt>
 <dd><p>Build a nested tree structure from a FilesBackend.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>backend</strong> (<a class="reference internal" href="#scitex_app.FilesBackend" title="scitex_app.FilesBackend"><em>FilesBackend</em></a>) – A file storage backend implementing the FilesBackend protocol.</p></li>
+<li><p><strong>backend</strong> (<a class="reference internal" href="#scitex_app.sdk._protocol.FilesBackend" title="scitex_app.sdk._protocol.FilesBackend"><em>FilesBackend</em></a>) – A file storage backend implementing the FilesBackend protocol.</p></li>
 <li><p><strong>directory</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Starting directory (relative to backend root). Default: root.</p></li>
 <li><p><strong>extensions</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Filter files by extension (e.g., [“.yaml”, “.png”]).
 Directories are always included for traversal.</p></li>
@@ -395,8 +226,8 @@ Directories are always included for traversal.</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.read_file">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">read_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#read_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.read_file" title="Link to this definition"></a></dt>
-<dd><p>Read a single file via the resolved <a class="reference internal" href="#scitex_app.FilesBackend" title="scitex_app.FilesBackend"><code class="xref py py-class docutils literal notranslate"><span class="pre">FilesBackend</span></code></a>.</p>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">read_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#read_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.read_file" title="Link to this definition"></a></dt>
+<dd><p>Read a single file via the resolved <code class="xref py py-class docutils literal notranslate"><span class="pre">FilesBackend</span></code>.</p>
 <p>Equivalent to <code class="docutils literal notranslate"><span class="pre">get_files(root).read(path,</span> <span class="pre">binary=binary)</span></code>;
 mirrors the <code class="docutils literal notranslate"><span class="pre">app_read_file</span></code> MCP tool.</p>
 <dl class="field-list simple">
@@ -415,8 +246,8 @@ mirrors the <code class="docutils literal notranslate"><span class="pre">app_rea
 
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.write_file">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">write_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#write_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.write_file" title="Link to this definition"></a></dt>
-<dd><p>Write a file via the resolved <a class="reference internal" href="#scitex_app.FilesBackend" title="scitex_app.FilesBackend"><code class="xref py py-class docutils literal notranslate"><span class="pre">FilesBackend</span></code></a>.</p>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">write_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#write_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.write_file" title="Link to this definition"></a></dt>
+<dd><p>Write a file via the resolved <code class="xref py py-class docutils literal notranslate"><span class="pre">FilesBackend</span></code>.</p>
 <p>Mirrors the <code class="docutils literal notranslate"><span class="pre">app_write_file</span></code> MCP tool.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
@@ -434,7 +265,7 @@ mirrors the <code class="docutils literal notranslate"><span class="pre">app_rea
 
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.list_files">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">list_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#list_files"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.list_files" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">list_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#list_files"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.list_files" title="Link to this definition"></a></dt>
 <dd><p>List file paths under <em>directory</em>.</p>
 <p>Mirrors the <code class="docutils literal notranslate"><span class="pre">app_list_files</span></code> MCP tool.</p>
 <dl class="field-list simple">
@@ -453,7 +284,7 @@ mirrors the <code class="docutils literal notranslate"><span class="pre">app_rea
 
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.file_exists">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">file_exists</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#file_exists"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.file_exists" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">file_exists</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#file_exists"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.file_exists" title="Link to this definition"></a></dt>
 <dd><p>Return whether <em>path</em> exists in the resolved backend.</p>
 <p>Mirrors the <code class="docutils literal notranslate"><span class="pre">app_file_exists</span></code> MCP tool.</p>
 <dl class="field-list simple">
@@ -471,7 +302,7 @@ mirrors the <code class="docutils literal notranslate"><span class="pre">app_rea
 
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.delete_file">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">delete_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#delete_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.delete_file" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">delete_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#delete_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.delete_file" title="Link to this definition"></a></dt>
 <dd><p>Delete <em>path</em> in the resolved backend.</p>
 <p>Mirrors the <code class="docutils literal notranslate"><span class="pre">app_delete_file</span></code> MCP tool.</p>
 <dl class="field-list simple">
@@ -489,7 +320,7 @@ mirrors the <code class="docutils literal notranslate"><span class="pre">app_rea
 
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.copy_file">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">copy_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest_path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#copy_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.copy_file" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">copy_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest_path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#copy_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.copy_file" title="Link to this definition"></a></dt>
 <dd><p>Copy <em>src_path</em> to <em>dest_path</em> within the resolved backend.</p>
 <p>Mirrors the <code class="docutils literal notranslate"><span class="pre">app_copy_file</span></code> MCP tool.</p>
 <dl class="field-list simple">
@@ -508,7 +339,7 @@ mirrors the <code class="docutils literal notranslate"><span class="pre">app_rea
 
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.rename_file">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">rename_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">old_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#rename_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.rename_file" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">rename_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">old_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#rename_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.rename_file" title="Link to this definition"></a></dt>
 <dd><p>Rename <em>old_path</em> to <em>new_path</em> within the resolved backend.</p>
 <p>Mirrors the <code class="docutils literal notranslate"><span class="pre">app_rename_file</span></code> MCP tool.</p>
 <dl class="field-list simple">
@@ -527,7 +358,7 @@ mirrors the <code class="docutils literal notranslate"><span class="pre">app_rea
 
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.scaffold">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">scaffold</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">icon</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'fas</span> <span class="pre">fa-puzzle-piece'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frontend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'html'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#scaffold"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.scaffold" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.</span></span><span class="sig-name descname"><span class="pre">scaffold</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">icon</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'fas</span> <span class="pre">fa-puzzle-piece'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frontend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'html'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/_files_api.html#scaffold"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.scaffold" title="Link to this definition"></a></dt>
 <dd><p>Generate a new SciTeX workspace app skeleton.</p>
 <p>Mirrors the <code class="docutils literal notranslate"><span class="pre">app_scaffold</span></code> MCP tool. Auto-appends <code class="docutils literal notranslate"><span class="pre">_app</span></code> /
 <code class="docutils literal notranslate"><span class="pre">-app</span></code> to <em>name</em> (matching the MCP tool’s behaviour) so
@@ -583,164 +414,15 @@ os.environ[“SCITEX_API_URL”] = “<a class="reference external" href="https:
 files = get_files()  # routes to remote cloud</p>
 </dd>
 </dl>
-<dl class="py class">
-<dt class="sig sig-object py" id="scitex_app.sdk.FilesBackend">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">scitex_app.sdk.</span></span><span class="sig-name descname"><span class="pre">FilesBackend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.FilesBackend" title="Link to this definition"></a></dt>
-<dd><p>File storage backend protocol.</p>
-<p>Implementations must provide these 7 methods.
-Uses <code class="docutils literal notranslate"><span class="pre">typing.Protocol</span></code> for structural subtyping — backends
-just implement the methods, no inheritance required.</p>
-<section id="id3">
-<h3>Implementations<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">FileSystemBackend</span></code> — local pathlib (ships with scitex-app)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">CloudFilesBackend</span></code> — HTTP via scitex_cloud (provided at runtime)</p></li>
-</ul>
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.sdk.FilesBackend.read">
-<span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.read"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.FilesBackend.read" title="Link to this definition"></a></dt>
-<dd><p>Read file content.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Relative path within the backend’s namespace.</p></li>
-<li><p><strong>binary</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If True, return bytes; otherwise return str.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If the file does not exist.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bytes</span></code></a>]</span></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.sdk.FilesBackend.write">
-<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">content</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.write"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.FilesBackend.write" title="Link to this definition"></a></dt>
-<dd><p>Write content to a file, creating parent dirs as needed.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Relative path within the backend’s namespace.</p></li>
-<li><p><strong>content</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><em>bytes</em></a>) – Text or binary content.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.sdk.FilesBackend.list">
-<span class="sig-name descname"><span class="pre">list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.FilesBackend.list" title="Link to this definition"></a></dt>
-<dd><p>List file paths in a directory.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>directory</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Relative directory path (”” = root).</p></li>
-<li><p><strong>extensions</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Filter by extension, e.g. [“.yaml”, “.png”].</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Relative file paths.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a> of <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.sdk.FilesBackend.exists">
-<span class="sig-name descname"><span class="pre">exists</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.exists"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.FilesBackend.exists" title="Link to this definition"></a></dt>
-<dd><p>Check if a file exists.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
-</dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.sdk.FilesBackend.delete">
-<span class="sig-name descname"><span class="pre">delete</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.delete"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.FilesBackend.delete" title="Link to this definition"></a></dt>
-<dd><p>Delete a file.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If the file does not exist.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
-</dd>
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.sdk.FilesBackend.rename">
-<span class="sig-name descname"><span class="pre">rename</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">old_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.rename"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.FilesBackend.rename" title="Link to this definition"></a></dt>
-<dd><p>Rename/move a file within the namespace.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If old_path does not exist.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileExistsError" title="(in Python v3.14)"><strong>FileExistsError</strong></a> – If new_path already exists.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
-</dd>
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>old_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-<li><p><strong>new_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="scitex_app.sdk.FilesBackend.copy">
-<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.copy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.FilesBackend.copy" title="Link to this definition"></a></dt>
-<dd><p>Copy a file within the namespace.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If src_path does not exist.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
-</dd>
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>src_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-<li><p><strong>dest_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-</section>
-</dd></dl>
-
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.sdk.get_files">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.sdk.</span></span><span class="sig-name descname"><span class="pre">get_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk.html#get_files"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.get_files" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.sdk.</span></span><span class="sig-name descname"><span class="pre">get_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk.html#get_files"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.get_files" title="Link to this definition"></a></dt>
 <dd><p>Get a files backend instance.</p>
-<p>Auto-detection logic:
-1. If <code class="docutils literal notranslate"><span class="pre">backend</span></code> is specified, use that.
-2. If <code class="docutils literal notranslate"><span class="pre">SCITEX_API_TOKEN</span></code> env var is set and “cloud” backend</p>
-<blockquote>
-<div><p>is registered, use cloud.</p>
-</div></blockquote>
-<ol class="arabic simple" start="3">
+<p>Auto-detection logic:</p>
+<ol class="arabic simple">
+<li><p>If <code class="docutils literal notranslate"><span class="pre">backend</span></code> is specified, use that.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">SCITEX_API_TOKEN</span></code> env var is set and “cloud” backend
+is registered, use cloud.</p></li>
 <li><p>Otherwise, use filesystem (default).</p></li>
 </ol>
 <dl class="field-list simple">
@@ -755,7 +437,7 @@ just implement the methods, no inheritance required.</p>
 <dd class="field-even"><p>A backend instance.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="#scitex_app.sdk.FilesBackend" title="scitex_app.sdk.FilesBackend">FilesBackend</a></p>
+<dd class="field-odd"><p><a class="reference internal" href="#scitex_app.sdk._protocol.FilesBackend" title="scitex_app.sdk._protocol.FilesBackend">FilesBackend</a></p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#KeyError" title="(in Python v3.14)"><strong>KeyError</strong></a> – If the requested backend is not registered.</p>
@@ -771,7 +453,7 @@ just implement the methods, no inheritance required.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Backend identifier (e.g., “cloud”, “s3”).</p></li>
-<li><p><strong>factory</strong> (<em>callable</em>) – Callable(root, <a href="#id4"><span class="problematic" id="id5">**</span></a>kwargs) -&gt; FilesBackend instance.</p></li>
+<li><p><strong>factory</strong> (<em>callable</em>) – Callable(root, <code class="docutils literal notranslate"><span class="pre">**kwargs</span></code>) -&gt; <code class="docutils literal notranslate"><span class="pre">FilesBackend</span></code> instance.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -782,12 +464,12 @@ just implement the methods, no inheritance required.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="scitex_app.sdk.build_tree">
-<span class="sig-prename descclassname"><span class="pre">scitex_app.sdk.</span></span><span class="sig-name descname"><span class="pre">build_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">backend</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_tree.html#build_tree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.build_tree" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">scitex_app.sdk.</span></span><span class="sig-name descname"><span class="pre">build_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">backend</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_hidden</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_tree.html#build_tree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk.build_tree" title="Link to this definition"></a></dt>
 <dd><p>Build a nested tree structure from a FilesBackend.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>backend</strong> (<a class="reference internal" href="#scitex_app.sdk.FilesBackend" title="scitex_app.sdk.FilesBackend"><em>FilesBackend</em></a>) – A file storage backend implementing the FilesBackend protocol.</p></li>
+<li><p><strong>backend</strong> (<a class="reference internal" href="#scitex_app.sdk._protocol.FilesBackend" title="scitex_app.sdk._protocol.FilesBackend"><em>FilesBackend</em></a>) – A file storage backend implementing the FilesBackend protocol.</p></li>
 <li><p><strong>directory</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Starting directory (relative to backend root). Default: root.</p></li>
 <li><p><strong>extensions</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Filter files by extension (e.g., [“.yaml”, “.png”]).
 Directories are always included for traversal.</p></li>
@@ -817,20 +499,20 @@ Directories are always included for traversal.</p></li>
 <h2>FilesBackend Protocol<a class="headerlink" href="#filesbackend-protocol" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="scitex_app.sdk._protocol.FilesBackend">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">scitex_app.sdk._protocol.</span></span><span class="sig-name descname"><span class="pre">FilesBackend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._protocol.FilesBackend" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">scitex_app.sdk._protocol.</span></span><span class="sig-name descname"><span class="pre">FilesBackend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._protocol.FilesBackend" title="Link to this definition"></a></dt>
 <dd><p>File storage backend protocol.</p>
 <p>Implementations must provide these 7 methods.
 Uses <code class="docutils literal notranslate"><span class="pre">typing.Protocol</span></code> for structural subtyping — backends
 just implement the methods, no inheritance required.</p>
-<section id="id6">
-<h3>Implementations<a class="headerlink" href="#id6" title="Link to this heading"></a></h3>
+<section id="implementations">
+<h3>Implementations<a class="headerlink" href="#implementations" title="Link to this heading"></a></h3>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">FileSystemBackend</span></code> — local pathlib (ships with scitex-app)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">CloudFilesBackend</span></code> — HTTP via scitex_cloud (provided at runtime)</p></li>
 </ul>
 <dl class="py method">
 <dt class="sig sig-object py" id="scitex_app.sdk._protocol.FilesBackend.read">
-<span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.read"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._protocol.FilesBackend.read" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.read"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._protocol.FilesBackend.read" title="Link to this definition"></a></dt>
 <dd><p>Read file content.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -867,7 +549,7 @@ just implement the methods, no inheritance required.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="scitex_app.sdk._protocol.FilesBackend.list">
-<span class="sig-name descname"><span class="pre">list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._protocol.FilesBackend.list" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_protocol.html#FilesBackend.list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._protocol.FilesBackend.list" title="Link to this definition"></a></dt>
 <dd><p>List file paths in a directory.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -967,7 +649,7 @@ just implement the methods, no inheritance required.</p>
 <h2>FileSystemBackend<a class="headerlink" href="#filesystembackend" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="scitex_app.sdk._filesystem.FileSystemBackend">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">scitex_app.sdk._filesystem.</span></span><span class="sig-name descname"><span class="pre">FileSystemBackend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_filesystem.html#FileSystemBackend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._filesystem.FileSystemBackend" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">scitex_app.sdk._filesystem.</span></span><span class="sig-name descname"><span class="pre">FileSystemBackend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_filesystem.html#FileSystemBackend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._filesystem.FileSystemBackend" title="Link to this definition"></a></dt>
 <dd><p>Local filesystem implementation of FilesBackend.</p>
 <p>All paths are relative to a root directory. Path traversal
 outside root is prevented.</p>
@@ -978,13 +660,13 @@ outside root is prevented.</p>
 </dl>
 <dl class="py property">
 <dt class="sig sig-object py" id="scitex_app.sdk._filesystem.FileSystemBackend.root">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">root</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a></em><a class="headerlink" href="#scitex_app.sdk._filesystem.FileSystemBackend.root" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">root</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a></span><a class="headerlink" href="#scitex_app.sdk._filesystem.FileSystemBackend.root" title="Link to this definition"></a></dt>
 <dd><p>Root directory.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="scitex_app.sdk._filesystem.FileSystemBackend.read">
-<span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_filesystem.html#FileSystemBackend.read"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._filesystem.FileSystemBackend.read" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">binary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_filesystem.html#FileSystemBackend.read"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._filesystem.FileSystemBackend.read" title="Link to this definition"></a></dt>
 <dd><p>Read file content.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
@@ -1018,7 +700,7 @@ outside root is prevented.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="scitex_app.sdk._filesystem.FileSystemBackend.list">
-<span class="sig-name descname"><span class="pre">list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_filesystem.html#FileSystemBackend.list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._filesystem.FileSystemBackend.list" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">extensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/scitex_app/sdk/_filesystem.html#FileSystemBackend.list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#scitex_app.sdk._filesystem.FileSystemBackend.list" title="Link to this definition"></a></dt>
 <dd><p>List file paths in a directory.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>

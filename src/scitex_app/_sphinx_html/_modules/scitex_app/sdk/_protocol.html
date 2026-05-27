@@ -5,17 +5,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>scitex_app.sdk._protocol &mdash; SciTeX App 0.2.6 documentation</title>
+  <title>scitex_app.sdk._protocol &mdash; SciTeX App 0.2.8 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
 
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=fc7d8818"></script>
-      <script src="../../../_static/doctools.js?v=9a2dae69"></script>
-      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/documentation_options.js?v=b01fafc3"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="../../../_static/copybutton.js?v=f281be69"></script>
     <script src="../../../_static/js/theme.js"></script>
@@ -90,7 +90,7 @@
 
 
 <div class="viewcode-block" id="FilesBackend">
-<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.FilesBackend">[docs]</a>
+<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.sdk._protocol.FilesBackend">[docs]</a>
 <span class="nd">@runtime_checkable</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">FilesBackend</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;File storage backend protocol.</span>
@@ -106,7 +106,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="FilesBackend.read">
-<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.FilesBackend.read">[docs]</a>
+<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.sdk._protocol.FilesBackend.read">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">binary</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Read file content.</span>
 
@@ -126,7 +126,7 @@
 
 
 <div class="viewcode-block" id="FilesBackend.write">
-<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.FilesBackend.write">[docs]</a>
+<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.sdk._protocol.FilesBackend.write">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">content</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Write content to a file, creating parent dirs as needed.</span>
 
@@ -141,7 +141,7 @@
 
 
 <div class="viewcode-block" id="FilesBackend.list">
-<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.FilesBackend.list">[docs]</a>
+<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.sdk._protocol.FilesBackend.list">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">list</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">directory</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
@@ -166,14 +166,14 @@
 
 
 <div class="viewcode-block" id="FilesBackend.exists">
-<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.FilesBackend.exists">[docs]</a>
+<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.sdk._protocol.FilesBackend.exists">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">exists</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if a file exists.&quot;&quot;&quot;</span>
         <span class="o">...</span></div>
 
 
 <div class="viewcode-block" id="FilesBackend.delete">
-<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.FilesBackend.delete">[docs]</a>
+<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.sdk._protocol.FilesBackend.delete">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Delete a file.</span>
 
@@ -186,7 +186,7 @@
 
 
 <div class="viewcode-block" id="FilesBackend.rename">
-<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.FilesBackend.rename">[docs]</a>
+<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.sdk._protocol.FilesBackend.rename">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">rename</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">old_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">new_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Rename/move a file within the namespace.</span>
 
@@ -201,7 +201,7 @@
 
 
 <div class="viewcode-block" id="FilesBackend.copy">
-<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.FilesBackend.copy">[docs]</a>
+<a class="viewcode-back" href="../../../api/scitex_app.html#scitex_app.sdk._protocol.FilesBackend.copy">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">src_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dest_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Copy a file within the namespace.</span>
 
