@@ -202,7 +202,7 @@ scitex-app app init . --name my_cool_app
 scitex-app app validate .
 
 # Dev-install on your SciTeX Cloud server
-scitex-app app dev-install . --server http://127.0.0.1:8000
+scitex-app app install-dev . --server http://127.0.0.1:8000
 
 # Submit for public review
 scitex-app app submit .

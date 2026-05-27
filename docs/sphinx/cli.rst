@@ -89,9 +89,13 @@ File Commands
 
 .. code-block:: bash
 
-   scitex-app read <path> [--root DIR] [--binary]
-   scitex-app list [DIR] [--root DIR] [--ext .yaml]
-   scitex-app exists <path> [--root DIR]
+   scitex-app file read <path> [--root DIR] [--binary]
+   scitex-app file write <path> <content> [--root DIR]
+   scitex-app file list [DIR] [--root DIR] [--ext .yaml]
+   scitex-app file exists <path> [--root DIR]
+   scitex-app file delete <path> [--root DIR]
+   scitex-app file rename <old> <new> [--root DIR]
+   scitex-app file copy <src> <dest> [--root DIR]
 
 
 Integration
