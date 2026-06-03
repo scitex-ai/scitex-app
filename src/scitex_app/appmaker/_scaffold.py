@@ -254,9 +254,9 @@ def gui(port, host, no_browser, force):
 
 
 def _pyproject_toml(name, label, description, license_id):
-    """Generate pyproject.toml for dual-mode app (standalone + scitex-cloud extension)."""
+    """Generate pyproject.toml for dual-mode app (standalone + scitex-hub extension)."""
     slug = name.replace("_", "-")
-    desc = description or f"{label} — a SciTeX Cloud app."
+    desc = description or f"{label} — a SciTeX Hub app."
     return f"""[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

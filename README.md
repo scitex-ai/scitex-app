@@ -239,7 +239,7 @@ scitex (orchestrator, core compute, CLI, MCP)
 **What this package does NOT own:**
 
 - Frontend components -- see [scitex-ui](https://github.com/ywatanabe1989/scitex-ui)
-- Platform server APIs -- see [scitex-cloud](https://github.com/ywatanabe1989/scitex-cloud)
+- Platform server APIs -- see [scitex-hub](https://github.com/ywatanabe1989/scitex-hub)
 - Core compute (io, stats, plt) -- see [scitex](https://github.com/ywatanabe1989/scitex-python)
 
 ## Part of SciTeX

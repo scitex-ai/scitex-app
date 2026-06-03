@@ -47,11 +47,11 @@ Expected: a version string, the CLI help, then a scaffolded app at
 
 ## Cloud companion (optional)
 
-To **dev-install** an app into a running SciTeX Cloud workspace, also
+To **dev-install** an app into a running SciTeX Hub workspace, also
 install:
 
 ```bash
-pip install scitex-cloud         # provides the workspace endpoint
+pip install scitex-hub           # provides the workspace endpoint
 ```
 
 Used as:

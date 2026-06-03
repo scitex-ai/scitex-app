@@ -70,13 +70,13 @@ Virtual indexed columns are created automatically — no Django migrations neede
 
 ---
 
-## Python SDK (`scitex_cloud.sdk`)
+## Python SDK (`scitex_hub.sdk`)
 
 Instead of constructing raw HTTP requests, use the Python SDK from your
 context builder or any backend code running inside Apptainer:
 
 ```python
-from scitex_cloud.sdk import data, files, jobs
+from scitex_hub.sdk import data, files, jobs
 
 # DataStore — CRUD
 data.create("{name}", "Sample", {{"name": "Test", "condition": "A"}})
@@ -102,9 +102,9 @@ Auth is automatic via `SCITEX_API_TOKEN` env var (injected into Apptainer).
 
 **CLI equivalent:**
 ```bash
-scitex-cloud sdk data list {name} Sample
-scitex-cloud sdk files upload {name} local.csv exports/data.csv
-scitex-cloud sdk jobs submit {name} export_csv --params '{{"format":"xlsx"}}'
+scitex-hub sdk data list {name} Sample
+scitex-hub sdk files upload {name} local.csv exports/data.csv
+scitex-hub sdk jobs submit {name} export_csv --params '{{"format":"xlsx"}}'
 ```
 
 ---
@@ -115,7 +115,7 @@ Bootstrap your app with one call — returns user profile, project metadata,
 and file tree:
 
 ```python
-from scitex_cloud.sdk._client import get_client
+from scitex_hub.sdk._client import get_client
 result = get_client().request("GET", "/platform/api/context/", params={{"project_id": pid}})
 # result["context"]["user"]     -> {{"id": ..., "username": ..., "email": ...}}
 # result["context"]["project"]  -> {{"id": ..., "name": ..., "slug": ...}}
@@ -324,10 +324,10 @@ This validates:
 
 Apps follow a two-tier distribution model:
 
-1. **Scaffold:** `scitex-cloud app init .` — creates all boilerplate
+1. **Scaffold:** `scitex-hub app init .` — creates all boilerplate
 2. **Develop:** Edit templates, views, and CSS in your project
-3. **Validate:** `scitex-cloud app validate .` — checks structure and security
-4. **Submit:** `scitex-cloud app submit .` — opens a PR on `scitex/apps` registry
+3. **Validate:** `scitex-hub app validate .` — checks structure and security
+4. **Submit:** `scitex-hub app submit .` — opens a PR on `scitex/apps` registry
 5. **Review:** Staff reviews the PR and merges to approve
 6. **Live:** Merged apps appear in the public Apps catalog
 
