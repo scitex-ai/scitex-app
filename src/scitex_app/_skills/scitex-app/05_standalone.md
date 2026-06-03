@@ -1,13 +1,13 @@
 ---
 description: |
   [TOPIC] Standalone Mode
-  [DETAILS] run_standalone() — launch a SciTeX app locally with the full workspace shell (Django + sidebar + file tree + AI panel) without scitex-cloud..
+  [DETAILS] run_standalone() — launch a SciTeX app locally with the full workspace shell (Django + sidebar + file tree + AI panel) without scitex-hub..
 tags: [scitex-app-standalone]
 ---
 
 # Standalone Mode
 
-`scitex_app._standalone.run_standalone()` launches any SciTeX app locally with the full workspace shell — same UX as scitex-cloud, no server required.
+`scitex_app._standalone.run_standalone()` launches any SciTeX app locally with the full workspace shell — same UX as scitex-hub, no server required.
 
 ## run_standalone()
 

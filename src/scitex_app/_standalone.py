@@ -3,7 +3,7 @@
 Provides a minimal Django server with the full workspace shell
 (sidebar, three-column layout, file tree, AI panel) from scitex-ui.
 
-Any app can use this to run locally with the same UX as scitex-cloud:
+Any app can use this to run locally with the same UX as scitex-hub:
 
     from scitex_app._standalone import run_standalone
     run_standalone(app_module="figrecipe._django", port=5050)
