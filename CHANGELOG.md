@@ -7,7 +7,10 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.2.9] - 2026-06-14
+## [0.2.10] - 2026-06-14
+
+(Version 0.2.9 was claimed by an earlier orphan tag on 2026-06-03 that
+never published to PyPI; jumping to 0.2.10 to avoid the conflict.)
 
 - fix(appmaker): emit nested-package layout (`<wrapper>/<name>/`) + add
   `[tool.hatch.build.targets.wheel] packages = ["<name>"]` block to
