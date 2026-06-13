@@ -92,6 +92,9 @@ packages = ["src/scitex_app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (pip-install/venv-build gates; deselect with '-m \"not slow\"')",
+]
 
 [tool.coverage.run]
 parallel = true
