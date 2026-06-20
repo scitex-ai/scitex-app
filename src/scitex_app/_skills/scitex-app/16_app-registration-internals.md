@@ -81,10 +81,10 @@ only.
 
 | File | Role |
 |------|------|
-| `scitex-cloud/apps/infra/workspace_app/registry.py` | `ModuleConfig` dataclass, `register_module()`, `get_all_modules()` |
-| `scitex-cloud/apps/workspace/apps_app/services/app_loader.py` | `load_approved_apps()` — published app registration at startup |
-| `scitex-cloud/apps/workspace/apps_app/services/dev_app_loader.py` | `build_module_config()` — per-request dev app config synthesis |
-| `scitex-cloud/apps/infra/workspace_app/context_processors.py` | Injects `workspace_modules` into template context |
+| `scitex-hub/apps/infra/workspace_app/registry.py` | `ModuleConfig` dataclass, `register_module()`, `get_all_modules()` |
+| `scitex-hub/apps/workspace/apps_app/services/app_loader.py` | `load_approved_apps()` — published app registration at startup |
+| `scitex-hub/apps/workspace/apps_app/services/dev_app_loader.py` | `build_module_config()` — per-request dev app config synthesis |
+| `scitex-hub/apps/infra/workspace_app/context_processors.py` | Injects `workspace_modules` into template context |
 
 ## Troubleshooting Registration
 

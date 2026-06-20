@@ -136,7 +136,7 @@ Apps register with pip entry points for automatic discovery:
 my_app = "my_app:scitex_module_config"
 ```
 
-The entry point must return a `ModuleConfig` instance. scitex-cloud's `discover_external_modules()` calls `entry_points(group="scitex_modules")` at startup.
+The entry point must return a `ModuleConfig` instance. scitex-hub's `discover_external_modules()` calls `entry_points(group="scitex_modules")` at startup.
 
 ## Cloud SDK Services
 
@@ -166,7 +166,7 @@ def my_chat_view(request):
 
 ## App Validation Pipeline
 
-The platform validates apps before approval using checks in both scitex-app (path/structure) and scitex-cloud (security):
+The platform validates apps before approval using checks in both scitex-app (path/structure) and scitex-hub (security):
 
 1. **Structure** -- `validate_project_structure()` checks for `templates/` and `index_partial.html`
 2. **Manifest** -- `resolve_manifest()` parses and validates `manifest.json`
@@ -185,6 +185,6 @@ The platform validates apps before approval using checks in both scitex-app (pat
 
 ## Cross-References
 
-- **scitex-cloud** (`docs/ARCHITECTURE/APP_PLATFORM.md`) -- Platform mounting, manifest loading, `ModuleConfig` registry
+- **scitex-hub** (`docs/ARCHITECTURE/APP_PLATFORM.md`) -- Platform mounting, manifest loading, `ModuleConfig` registry
 - **scitex-ui** (`docs/APP_SANDBOX.md`) -- Frontend CSS isolation, shared components, theme contract
 - **figrecipe** (`docs/SCITEX_APP_INTEGRATION.md`) -- Reference implementation using `FilesBackend` and `_django` convention

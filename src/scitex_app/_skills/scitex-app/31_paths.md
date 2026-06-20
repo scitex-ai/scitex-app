@@ -126,7 +126,7 @@ Returns `project_dir/static` if it exists, else `None`.
 def parse_dev_module_name(module_name: str) -> Optional[tuple[str, str]]
 ```
 
-Parses the `dev__<owner>__<repo>` convention used by scitex-cloud for dev apps.
+Parses the `dev__<owner>__<repo>` convention used by scitex-hub for dev apps.
 
 ```python
 from scitex_app.paths import parse_dev_module_name

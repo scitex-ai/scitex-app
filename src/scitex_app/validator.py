@@ -168,7 +168,7 @@ class AppValidator:
             else:
                 self._result.add_warning(
                     "No _django/ directory found. "
-                    "App may not integrate with scitex-cloud."
+                    "App may not integrate with scitex-hub."
                 )
                 return
 
