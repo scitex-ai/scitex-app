@@ -7,6 +7,21 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-06-14
+
+(Version 0.2.9 was claimed by an earlier orphan tag on 2026-06-03 that
+never published to PyPI; jumping to 0.2.10 to avoid the conflict.)
+
+- fix(appmaker): emit nested-package layout (`<wrapper>/<name>/`) + add
+  `[tool.hatch.build.targets.wheel] packages = ["<name>"]` block to
+  generated `pyproject.toml`. Pre-fix the scaffold emitted a FLAT layout
+  that hatchling refused to package — every `pip install --no-deps
+  --target=<dir> <gitea-archive-url>` from the hub then failed with
+  "Unable to determine which files to ship inside the wheel". Port of
+  scitex-cloud PR #293 M4 done-gate. New test gate
+  (`tests/scitex_app/appmaker/test__scaffold.py`, 36 cases, no mocks,
+  incl. real `pip install` into a fresh venv) prevents regression. (#35)
+
 ## [0.2.8] - 2026-05-26
 
 - test: de-mock + fix test quality; fix fastmcp call-tool API drift

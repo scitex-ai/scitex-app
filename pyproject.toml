@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "scitex-app"
-version = "0.2.8"
+version = "0.2.11"
 description = "SciTeX App SDK — write-once interface for local + cloud apps"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -92,6 +92,9 @@ packages = ["src/scitex_app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (pip-install/venv-build gates; deselect with '-m \"not slow\"')",
+]
 
 [tool.coverage.run]
 parallel = true
@@ -112,7 +115,3 @@ library_dirs = ["src", "tests", "examples"]
 # exception inline so the audit passes on every scitex-dev version,
 # independent of release timing.
 ps168_secret_exceptions = ["GH_PERSONAL_ACCESS_TOKEN"]
-
-dependencies = [
-    "scitex-dev>=0.17.8",
-]

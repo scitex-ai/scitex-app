@@ -3,7 +3,7 @@ App Development Guide
 
 SciTeX apps are self-contained Django plugins that integrate into the
 SciTeX Cloud workspace. This guide covers the full lifecycle: scaffold,
-validate, dev-install, and submit.
+validate, install-dev, and submit.
 
 .. contents:: Contents
    :local:
@@ -186,10 +186,10 @@ SciTeX Cloud server for development testing:
    export SCITEX_API_TOKEN="your-jwt-token"
    export SCITEX_SERVER_URL="http://127.0.0.1:8000"
 
-   scitex-app app dev-install .
+   scitex-app app install-dev .
 
    # Or pass options explicitly
-   scitex-app app dev-install . \
+   scitex-app app install-dev . \
        --server http://my-server:8000 \
        --token  "$SCITEX_API_TOKEN"
 
@@ -355,9 +355,9 @@ Typical Workflow
 
    # 4. Dev-install on a running server for live testing
    export SCITEX_API_TOKEN="..."
-   scitex-app app dev-install . --server http://127.0.0.1:8000
+   scitex-app app install-dev . --server http://127.0.0.1:8000
 
-   # 5. Iterate: edit → validate → dev-install
+   # 5. Iterate: edit → validate → install-dev
    # (The server hot-reloads on file changes)
 
    # 6. Submit when ready

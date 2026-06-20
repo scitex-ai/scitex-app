@@ -11,6 +11,7 @@ tags: [scitex-app-environment-vars]
 
 | Variable | Purpose | Used by |
 |----------|---------|---------|
+| `SCITEX_DIR` | Relocate the user-scope `.scitex/` tree | `scitex_app._cli._skills._scitex_dir()` |
 | `SCITEX_BASE_DIR` | Base directory for app path resolution | `scitex_app.paths.get_base_dir()` |
 | `SCITEX_WORKING_DIR` | Working directory for standalone file tree | `run_standalone()` |
 
