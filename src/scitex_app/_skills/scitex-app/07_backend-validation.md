@@ -62,6 +62,6 @@ myapp/
 - `_django/views.py` and `_django/urls.py` required for platform integration
 - Use `get_files()` for all file I/O — never `open()` directly in app logic
 - **Packaging**: Apps with a `bridge` key in manifest.json must keep
-  `_django/frontend/src/` in their source tree. scitex-cloud discovers
+  `_django/frontend/src/` in their source tree. scitex-hub discovers
   bridges by scanning sibling directories. Use an `[app]` optional extra
   for platform Python deps. In CI, clone the repo as a sibling.

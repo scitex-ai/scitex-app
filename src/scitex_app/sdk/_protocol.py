@@ -20,7 +20,7 @@ class FilesBackend(Protocol):
     Implementations
     ---------------
     - ``FileSystemBackend`` — local pathlib (ships with scitex-app)
-    - ``CloudFilesBackend`` — HTTP via scitex_cloud (provided at runtime)
+    - ``CloudFilesBackend`` — HTTP via scitex_hub (provided at runtime)
     """
 
     def read(self, path: str, *, binary: bool = False) -> Union[str, bytes]:

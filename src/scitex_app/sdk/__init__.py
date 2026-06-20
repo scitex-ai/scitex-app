@@ -109,7 +109,7 @@ __all__ = [
 
 
 # Internal cloud modules — accessible via scitex_app.sdk._client etc.
-# but NOT part of the public API contract. Use scitex_cloud.sdk for
+# but NOT part of the public API contract. Use scitex_hub.sdk for
 # cloud service access (data, files, jobs, scitex, external).
 def __getattr__(name: str) -> Any:
     """Lazy-load cloud internals on demand (not in __all__)."""

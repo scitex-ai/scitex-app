@@ -15,11 +15,11 @@ Role of Each Package
 .. code-block:: text
 
    scitex-app  (this package) — developer SDK: scaffold, validate, install
-   scitex-cloud               — platform: mounts apps, handles security, routing
+   scitex-hub                 — platform: mounts apps, handles security, routing
    figrecipe                  — reference app: see how a real app is built
 
 ``scitex-app`` is the **only** package app developers need to install.
-``scitex-cloud`` is the platform; developers interact with it only through
+``scitex-hub`` is the platform; developers interact with it only through
 the server URL and API token.
 
 
