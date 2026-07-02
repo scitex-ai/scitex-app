@@ -3,6 +3,8 @@ description: |
   [TOPIC] Environment Variables
   [DETAILS] All environment variables used by scitex-app — storage, cloud API, standalone Django, and LLM configuration..
 tags: [scitex-app-environment-vars]
+version: 0.2.6
+exported_via: installed
 ---
 
 # Environment Variables

@@ -3,6 +3,8 @@ description: |
   [TOPIC] scitex-app Python API
   [DETAILS] Top-level public surface — FilesBackend, get_files, register_backend, build_tree, chat, paths, validator.
 tags: [scitex-app-python-api]
+version: 0.2.6
+exported_via: installed
 ---
 
 # Python API

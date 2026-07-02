@@ -3,6 +3,8 @@ description: |
   [TOPIC] Backend SDK — App Validation
   [DETAILS] Backend SDK — App validation pipeline (manifest, structure, CSS, JS, bundle size, privileges) and the minimal-app checklist..
 tags: [scitex-app-backend-validation]
+version: 0.2.6
+exported_via: installed
 ---
 
 # Backend SDK — App Validation

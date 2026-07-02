@@ -3,6 +3,8 @@ description: |
   [TOPIC] App Development Patterns
   [DETAILS] Detailed development patterns for SciTeX apps — views.py, urls.py, templates (AJAX partial), CSS scoping, React bridge, and Django AppConfig..
 tags: [scitex-app-app-develop]
+version: 0.2.6
+exported_via: installed
 ---
 
 # App Development Patterns

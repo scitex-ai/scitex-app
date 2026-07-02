@@ -3,6 +3,8 @@ description: |
   [TOPIC] Path Resolution
   [DETAILS] Path resolution utilities for SciTeX apps. get_base_dir(), resolve_user_project_dir(), resolve_published_project_dir(), resolve_manifest(), find_partial_template(), parse_dev_module_name()..
 tags: [scitex-app-paths]
+version: 0.2.6
+exported_via: installed
 ---
 
 # Path Resolution

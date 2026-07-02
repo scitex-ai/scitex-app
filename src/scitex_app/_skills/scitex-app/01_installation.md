@@ -3,6 +3,8 @@ description: |
   [TOPIC] scitex-app Installation
   [DETAILS] pip install scitex-app; zero runtime deps (stdlib SDK); smoke verify with scitex-app version + app init.
 tags: [scitex-app-installation]
+version: 0.2.6
+exported_via: installed
 ---
 
 # Installation

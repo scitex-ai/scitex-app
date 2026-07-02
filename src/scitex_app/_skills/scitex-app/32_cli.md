@@ -3,6 +3,8 @@ description: |
   [TOPIC] CLI Reference
   [DETAILS] scitex-app CLI — file operations, app lifecycle (init/validate/dev-install/submit), MCP server, and Python API introspection..
 tags: [scitex-app-cli]
+version: 0.2.6
+exported_via: installed
 ---
 
 # CLI Reference

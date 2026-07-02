@@ -13,6 +13,8 @@ interfaces:
   mcp: 2
   skills: 2
   http: 0
+version: 0.2.6
+exported_via: installed
 ---
 
 # scitex-app — App Developer SDK

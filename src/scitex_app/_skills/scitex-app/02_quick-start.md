@@ -3,6 +3,8 @@ description: |
   [TOPIC] scitex-app Quick Start
   [DETAILS] Smallest example — scaffold an app, validate, dev-install into a local workspace, and test in the browser.
 tags: [scitex-app-quick-start]
+version: 0.2.6
+exported_via: installed
 ---
 
 # Quick Start

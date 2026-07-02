@@ -3,6 +3,8 @@ description: |
   [TOPIC] scitex-app CLI Reference
   [DETAILS] Top-level subcommands of `scitex-app` — app (init/validate/dev-install/submit), file, mcp, docs, skills, list-python-apis.
 tags: [scitex-app-cli-reference]
+version: 0.2.6
+exported_via: installed
 ---
 
 # CLI Reference

@@ -3,6 +3,8 @@ description: |
   [TOPIC] App — Test, Troubleshoot, Env Vars
   [DETAILS] App testing in browser, standalone mode, troubleshooting, and environment variables reference. Companion to 13_app-validate-install.md..
 tags: [scitex-app-app-test-troubleshoot]
+version: 0.2.6
+exported_via: installed
 ---
 
 # App — Test, Troubleshoot, Env Vars

@@ -3,6 +3,8 @@ description: |
   [TOPIC] scitex_app — AI Agent Developer Guide
   [DETAILS] Backend SDK reference — FilesBackend protocol, Django integration, manifest schema, app validation, path resolution.
 tags: [scitex-app-backend-sdk]
+version: 0.2.6
+exported_via: installed
 ---
 
 #!/usr/bin/env python3

@@ -3,6 +3,8 @@ description: |
   [TOPIC] App Lifecycle — Validate, Install, Test, Submit
   [DETAILS] App lifecycle — Steps 3–6 (validate, dev-install, test, submit) plus the canonical reference implementation (figrecipe). Companion to 10_app-lifecycle.md..
 tags: [scitex-app-app-lifecycle-deploy]
+version: 0.2.6
+exported_via: installed
 ---
 
 # App Lifecycle — Validate, Install, Test, Submit

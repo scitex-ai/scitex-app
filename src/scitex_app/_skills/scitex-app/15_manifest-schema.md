@@ -3,6 +3,8 @@ description: |
   [TOPIC] manifest.json — Complete Schema
   [DETAILS] Complete manifest.json schema for SciTeX apps — required fields, all optional metadata, privilege types and valid scopes, dependency layout..
 tags: [scitex-app-manifest-schema]
+version: 0.2.6
+exported_via: installed
 ---
 
 # manifest.json — Complete Schema
