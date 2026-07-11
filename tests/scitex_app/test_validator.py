@@ -940,7 +940,7 @@ class TestFullValidate:
                 "name": "x",
                 "slug": "x",
                 "label": "x",
-                "version": "1.0.0",
+                "pip_package": "x-app",
                 "icon": "x",
                 "privileges": [{"type": "invalid_type", "scope": "none"}],
             },
