@@ -22,7 +22,7 @@ versions follow [Semantic Versioning](https://semver.org/).
   `version` key is present. The scaffold now generates `pip_package`
   instead of `version`, and the manifest schema doc documents the rule.
   **Breaking:** existing manifests that declare `version` must remove it
-  and add `pip_package`. (#45)
+  and add `pip_package`. (#47)
 
 ## [0.2.10] - 2026-06-14
 
