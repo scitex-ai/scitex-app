@@ -26,7 +26,7 @@ FORBIDDEN_PATTERNS = [
     (r"\b__import__\b", "__import__"),
 ]
 
-MANIFEST_REQUIRED_KEYS = ["name", "slug", "label", "version", "icon", "license"]
+MANIFEST_REQUIRED_KEYS = ["name", "slug", "label", "pip_package", "icon", "license"]
 
 # Frame selectors that app CSS must not style
 PROTECTED_SELECTORS = [
@@ -153,17 +153,25 @@ def validate_manifest(app_dir: str | Path) -> list[str]:
         if key not in data:
             errors.append(f"manifest.json missing required key: '{key}'")
 
+    # The app version is the SINGLE SOURCE OF TRUTH: the installed package's own
+    # version, read at runtime via importlib.metadata from `pip_package`. A
+    # hand-written `version` in the manifest is FORBIDDEN — it inevitably drifts
+    # from the package (2026-07 incident: manifests stuck at "0.14.0" while the
+    # packages shipped 2.25.0 / 0.29.9 / 1.4.2, so every app tile showed a wrong
+    # version). Declare `pip_package` (the dist name) and let the version derive.
+    if "version" in data:
+        errors.append(
+            "manifest.json must NOT declare 'version' — it drifts from the "
+            "package. The version is derived at runtime from the installed "
+            "'pip_package' (importlib.metadata). Remove the 'version' key."
+        )
+
     # Validate name matches directory convention
     name = data.get("name", "")
     if name and not (name.endswith("_app") or name.endswith("-app")):
         errors.append(
             f"manifest.json 'name' should end with '_app' or '-app' (got: '{name}')"
         )
-
-    # Validate version format
-    version = data.get("version", "")
-    if version and not re.match(r"^\d+\.\d+\.\d+", version):
-        errors.append(f"manifest.json 'version' should be semver (got: '{version}')")
 
     return errors
 
