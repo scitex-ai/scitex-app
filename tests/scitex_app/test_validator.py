@@ -40,7 +40,7 @@ def make_valid_manifest(path: Path) -> None:
             "name": "test_app",
             "slug": "test-app",
             "label": "Test App",
-            "version": "1.0.0",
+            "pip_package": "test-app",
             "icon": "fas fa-flask",
         },
     )
@@ -273,7 +273,6 @@ class TestValidateManifest:
     def test_all_required_fields_present(self, tmp_path):
         # Arrange
         data = {field: "value" for field in MANIFEST_REQUIRED_FIELDS}
-        data["version"] = "1.0.0"
         write_manifest(tmp_path, data)
         validator = AppValidator(tmp_path)
         validator.validate_manifest()
@@ -286,7 +285,7 @@ class TestValidateManifest:
         # Arrange
         write_manifest(
             tmp_path,
-            {"name": 123, "slug": "x", "label": "x", "version": "1.0.0", "icon": "x"},
+            {"name": 123, "slug": "x", "label": "x", "pip_package": "x-app", "icon": "x"},
         )
         validator = AppValidator(tmp_path)
         # Act
@@ -294,7 +293,9 @@ class TestValidateManifest:
         # Assert
         assert any("name must be a string" in e for e in validator._result.errors)
 
-    def test_non_semver_version_adds_warning(self, tmp_path):
+    def test_version_key_forbidden_result_passed_is_false(self, tmp_path):
+        # A hand-written 'version' key is forbidden — it drifts from the
+        # installed package; the version derives from 'pip_package'.
         # Arrange
         write_manifest(
             tmp_path,
@@ -302,15 +303,68 @@ class TestValidateManifest:
                 "name": "x",
                 "slug": "x",
                 "label": "x",
-                "version": "alpha",
+                "pip_package": "x-app",
                 "icon": "x",
+                "version": "1.0.0",
             },
         )
         validator = AppValidator(tmp_path)
         # Act
         validator.validate_manifest()
         # Assert
-        assert any("semver" in w for w in validator._result.warnings)
+        assert validator._result.passed is False
+
+    def test_version_key_forbidden_adds_error(self, tmp_path):
+        # A hand-written 'version' key emits the forbidden-version error.
+        # Arrange
+        write_manifest(
+            tmp_path,
+            {
+                "name": "x",
+                "slug": "x",
+                "label": "x",
+                "pip_package": "x-app",
+                "icon": "x",
+                "version": "1.0.0",
+            },
+        )
+        validator = AppValidator(tmp_path)
+        # Act
+        validator.validate_manifest()
+        # Assert
+        assert any(
+            "must NOT declare 'version'" in e for e in validator._result.errors
+        )
+
+    def test_missing_pip_package_result_passed_is_false(self, tmp_path):
+        # pip_package is required — it is the single source of truth for the
+        # app version (read at runtime via importlib.metadata).
+        # Arrange
+        write_manifest(
+            tmp_path,
+            {"name": "x", "slug": "x", "label": "x", "icon": "x"},
+        )
+        validator = AppValidator(tmp_path)
+        # Act
+        validator.validate_manifest()
+        # Assert
+        assert validator._result.passed is False
+
+    def test_missing_pip_package_adds_missing_required_error(self, tmp_path):
+        # A manifest without pip_package reports the missing-required error.
+        # Arrange
+        write_manifest(
+            tmp_path,
+            {"name": "x", "slug": "x", "label": "x", "icon": "x"},
+        )
+        validator = AppValidator(tmp_path)
+        # Act
+        validator.validate_manifest()
+        # Assert
+        assert any(
+            "missing required fields" in e and "pip_package" in e
+            for e in validator._result.errors
+        )
 
     def test_privileges_extracted_from_manifest(self, tmp_path):
         # Arrange
@@ -321,7 +375,7 @@ class TestValidateManifest:
                 "name": "x",
                 "slug": "x",
                 "label": "x",
-                "version": "1.0.0",
+                "pip_package": "x-app",
                 "icon": "x",
                 "privileges": privs,
             },
@@ -931,14 +985,14 @@ class TestConstants:
         # Assert
         assert "label" in MANIFEST_REQUIRED_FIELDS
 
-    def test_manifest_required_fields_version_in_manifest_required_fields(self):
+    def test_manifest_required_fields_pip_package_in_manifest_required_fields(self):
         # Arrange
         # Act
         # Assert
         # Arrange
         # Act
         # Assert
-        assert "version" in MANIFEST_REQUIRED_FIELDS
+        assert "pip_package" in MANIFEST_REQUIRED_FIELDS
 
     def test_manifest_required_fields_icon_in_manifest_required_fields(self):
         # Arrange
