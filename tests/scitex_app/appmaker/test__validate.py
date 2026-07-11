@@ -46,7 +46,7 @@ def make_minimal_embedded_app(root: Path) -> None:
             "name": "test_app",
             "slug": "test-app",
             "label": "Test App",
-            "version": "1.0.0",
+            "pip_package": "test-app",
             "icon": "fas fa-flask",
             "license": "MIT",
             "embedded_package": True,
@@ -65,7 +65,7 @@ def make_full_standalone_app(root: Path, app_name: str = "myapp") -> None:
             "name": app_name,
             "slug": app_name.replace("_", "-"),
             "label": "My App",
-            "version": "1.0.0",
+            "pip_package": app_name.replace("_", "-"),
             "icon": "fas fa-star",
             "license": "MIT",
             "dependencies": {"python": ["django"]},
@@ -284,7 +284,7 @@ class TestValidateStructure:
                 "name": "react_app",
                 "slug": "react-app",
                 "label": "React App",
-                "version": "1.0.0",
+                "pip_package": "react-app",
                 "icon": "fa",
                 "license": "MIT",
                 "frontend_type": "react",
@@ -440,7 +440,6 @@ class TestValidateManifest:
         # Arrange
         data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
         data["name"] = "my_app"
-        data["version"] = "1.0.0"
         data["slug"] = "my-app"
         data["label"] = "My App"
         data["icon"] = "fas fa-star"
@@ -455,7 +454,6 @@ class TestValidateManifest:
         # Arrange
         data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
         data["name"] = "mybadname"  # no _app suffix
-        data["version"] = "1.0.0"
         write_manifest(tmp_path, data)
         # Act
         errors = validate_manifest(tmp_path)
@@ -466,7 +464,6 @@ class TestValidateManifest:
         # Arrange
         data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
         data["name"] = "my_app"
-        data["version"] = "1.0.0"
         write_manifest(tmp_path, data)
         errors = validate_manifest(tmp_path)
         # Act
@@ -474,28 +471,29 @@ class TestValidateManifest:
         # Assert
         assert name_errors == []
 
-    def test_non_semver_version_adds_error(self, tmp_path):
+    def test_version_key_forbidden_adds_error(self, tmp_path):
+        # A hand-written 'version' key is forbidden — the version derives at
+        # runtime from the installed 'pip_package' (importlib.metadata).
         # Arrange
         data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
         data["name"] = "my_app"
-        data["version"] = "not-a-version"
+        data["version"] = "1.0.0"
         write_manifest(tmp_path, data)
         # Act
         errors = validate_manifest(tmp_path)
         # Assert
-        assert any("semver" in e for e in errors)
+        assert any("must NOT declare 'version'" in e for e in errors)
 
-    def test_valid_semver_version_passes(self, tmp_path):
+    def test_missing_pip_package_adds_error(self, tmp_path):
+        # pip_package is required — the single source of truth for the version.
         # Arrange
-        data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
+        data = {k: "value" for k in MANIFEST_REQUIRED_KEYS if k != "pip_package"}
         data["name"] = "my_app"
-        data["version"] = "2.1.3"
         write_manifest(tmp_path, data)
-        errors = validate_manifest(tmp_path)
         # Act
-        version_errors = [e for e in errors if "semver" in e]
+        errors = validate_manifest(tmp_path)
         # Assert
-        assert version_errors == []
+        assert any("pip_package" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------
@@ -850,6 +848,12 @@ class TestConstants:
         # Act
         # Assert
         assert "license" in MANIFEST_REQUIRED_KEYS
+
+    def test_manifest_required_keys_pip_package_in_manifest_required_keys(self):
+        # Arrange
+        # Act
+        # Assert
+        assert "pip_package" in MANIFEST_REQUIRED_KEYS
 
 
     def test_protected_selectors_len_protected_selectors_0(self):

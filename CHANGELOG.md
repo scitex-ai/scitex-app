@@ -7,6 +7,23 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-12
+
+- feat(validator): forbid a hand-written `version` in `manifest.json`;
+  require `pip_package` (the dist name) instead. The app version is now
+  the SINGLE SOURCE OF TRUTH of the installed pip package, read at
+  runtime via `importlib.metadata`. A manifest `version` inevitably
+  drifts from the package (2026-07 incident: manifests stuck at
+  `0.14.0` while packages shipped `2.25.0` / `0.29.9` / `1.4.2`, so
+  every app tile in scitex-hub showed a wrong version). Both validators
+  (`scitex_app.validator.AppValidator` and
+  `scitex_app.appmaker._validate`) drop `version` from their
+  required-field lists, add `pip_package`, and emit an error when a
+  `version` key is present. The scaffold now generates `pip_package`
+  instead of `version`, and the manifest schema doc documents the rule.
+  **Breaking:** existing manifests that declare `version` must remove it
+  and add `pip_package`. (#47)
+
 ## [0.2.10] - 2026-06-14
 
 (Version 0.2.9 was claimed by an earlier orphan tag on 2026-06-03 that
