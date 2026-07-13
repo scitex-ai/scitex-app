@@ -7,9 +7,9 @@ tags: [scitex-app-cli]
 
 # CLI Reference
 
-Entry point: `scitex-app` (installed via `pip install scitex-app[cli]`)
+Entry point: `scitex-app` (installed via `pip install scitex-app`)
 
-Requires `click` and `rich`. Install with: `pip install scitex-app[cli]`
+`click` and `rich` are base dependencies, always installed. For chat/cloud/django/mcp features: `pip install scitex-app[all]`.
 
 ```
 Usage: scitex-app [OPTIONS] COMMAND [ARGS]...

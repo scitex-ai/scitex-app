@@ -62,7 +62,7 @@ def list_tools(verbose: int, as_json: bool) -> None:
         from .._mcp.server import mcp as mcp_server
     except ImportError as e:
         raise click.ClickException(
-            f"fastmcp not installed. Install with: pip install scitex-app[mcp]\n{e}"
+            f"fastmcp not installed. Install with: pip install scitex-app[all]\n{e}"
         ) from e
 
     import asyncio
@@ -120,7 +120,7 @@ def start_server(dry_run: bool, yes: bool) -> None:
     except ImportError as e:
         raise click.ClickException(
             f"Failed to import MCP server. "
-            f"Install fastmcp: pip install scitex-app[mcp]\n{e}"
+            f"Install fastmcp: pip install scitex-app[all]\n{e}"
         ) from e
 
     click.echo("Starting scitex-app MCP server...")
@@ -169,7 +169,7 @@ def show_installation(as_json: bool) -> None:
             _json.dumps(
                 {
                     "success": True,
-                    "install_command": "pip install scitex-app[mcp]",
+                    "install_command": "pip install scitex-app[all]",
                     "config": config,
                 },
                 indent=2,
@@ -178,7 +178,7 @@ def show_installation(as_json: bool) -> None:
         return
     click.echo("Install scitex-app with MCP support:")
     click.echo()
-    click.echo("  pip install scitex-app[mcp]")
+    click.echo("  pip install scitex-app[all]")
     click.echo()
     click.echo("Add to your MCP client configuration:")
     click.echo()
@@ -208,7 +208,7 @@ def doctor() -> None:
         click.echo(f"  [OK] fastmcp {fastmcp.__version__}")
     except ImportError:
         click.echo("  [!!] fastmcp not installed")
-        click.echo("    Install with: pip install scitex-app[mcp]")
+        click.echo("    Install with: pip install scitex-app[all]")
         return
 
     try:

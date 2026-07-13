@@ -14,7 +14,7 @@ scaffold → develop → validate → dev-install → test in browser → submit
 ```
 
 Prerequisites:
-- `pip install scitex-app[cli]` — installs the `scitex-app` CLI
+- `pip install scitex-app` — installs the `scitex-app` CLI (click/rich are base dependencies)
 - A running SciTeX Cloud instance (for dev-install) at `http://127.0.0.1:8000`
 - A JWT token from your profile settings on the server
 
