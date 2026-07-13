@@ -119,8 +119,8 @@ import {{ FileBrowser }} from "scitex-ui/react/app/file-browser";
 
 **Standalone mode:**
 ```python
-from scitex_app._standalone import run_standalone
-run_standalone(app_module="{name}._django", port=5050)
+from scitex_app.embed import run_standalone
+run_standalone(app_module="{name}._django")
 ```
 '''
     }{

@@ -6,9 +6,10 @@
 
 Requires Django to be installed. Import guard at module level.
 
-Usage::
+This is an implementation module — consumers should import from the
+public ``scitex_app.embed`` surface, not from here directly::
 
-    from scitex_app._django import ScitexAppConfig, scitex_api_dispatch, scitex_editor_page
+    from scitex_app.embed import ScitexAppConfig, scitex_api_dispatch, scitex_editor_page
 """
 
 from __future__ import annotations
@@ -191,7 +192,7 @@ def scitex_urlpatterns(views_module) -> list:
     Usage::
 
         # In your urls.py:
-        from scitex_app._django import scitex_urlpatterns
+        from scitex_app.embed import scitex_urlpatterns
         from . import views
         urlpatterns = scitex_urlpatterns(views)
     """

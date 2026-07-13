@@ -98,7 +98,7 @@ class MyAwesomeAppConfig(AppConfig):
 Alternatively, use `ScitexAppConfig` from the SDK for auto manifest loading:
 
 ```python
-from scitex_app._django import ScitexAppConfig
+from scitex_app.embed import ScitexAppConfig
 
 class MyAwesomeAppConfig(ScitexAppConfig):
     name = "my_awesome_app._django"  # or just "my_awesome_app"

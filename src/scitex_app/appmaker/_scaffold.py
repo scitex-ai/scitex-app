@@ -257,13 +257,17 @@ def main(ctx):
 def gui(port, host, no_browser, force):
     """Launch standalone GUI with workspace shell."""
     if force:
+        # NOTE: unconditionally kills whatever holds `port`, even a
+        # foreign/unrelated process (e.g. a database). Tracked for a
+        # safe replacement (own-pid-only guard) in scitex-app card
+        # scitex-app-shared-launcher-20260713.
         import subprocess
         subprocess.run(
             ["fuser", "-k", f"{{port}}/tcp"],
             capture_output=True,
         )
 
-    from scitex_app._standalone import run_standalone
+    from scitex_app.embed import run_standalone
 
     run_standalone(
         app_module="{name}",
