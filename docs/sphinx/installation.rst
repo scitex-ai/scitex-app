@@ -8,22 +8,12 @@ Basic
 
    pip install scitex-app
 
-CLI support
------------
-
-.. code-block:: bash
-
-   pip install scitex-app[cli]
-
-MCP support
------------
-
-.. code-block:: bash
-
-   pip install scitex-app[mcp]
+``click``, ``rich``, and ``scitex-config`` are base dependencies, always installed.
 
 All features
 ------------
+
+Chat (anthropic/litellm), cloud, Django integration, and MCP tools:
 
 .. code-block:: bash
 
