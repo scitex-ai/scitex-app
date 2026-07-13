@@ -7,6 +7,30 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-13
+
+- feat: add `scitex_app.embed`, a public host-embedding API. 3+ consumers
+  (figrecipe, writer, scitex-todo) were reaching into the private
+  `scitex_app._django` / `scitex_app._standalone` modules for
+  host-embedding, including one hard top-level import. Root cause was
+  our own skill docs and app-scaffold templates teaching that private
+  import pattern to every consumer; both now reference
+  `scitex_app.embed`, so newly scaffolded apps stop reproducing it.
+  `scitex_app.chat`'s own docstrings and docs/APP_SDK.md are also fixed
+  — `from scitex_app.chat import X` raises `ModuleNotFoundError` because
+  `chat` is a lazy `__getattr__` attribute, not a real submodule; the
+  working form is `from scitex_app import chat` then `chat.X`. (#48)
+- feat: add a shared GUI launcher (`scitex_app.embed.serve_gui` +
+  `scitex_app._gui_runtime`), generalized from scitex-writer's `gui
+  serve` runtime module (writer PR #316). Binds the exact port or fails
+  loud (never drifts to the next free port), refuses a second instance
+  via runtime state (self-healing a stale recorded pid), identifies a
+  foreign port holder via `/proc` (no `ss`/`lsof` shell-out), and
+  `--force` only ever stops the instance recorded in its own runtime
+  state — never a process it does not own. Scaffolded apps' `gui
+  --force` no longer blind-kills whatever holds the port via `fuser -k`.
+  `scitex-config` is now a real (non-dev) dependency. (#49)
+
 ## [0.3.0] - 2026-07-12
 
 - feat(validator): forbid a hand-written `version` in `manifest.json`;
