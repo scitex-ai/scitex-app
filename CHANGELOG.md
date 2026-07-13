@@ -7,6 +7,18 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-13
+
+- fix(gui-runtime): `_gui_runtime.state_path(package)` now honors a
+  `SCITEX_<PACKAGE>_GUI_STATE` env override before falling back to the
+  `scitex_config` resolution, matching scitex-writer's pre-existing
+  `SCITEX_WRITER_GUI_STATE` convention (dropped during the 0.4.0
+  generalization from writer PR #316). This repo bans mocks/
+  monkeypatch, so the env var is the only channel available to a
+  subprocess-driven end-to-end CLI test (`gui serve` run as a real
+  subprocess) — without it, such a test writes to the developer's
+  actual runtime state instead of a temp file. (#51)
+
 ## [0.4.0] - 2026-07-13
 
 - feat: add `scitex_app.embed`, a public host-embedding API. 3+ consumers
