@@ -64,9 +64,15 @@ Apps created with `scitex-app app init` get a `_cli.py` with a `gui` command:
 
 ```bash
 my-app gui                           # default port 8050
-my-app gui --port 5000 --no-browser
-my-app gui --force                   # kill existing process on port first
+my-app gui --port 8051 --no-browser
+my-app gui --force                   # stop THIS app's own previous instance, then serve
 ```
+
+The `gui` command uses `scitex_app.embed.serve_gui`: it binds exactly
+`--port` or fails loud (never drifts to the next free port), refuses a
+second instance of this app's own GUI unless `--force` is given, and
+`--force` never kills a process it does not own -- for a foreign port
+holder it prints the process name/pid and a `kill` command instead.
 
 ### Django settings configured
 
