@@ -16,9 +16,14 @@ keywords = ["scitex", "app-sdk", "files", "storage", "cloud", "local"]
 # (scripts entry-point `scitex-app = "scitex_app._cli:main"` imports
 # them at module top). Importing scitex_app._cli without them blew
 # up CI when the [dev,cli] extra-install hit a resolver fallback.
+# scitex-config's local_state.runtime_path() is what _gui_runtime.py
+# uses to resolve the fleet-standard runtime-state-db path
+# (<proj-root>/.scitex/<pkg-short>/runtime/...) for the shared GUI
+# launcher's state file -- needed unconditionally, not just under [dev].
 dependencies = [
     "click>=8.0.0",
     "rich>=13.0.0",
+    "scitex-config>=0.3.6",
 ]
 
 [project.optional-dependencies]
