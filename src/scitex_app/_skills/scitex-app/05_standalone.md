@@ -93,3 +93,14 @@ Settings configure only once — calling `run_standalone()` a second time is a n
 - `django` (always required)
 - `scitex_ui` (optional, provides the workspace shell sidebar/panel)
 - `pywebview` (optional, only for `desktop=True`)
+
+### Testing the `gui` command's real CLI path
+
+`serve_gui`'s state-file location can be redirected with an env var --
+the only channel available to a subprocess-driven end-to-end test
+(`python -m my_app gui serve` run as a real subprocess), which cannot
+inject a path via function arguments across a process boundary. Set
+`SCITEX_<PACKAGE>_GUI_STATE` (package name uppercased, non-alnum chars
+-> `_`, e.g. `SCITEX_MY_APP_GUI_STATE` for `"my-app"`) before spawning
+the subprocess to point state at a tmp path instead of the developer's
+real runtime state -- keeps end-to-end CLI tests mock-free.

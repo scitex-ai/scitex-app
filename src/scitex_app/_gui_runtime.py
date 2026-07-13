@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import time
 from pathlib import Path
@@ -36,10 +37,33 @@ PathLike = Union[str, Path]
 _STATE_FIELDS = ("pid", "port", "host", "project", "started_at")
 
 
-def state_path(package: str) -> Path:
-    """Resolve the GUI state-file path for `package` via the fleet
-    local-state convention (scitex_config.local_state.runtime_path).
+def state_path_env_var(package: str) -> str:
+    """Return the env-var name that overrides `package`'s state path.
+
+    ``SCITEX_<PACKAGE>_GUI_STATE`` (package name uppercased, non-alnum
+    chars -> ``_``) -- matches scitex-writer's pre-existing
+    ``SCITEX_WRITER_GUI_STATE`` convention.
     """
+    return "SCITEX_" + re.sub(r"[^A-Za-z0-9]", "_", package).upper() + "_GUI_STATE"
+
+
+def state_path(package: str) -> Path:
+    """Resolve the GUI state-file path for `package`.
+
+    ``SCITEX_<PACKAGE>_GUI_STATE`` overrides the resolved path -- the
+    only channel available to subprocess-driven end-to-end CLI tests
+    (``python -m mypkg gui serve`` in a subprocess), which cannot
+    inject a path via function arguments across a process boundary.
+    This repo bans mocks/monkeypatch (PA-306), so this env var is what
+    makes ``gui serve``'s real CLI path testable without writing to the
+    developer's actual runtime state. Falls back to the fleet
+    local-state convention (scitex_config.local_state.runtime_path)
+    when unset.
+    """
+    override = os.environ.get(state_path_env_var(package))
+    if override:
+        return Path(override)
+
     from scitex_config._ecosystem import local_state
 
     return Path(local_state.runtime_path(package, "gui.json"))
