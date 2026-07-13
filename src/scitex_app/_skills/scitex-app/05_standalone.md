@@ -7,7 +7,9 @@ tags: [scitex-app-standalone]
 
 # Standalone Mode
 
-`scitex_app._standalone.run_standalone()` launches any SciTeX app locally with the full workspace shell — same UX as scitex-hub, no server required.
+`scitex_app.embed.run_standalone()` launches any SciTeX app locally with the full workspace shell — same UX as scitex-hub, no server required.
+
+`embed` is the public host-embedding surface (`scitex_app.embed`) — import from there, not from the private `scitex_app._standalone` / `scitex_app._django` implementation modules.
 
 ## run_standalone()
 
@@ -44,13 +46,13 @@ def run_standalone(
 ### Basic usage
 
 ```python
-from scitex_app._standalone import run_standalone
+from scitex_app.embed import run_standalone
 
 # Minimal — app at my_app/urls.py, my_app/views.py, etc.
 run_standalone(app_module="my_app")
 
 # Custom port, no browser
-run_standalone(app_module="my_app", port=5050, open_browser=False)
+run_standalone(app_module="my_app", port=8051, open_browser=False)
 
 # Native desktop window (requires: pip install pywebview)
 run_standalone(app_module="my_app", desktop=True)

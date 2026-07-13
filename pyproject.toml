@@ -104,6 +104,24 @@ concurrency = ["multiprocessing", "thread"]
 [tool.scitex-linter]
 library_dirs = ["src", "tests", "examples"]
 
+[tool.scitex_dev]
+# §6 MCP-tool <-> Python-API parity exemption (scitex-dev
+# _mcp_parity.py). scitex-app's public surface is a mix: agent-actionable
+# file/app-ops functions already have full MCP mirrors (app_read_file,
+# app_scaffold, app_validate, ...), but scitex_app.embed exposes Django
+# HOST-INTEGRATION primitives (run_standalone, scitex_api_dispatch,
+# scitex_editor_page, scitex_urlpatterns) that are structurally not
+# MCP-tool-shaped: run_standalone blocks forever running a dev webserver
+# (would hang an MCP call), and the other three are wiring-time factory
+# functions returning non-JSON-serializable callables, used at
+# urls.py/views.py import time — not agent-invocable actions. This is the
+# same false-positive shape §6 already exempts for classes (see
+# _mcp_parity.py docstring); functions used purely as framework
+# integration points hit the same false positive. Package-level exemption
+# because these primitives are threaded through scitex_app.embed by
+# design, not a one-off oversight.
+mcp_parity_exempt = true
+
 [tool.scitex_dev.audit]
 # PS-168 — Per-package secret + env-var prefix in GitHub Actions workflows.
 # `GH_PERSONAL_ACCESS_TOKEN` is the ecosystem-wide cross-cutting PAT used
