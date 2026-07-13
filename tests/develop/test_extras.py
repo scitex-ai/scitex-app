@@ -53,6 +53,10 @@ def test_only_all_dev_docs_extras_declared(pyproject_data):
 
 _THIS_FILE = Path(__file__).resolve()
 _SCANNED_SUFFIXES = {".py", ".md", ".rst", ".toml", ".yml", ".yaml"}
+# CHANGELOG.md narrates past incidents/fixes in prose and will keep
+# needing to describe this exact bracket-extra pattern as an example --
+# excluded so a historical mention is never mistaken for a live hint.
+_EXCLUDED_PATHS = {"CHANGELOG.md"}
 
 
 def _tracked_files() -> list[Path]:
@@ -78,6 +82,8 @@ def _referenced_extras_in_repo() -> set[str]:
     found: set[str] = set()
     for path in _tracked_files():
         if path.resolve() == _THIS_FILE or path.suffix not in _SCANNED_SUFFIXES:
+            continue
+        if path.name in _EXCLUDED_PATHS:
             continue
         try:
             text = path.read_text(errors="ignore")

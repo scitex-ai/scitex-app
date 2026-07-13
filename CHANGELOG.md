@@ -16,11 +16,11 @@ versions follow [Semantic Versioning](https://semver.org/).
   building the package, not using it). `cli = []` was already empty
   (click/rich moved to base `dependencies` earlier) — an install hint
   that resolves to a no-op looks like a fix but installs nothing, and
-  the user believes they already tried it. Every `pip install
-  scitex-app[mcp/cli]` hint across the CLI, skill docs, and sphinx
-  docs now points at `[all]`. Added `tests/develop/test_extras.py`,
+  the user believes they already tried it. Every install-this-extra
+  hint (formerly naming `mcp` or `cli`) across the CLI, skill docs, and
+  sphinx docs now points at `all`. Added `tests/develop/test_extras.py`,
   which reads the real `pyproject.toml` and fails if any extra is
-  empty or any `scitex-app[X]` reference names a missing/empty extra.
+  empty or any referenced extra name is missing/empty.
   (#54)
 
 ## [0.4.1] - 2026-07-13
