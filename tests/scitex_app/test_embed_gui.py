@@ -189,7 +189,20 @@ def test_gui_status_reports_not_running_by_default(state_file):
 def test_gui_port_holder_returns_none_for_free_port(free_port):
     # Arrange
     # Act
+    #
+    # A just-released ephemeral port can be immediately re-bound by an
+    # unrelated concurrently-running test worker before this line runs
+    # (pytest-xdist parallelism) -- a TOCTOU race in the fixture's own
+    # setup, not a defect in gui_port_holder(). Poll briefly rather than
+    # asserting on a single racy sample.
+    import time as _time
+
     holder = embed.gui_port_holder(free_port)
+    attempts = 1
+    while holder is not None and attempts < 20:
+        _time.sleep(0.05)
+        holder = embed.gui_port_holder(free_port)
+        attempts += 1
     # Assert
     assert holder is None
 

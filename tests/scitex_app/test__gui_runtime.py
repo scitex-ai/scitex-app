@@ -266,6 +266,19 @@ def test_port_holder_returns_none_when_port_is_free():
     free_port = probe.getsockname()[1]
     probe.close()
     # Act
+    #
+    # A just-released ephemeral port can be immediately re-bound by an
+    # unrelated concurrently-running test worker before this line runs
+    # (pytest-xdist parallelism on a low-core CI runner) -- a real TOCTOU
+    # race in the test's own setup, not a defect in port_holder(). Poll
+    # briefly rather than asserting on a single racy sample.
+    import time as _time
+
     holder = _gui_runtime.port_holder(free_port)
+    attempts = 1
+    while holder is not None and attempts < 20:
+        _time.sleep(0.05)
+        holder = _gui_runtime.port_holder(free_port)
+        attempts += 1
     # Assert
     assert holder is None
