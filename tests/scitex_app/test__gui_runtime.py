@@ -21,8 +21,65 @@ def state_file(tmp_path):
     return tmp_path / "gui.json"
 
 
+@pytest.fixture
+def gui_state_env():
+    """Set/restore a package's GUI-state override env var around a test.
+
+    Real env-var manipulation (not a mock): yields a setter; whatever
+    was there before is restored on teardown so tests don't leak state.
+    """
+    touched: list[str] = []
+    saved: dict[str, str | None] = {}
+
+    def _set(package, value):
+        env_name = _gui_runtime.state_path_env_var(package)
+        if env_name not in saved:
+            saved[env_name] = os.environ.get(env_name)
+            touched.append(env_name)
+        if value is None:
+            os.environ.pop(env_name, None)
+        else:
+            os.environ[env_name] = str(value)
+
+    try:
+        yield _set
+    finally:
+        for env_name in touched:
+            if saved[env_name] is None:
+                os.environ.pop(env_name, None)
+            else:
+                os.environ[env_name] = saved[env_name]
+
+
 def test_state_path_includes_package_name():
     # Arrange
+    # Act
+    path = _gui_runtime.state_path("scitex-app-test-pkg")
+    # Assert
+    assert "scitex-app-test-pkg" in str(path)
+
+
+def test_state_path_env_var_matches_writer_convention():
+    # Arrange
+    # Act
+    env_name = _gui_runtime.state_path_env_var("writer")
+    # Assert
+    assert env_name == "SCITEX_WRITER_GUI_STATE"
+
+
+def test_state_path_honours_env_override(tmp_path, gui_state_env):
+    # Arrange
+    override = tmp_path / "custom.json"
+    gui_state_env("scitex-app-test-pkg", override)
+    # Act
+    path = _gui_runtime.state_path("scitex-app-test-pkg")
+    # Assert
+    assert path == override
+
+
+def test_state_path_falls_back_when_env_unset(gui_state_env):
+    # Arrange
+    gui_state_env("scitex-app-test-pkg", None)
     # Act
     path = _gui_runtime.state_path("scitex-app-test-pkg")
     # Assert
