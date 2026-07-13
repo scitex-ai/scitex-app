@@ -7,6 +7,22 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-13
+
+- chore: consolidate optional-dependencies into a single `[all]` extra
+  (operator directive, prompted by scitex-writer PR #322). Extras are
+  now all-or-nothing — `chat`/`chat-all`/`cli`/`cloud`/`django`/`mcp`
+  collapse into one `[all]`; `dev`/`docs` stay separate (those are for
+  building the package, not using it). `cli = []` was already empty
+  (click/rich moved to base `dependencies` earlier) — an install hint
+  that resolves to a no-op looks like a fix but installs nothing, and
+  the user believes they already tried it. Every `pip install
+  scitex-app[mcp/cli]` hint across the CLI, skill docs, and sphinx
+  docs now points at `[all]`. Added `tests/develop/test_extras.py`,
+  which reads the real `pyproject.toml` and fails if any extra is
+  empty or any `scitex-app[X]` reference names a missing/empty extra.
+  (#54)
+
 ## [0.4.1] - 2026-07-13
 
 - fix(gui-runtime): `_gui_runtime.state_path(package)` now honors a
