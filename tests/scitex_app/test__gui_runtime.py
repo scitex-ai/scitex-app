@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 import socket
 import subprocess
@@ -383,23 +384,40 @@ def test_a_bare_interpreter_name_proves_nothing():
 
 
 def test_identified_holder_without_a_pid_is_rejected():
-    # Arrange / Act / Assert
-    with pytest.raises(ValueError):
-        _gui_runtime.PortHolder(port=31298, status=_gui_runtime.HOLDER_IDENTIFIED)
+    # Arrange
+    build = functools.partial(
+        _gui_runtime.PortHolder, port=31298, status=_gui_runtime.HOLDER_IDENTIFIED
+    )
+    # Act
+    raised = pytest.raises(ValueError)
+    # Assert
+    with raised:
+        build()
 
 
 def test_unreadable_holder_carrying_an_ownership_verdict_is_rejected():
-    # Arrange / Act / Assert
-    with pytest.raises(ValueError):
-        _gui_runtime.PortHolder(
-            port=31298, status=_gui_runtime.HOLDER_UNREADABLE, ours=False
-        )
+    # Arrange
+    build = functools.partial(
+        _gui_runtime.PortHolder,
+        port=31298,
+        status=_gui_runtime.HOLDER_UNREADABLE,
+        ours=False,
+    )
+    # Act
+    raised = pytest.raises(ValueError)
+    # Assert
+    with raised:
+        build()
 
 
 def test_an_undeclared_status_is_rejected():
-    # Arrange / Act / Assert
-    with pytest.raises(ValueError):
-        _gui_runtime.PortHolder(port=31298, status="probably-fine")
+    # Arrange
+    build = functools.partial(_gui_runtime.PortHolder, port=31298, status="probably-fine")
+    # Act
+    raised = pytest.raises(ValueError)
+    # Assert
+    with raised:
+        build()
 
 
 # =============================================================================
