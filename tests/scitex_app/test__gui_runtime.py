@@ -6,10 +6,12 @@
 
 from __future__ import annotations
 
+import functools
 import os
 import socket
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -241,25 +243,73 @@ def listening_socket():
     sock.close()
 
 
-def test_port_holder_finds_our_own_listening_pid(listening_socket):
+def _proc_fd_is_readable() -> bool:
+    """True when this process may read its OWN /proc/<pid>/fd.
+
+    Not a mock and not a guess -- a real capability probe. Our agent
+    containers deny this directory even for a same-uid process, which
+    is precisely why `port_holder` must distinguish "we could not
+    look" from "someone else's process".
+    """
+    try:
+        list(Path(f"/proc/{os.getpid()}/fd").iterdir())
+    except OSError:
+        return False
+    return True
+
+
+needs_proc_fd = pytest.mark.skipif(
+    not _proc_fd_is_readable(),
+    reason="/proc/<pid>/fd unreadable here (agent container); holder identification "
+    "is provable only where the kernel lets us map socket inodes to pids",
+)
+needs_denied_proc_fd = pytest.mark.skipif(
+    _proc_fd_is_readable(),
+    reason="/proc/<pid>/fd is readable here, so the denied-lookup path cannot occur",
+)
+
+
+@needs_proc_fd
+def test_port_holder_identifies_our_own_listening_pid(listening_socket):
     # Arrange
     port = listening_socket.getsockname()[1]
     # Act
     holder = _gui_runtime.port_holder(port)
     # Assert
-    assert holder["pid"] == os.getpid()
+    assert holder.pid == os.getpid()
 
 
-def test_port_holder_reports_the_process_name(listening_socket):
+@needs_proc_fd
+def test_port_holder_reports_the_holder_argv(listening_socket):
     # Arrange
     port = listening_socket.getsockname()[1]
     # Act
     holder = _gui_runtime.port_holder(port)
     # Assert
-    assert holder["name"]
+    assert holder.argv
 
 
-def test_port_holder_returns_none_when_port_is_free():
+@needs_denied_proc_fd
+def test_port_holder_reports_unreadable_rather_than_blaming_another_user(listening_socket):
+    # Arrange
+    port = listening_socket.getsockname()[1]
+    # Act
+    holder = _gui_runtime.port_holder(port)
+    # Assert
+    assert holder.status == _gui_runtime.HOLDER_UNREADABLE
+
+
+@needs_denied_proc_fd
+def test_unreadable_holder_never_claims_to_know_whose_it_is(listening_socket):
+    # Arrange
+    port = listening_socket.getsockname()[1]
+    # Act
+    holder = _gui_runtime.port_holder(port, "scitex_app")
+    # Assert
+    assert holder.ours is None
+
+
+def test_port_holder_reports_free_when_nothing_listens():
     # Arrange
     probe = socket.socket()
     probe.bind(("127.0.0.1", 0))
@@ -276,9 +326,120 @@ def test_port_holder_returns_none_when_port_is_free():
 
     holder = _gui_runtime.port_holder(free_port)
     attempts = 1
-    while holder is not None and attempts < 20:
+    while holder.in_use and attempts < 20:
         _time.sleep(0.05)
         holder = _gui_runtime.port_holder(free_port)
         attempts += 1
     # Assert
-    assert holder is None
+    assert holder.status == _gui_runtime.HOLDER_FREE
+
+
+# =============================================================================
+# Ownership is proven from ARGV, never from the process NAME -- a `comm` of
+# "python" is shared by every Python server on the box, so killing on that
+# basis would kill strangers.
+# =============================================================================
+
+
+def test_argv_proves_ownership_for_a_module_run():
+    # Arrange
+    argv = ("/usr/bin/python3", "-m", "scitex_writer", "gui")
+    # Act
+    ours = _gui_runtime.argv_is_ours(argv, "scitex-writer")
+    # Assert
+    assert ours is True
+
+
+def test_argv_proves_ownership_from_an_installed_script_path():
+    # Arrange
+    argv = ("/opt/venv/lib/python3.12/site-packages/scitex_writer/__main__.py",)
+    # Act
+    ours = _gui_runtime.argv_is_ours(argv, "scitex_writer")
+    # Assert
+    assert ours is True
+
+
+def test_argv_does_not_claim_a_merely_similar_name():
+    # Arrange
+    argv = ("/usr/bin/python3", "-m", "myscitex_writerx")
+    # Act
+    ours = _gui_runtime.argv_is_ours(argv, "scitex-writer")
+    # Assert
+    assert ours is False
+
+
+def test_a_bare_interpreter_name_proves_nothing():
+    # Arrange
+    argv = ("python",)
+    # Act
+    ours = _gui_runtime.argv_is_ours(argv, "scitex-writer")
+    # Assert
+    assert ours is False
+
+
+# =============================================================================
+# PortHolder validates its own shape, so a malformed answer fails where it is
+# built rather than three layers downstream.
+# =============================================================================
+
+
+def test_identified_holder_without_a_pid_is_rejected():
+    # Arrange
+    build = functools.partial(
+        _gui_runtime.PortHolder, port=31298, status=_gui_runtime.HOLDER_IDENTIFIED
+    )
+    # Act
+    raised = pytest.raises(ValueError)
+    # Assert
+    with raised:
+        build()
+
+
+def test_unreadable_holder_carrying_an_ownership_verdict_is_rejected():
+    # Arrange
+    build = functools.partial(
+        _gui_runtime.PortHolder,
+        port=31298,
+        status=_gui_runtime.HOLDER_UNREADABLE,
+        ours=False,
+    )
+    # Act
+    raised = pytest.raises(ValueError)
+    # Assert
+    with raised:
+        build()
+
+
+def test_an_undeclared_status_is_rejected():
+    # Arrange
+    build = functools.partial(_gui_runtime.PortHolder, port=31298, status="probably-fine")
+    # Act
+    raised = pytest.raises(ValueError)
+    # Assert
+    with raised:
+        build()
+
+
+# =============================================================================
+# terminate -- the primitive --force uses to reclaim an orphan of our own.
+# =============================================================================
+
+
+def test_terminate_stops_a_live_process():
+    # Arrange
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    # Act
+    result = _gui_runtime.terminate(child.pid, timeout=5.0)
+    child.wait(timeout=5)
+    # Assert
+    assert result["terminated"] is True
+
+
+def test_terminate_is_idempotent_on_an_already_dead_process():
+    # Arrange
+    child = subprocess.Popen([sys.executable, "-c", ""])
+    child.wait(timeout=5)
+    # Act
+    result = _gui_runtime.terminate(child.pid, timeout=5.0)
+    # Assert
+    assert result["signalled"] is False

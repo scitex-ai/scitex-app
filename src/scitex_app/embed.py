@@ -68,9 +68,13 @@ def gui_stop(
     )
 
 
-def gui_port_holder(port: int) -> Optional[dict]:
-    """Identify the process LISTENing on `port` (via /proc, no `ss`/`lsof`)."""
-    return _gr.port_holder(port)
+def gui_port_holder(port: int, package: Optional[str] = None) -> "_gr.PortHolder":
+    """Identify the process LISTENing on `port` (via /proc, no `ss`/`lsof`).
+
+    Pass `package` to have the result report whether the holder is an
+    instance of OUR OWN app (proven from its argv).
+    """
+    return _gr.port_holder(port, package)
 
 
 def _port_is_free(host: str, port: int) -> bool:
@@ -83,27 +87,37 @@ def _port_is_free(host: str, port: int) -> bool:
     return True
 
 
-def _port_taken_message(package: str, host: str, port: int) -> str:
-    """Explain who holds `port` and give paste-ready commands to fix it.
+def _port_taken_message(package: str, host: str, holder: "_gr.PortHolder") -> str:
+    """Explain who holds the port and give paste-ready commands to fix it.
 
-    This path means the port is held by something not tracked in our
-    runtime state -- an orphaned server, or an unrelated process.
-    `--force` only stops the server recorded in our own state, so it
-    is deliberately NOT offered here for a foreign holder: a hint that
-    does not work is worse than no hint.
+    Every remedy offered here must actually work for the case that
+    printed it. `--force` is offered only when the holder is provably
+    our own app -- the one case where `serve_gui` will act on it.
+    Naming a flag that then refuses is the same bug as an install hint
+    that installs nothing.
     """
-    holder = _gr.port_holder(port)
+    port = holder.port
     lines = [f"Error: port {port} is already in use on {host}."]
-    if holder and holder.get("pid"):
-        lines.append(f"Held by: {holder['name']} (pid {holder['pid']})")
-    elif holder:
-        lines.append("Held by: a process owned by another user.")
+    if holder.status == _gr.HOLDER_UNREADABLE:
+        lines += [
+            "Held by: unknown -- something is listening, but this process is not",
+            "  allowed to read /proc/<pid>/fd, so the holder cannot be identified.",
+            "  (Routine inside our agent containers, even for a process we own.)",
+        ]
+    elif holder.ours:
+        lines.append(
+            f"Held by: an orphaned {package} GUI (pid {holder.pid}) "
+            "that never cleared its state file."
+        )
     else:
-        lines.append("Held by: unknown (the listening process could not be read).")
+        lines.append(f"Held by: {holder.name or '?'} (pid {holder.pid}) -- not a {package} GUI.")
+        lines.append(f"  argv: {' '.join(holder.argv) if holder.argv else 'unreadable'}")
     lines += ["", "Fix it with one of:"]
+    if holder.ours:
+        lines.append(f"  {package} gui --force            # reclaim the orphan and serve here")
     lines.append(f"  {package} gui --port {port + 1}   # serve on a free port")
-    if holder and holder.get("pid"):
-        lines.append(f"  kill {holder['pid']}{' ' * 26}# stop it, then serve again")
+    if holder.pid is not None and not holder.ours:
+        lines.append(f"  kill {holder.pid}{' ' * 26}# stop it yourself, then serve again")
     return "\n".join(lines)
 
 
@@ -122,8 +136,13 @@ def serve_gui(
     the next free port. Refuses a second instance when a live pid is
     recorded (printing the running URL + pid), self-heals a stale
     recorded pid, and identifies a foreign port holder via /proc.
-    `--force` (``force=True``) stops only the instance recorded in our
-    own runtime state; it never kills a process it does not own.
+
+    `--force` (``force=True``) stops the instance recorded in our own
+    runtime state AND reclaims an ORPHANED instance of our own -- one
+    holding the port after dying without clearing its state file,
+    which is invisible to ``status()`` and is the very case the flag
+    exists for. It never touches a process it cannot prove is ours,
+    and ownership is proven from the holder's argv, not its name.
 
     Parameters
     ----------
@@ -134,7 +153,8 @@ def serve_gui(
         Project directory recorded in the runtime state (informational).
     port, host : the address to bind.
     force : bool
-        Stop a previous instance of OUR OWN recorded server, then serve.
+        Stop a previous instance of OUR OWN server -- recorded or
+        orphaned -- then serve.
     run_server : Callable[[], None]
         Zero-arg callable that BLOCKS running the actual dev server
         (e.g. ``functools.partial(run_standalone, app_module=..., port=port)``).
@@ -165,8 +185,26 @@ def serve_gui(
         click.echo(f"Stopping the GUI at {current['url']} (pid {current['pid']}).")
         _gr.stop(resolved_state_path)
     if not _port_is_free(host, port):
-        click.echo(_port_taken_message(package, host, port), err=True)
-        return 1
+        holder = _gr.port_holder(port, package)
+        # An orphan of ours -- it died without clearing its state file, so
+        # status() above could not see it. This is exactly what --force is
+        # for, and refusing here would make the flag a lie.
+        if force and holder.ours:
+            click.echo(f"Reclaiming port {port} from an orphaned {package} GUI (pid {holder.pid}).")
+            result = _gr.terminate(holder.pid)
+            if not result["terminated"]:
+                click.echo(
+                    f"Error: could not stop pid {holder.pid}"
+                    f"{': ' + result['error'] if result.get('error') else ' (still alive)'}.\n"
+                    f"\nFix it with one of:\n"
+                    f"  kill -9 {holder.pid}\n"
+                    f"  {package} gui --port {port + 1}",
+                    err=True,
+                )
+                return 1
+        if not _port_is_free(host, port):
+            click.echo(_port_taken_message(package, host, holder), err=True)
+            return 1
     _gr.write_state(os.getpid(), port, host, str(project_dir), resolved_state_path)
     try:
         run_server()

@@ -10,7 +10,7 @@ import socket
 
 import pytest
 
-from scitex_app import embed
+from scitex_app import _gui_runtime, embed
 
 
 @pytest.fixture
@@ -164,18 +164,61 @@ def test_serve_gui_never_offers_force_hint_for_foreign_holder(state_file, capsys
     assert "--force" not in capsys.readouterr().err
 
 
-def test_port_taken_message_includes_kill_command_for_known_holder():
+def test_port_taken_message_includes_kill_command_for_a_foreign_holder():
     # Arrange
-    sock = socket.socket()
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("127.0.0.1", 0))
-    sock.listen(1)
-    port = sock.getsockname()[1]
+    holder = _gui_runtime.PortHolder(
+        port=31298,
+        status=_gui_runtime.HOLDER_IDENTIFIED,
+        pid=4242,
+        name="nginx",
+        argv=("nginx", "-g", "daemon off;"),
+        ours=False,
+    )
     # Act
-    message = embed._port_taken_message("testpkg", "127.0.0.1", port)
-    sock.close()
+    message = embed._port_taken_message("testpkg", "127.0.0.1", holder)
     # Assert
-    assert "kill" in message
+    assert "kill 4242" in message
+
+
+def test_port_taken_message_never_offers_force_for_a_foreign_holder():
+    # Arrange
+    holder = _gui_runtime.PortHolder(
+        port=31298,
+        status=_gui_runtime.HOLDER_IDENTIFIED,
+        pid=4242,
+        name="nginx",
+        argv=("nginx",),
+        ours=False,
+    )
+    # Act
+    message = embed._port_taken_message("testpkg", "127.0.0.1", holder)
+    # Assert
+    assert "--force" not in message
+
+
+def test_port_taken_message_offers_force_for_our_own_orphan():
+    # Arrange
+    holder = _gui_runtime.PortHolder(
+        port=31298,
+        status=_gui_runtime.HOLDER_IDENTIFIED,
+        pid=4242,
+        name="python3",
+        argv=("python3", "-m", "testpkg", "gui"),
+        ours=True,
+    )
+    # Act
+    message = embed._port_taken_message("testpkg", "127.0.0.1", holder)
+    # Assert
+    assert "--force" in message
+
+
+def test_port_taken_message_admits_it_could_not_look_rather_than_blaming_a_user():
+    # Arrange
+    holder = _gui_runtime.PortHolder(port=31298, status=_gui_runtime.HOLDER_UNREADABLE)
+    # Act
+    message = embed._port_taken_message("testpkg", "127.0.0.1", holder)
+    # Assert
+    assert "another user" not in message
 
 
 def test_gui_status_reports_not_running_by_default(state_file):
@@ -186,7 +229,7 @@ def test_gui_status_reports_not_running_by_default(state_file):
     assert result == {"running": False}
 
 
-def test_gui_port_holder_returns_none_for_free_port(free_port):
+def test_gui_port_holder_reports_free_for_an_unused_port(free_port):
     # Arrange
     # Act
     #
@@ -199,12 +242,12 @@ def test_gui_port_holder_returns_none_for_free_port(free_port):
 
     holder = embed.gui_port_holder(free_port)
     attempts = 1
-    while holder is not None and attempts < 20:
+    while holder.in_use and attempts < 20:
         _time.sleep(0.05)
         holder = embed.gui_port_holder(free_port)
         attempts += 1
     # Assert
-    assert holder is None
+    assert holder.status == _gui_runtime.HOLDER_FREE
 
 
 def test_gui_stop_is_idempotent_when_not_running(state_file):
