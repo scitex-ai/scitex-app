@@ -29,12 +29,18 @@ import os
 import re
 import signal
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
 PathLike = Union[str, Path]
 
 _STATE_FIELDS = ("pid", "port", "host", "project", "started_at")
+
+#: Declared ``PortHolder.status`` values. Nothing else is ever set.
+HOLDER_FREE = "free"
+HOLDER_IDENTIFIED = "identified"
+HOLDER_UNREADABLE = "unreadable"
 
 
 def state_path_env_var(package: str) -> str:
@@ -169,41 +175,138 @@ def _listening_socket_inodes(port: int) -> set[str]:
     return inodes
 
 
-def port_holder(port: int) -> Optional[dict]:
-    """Identify the process LISTENing on ``port``: ``{pid, name}``, or None.
+def _argv_of(pid: int) -> tuple[str, ...]:
+    """Full argv of ``pid`` from /proc/<pid>/cmdline; empty when unreadable."""
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return ()
+    return tuple(part for part in raw.decode("utf-8", "replace").split("\0") if part)
+
+
+def _normalize(text: str) -> str:
+    """Lowercase ``text`` with every non-alphanumeric run collapsed to ``_``.
+
+    Bracketed by ``_`` so a token test is a whole-token test: it makes
+    ``scitex_writer`` match ``scitex-writer`` and
+    ``/opt/venv/scitex_writer/__main__.py``, while ``myscitex_writerx``
+    correctly does NOT match.
+    """
+    return "_" + re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_").lower() + "_"
+
+
+def argv_is_ours(argv: tuple[str, ...], package: str) -> bool:
+    """True when ``argv`` proves the process is an instance of ``package``.
+
+    Ownership is proven from the ARGV, never from the process NAME: a
+    ``comm`` of "python" names nothing, and every Python server on the
+    box shares it -- killing on that basis would kill strangers. The
+    argv, by contrast, carries the module or console-script that was
+    actually run.
+    """
+    token = _normalize(package)
+    return any(token in _normalize(arg) for arg in argv)
+
+
+@dataclass(frozen=True)
+class PortHolder:
+    """Who is LISTENing on a port -- one shape, every signal three-valued.
+
+    ``status`` is always one of the declared ``HOLDER_*`` constants, so
+    a caller never has to guess which keys exist on this call.
+    ``ours`` is deliberately ``True`` / ``False`` / ``None`` (unknown):
+    collapsing "we could not look" into "someone else's" is how a
+    diagnostic module ships a confident wrong answer.
+    """
+
+    port: int
+    status: str
+    pid: Optional[int] = None
+    name: Optional[str] = None
+    argv: tuple[str, ...] = ()
+    ours: Optional[bool] = None
+
+    def __post_init__(self) -> None:
+        if self.status not in (HOLDER_FREE, HOLDER_IDENTIFIED, HOLDER_UNREADABLE):
+            raise ValueError(f"unknown PortHolder.status: {self.status!r}")
+        if self.status == HOLDER_IDENTIFIED and self.pid is None:
+            raise ValueError("PortHolder.status='identified' requires a pid")
+        if self.status != HOLDER_IDENTIFIED and self.pid is not None:
+            raise ValueError(f"PortHolder.status={self.status!r} must not carry a pid")
+        if self.status != HOLDER_IDENTIFIED and self.ours is not None:
+            raise ValueError(f"PortHolder.status={self.status!r} cannot know 'ours'")
+
+    @property
+    def in_use(self) -> bool:
+        """True when something holds the port, identified or not."""
+        return self.status != HOLDER_FREE
+
+
+def port_holder(port: int, package: Optional[str] = None) -> PortHolder:
+    """Identify the process LISTENing on ``port``.
 
     Reads /proc directly rather than shelling out to ``ss``/``lsof``,
     which are absent from many containers -- a hint that silently
     disappears in the exact minimal environment where it is needed
     most is not a hint.
 
-    Only processes the caller can see are reported: an inode we cannot
-    map to a pid (another user's process) yields ``{pid: None}``, so
-    the caller says "another process" rather than inventing a wrong one.
+    When ``package`` is given, ``ours`` reports whether the holder's
+    argv proves it is an instance of that package (see
+    :func:`argv_is_ours`) -- the only evidence on which a caller may
+    terminate it.
+
+    Returns ``status=HOLDER_UNREADABLE`` when the port IS held but no
+    pid could be attributed. That is genuinely ambiguous -- another
+    user's process, or (routinely, inside our agent containers)
+    /proc/<pid>/fd denying us even for a process we own. Reporting it
+    as "another user's" would be a guess stated as a fact.
     """
     inodes = _listening_socket_inodes(port)
     if not inodes:
-        return None
+        return PortHolder(port=port, status=HOLDER_FREE)
     for proc_dir in Path("/proc").iterdir():
         if not proc_dir.name.isdigit():
             continue
         try:
             fds = list((proc_dir / "fd").iterdir())
         except OSError:
-            continue  # not ours / vanished -- keep scanning
+            continue  # denied / vanished -- keep scanning
         for fd in fds:
             try:
                 target = os.readlink(fd)
             except OSError:
                 continue
-            if target[8:-1] not in inodes or not target.startswith("socket:["):
+            if not target.startswith("socket:[") or target[8:-1] not in inodes:
                 continue
+            pid = int(proc_dir.name)
             try:
                 name = (proc_dir / "comm").read_text().strip()
             except OSError:
-                name = "?"
-            return {"pid": int(proc_dir.name), "name": name}
-    return {"pid": None, "name": None}
+                name = None
+            argv = _argv_of(pid)
+            return PortHolder(
+                port=port,
+                status=HOLDER_IDENTIFIED,
+                pid=pid,
+                name=name,
+                argv=argv,
+                ours=argv_is_ours(argv, package) if package and argv else None,
+            )
+    return PortHolder(port=port, status=HOLDER_UNREADABLE)
+
+
+def terminate(pid: int, timeout: float = 5.0) -> dict:
+    """SIGTERM ``pid`` and wait for it to die. Reports what actually happened."""
+    if not pid_alive(pid):
+        return {"signalled": False, "terminated": True, "pid": pid}
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError as exc:
+        return {"signalled": False, "terminated": False, "pid": pid, "error": str(exc)}
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and pid_alive(pid):
+        time.sleep(0.1)
+    return {"signalled": True, "terminated": not pid_alive(pid), "pid": pid}
 
 
 def stop(path: PathLike, timeout: float = 5.0) -> dict:
@@ -212,15 +315,11 @@ def stop(path: PathLike, timeout: float = 5.0) -> dict:
     if not current.get("running"):
         return {"stopped": False, "running": False}
     pid = current["pid"]
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError as exc:
-        return {"stopped": False, "running": True, "pid": pid, "error": str(exc)}
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline and pid_alive(pid):
-        time.sleep(0.1)
+    result = terminate(pid, timeout=timeout)
+    if not result["signalled"] and "error" in result:
+        return {"stopped": False, "running": True, "pid": pid, "error": result["error"]}
     clear_state(path)
-    return {"stopped": True, "pid": pid, "terminated": not pid_alive(pid)}
+    return {"stopped": True, "pid": pid, "terminated": result["terminated"]}
 
 
 # EOF

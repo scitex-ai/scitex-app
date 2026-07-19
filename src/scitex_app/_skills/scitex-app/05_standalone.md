@@ -69,10 +69,24 @@ my-app gui --force                   # stop THIS app's own previous instance, th
 ```
 
 The `gui` command uses `scitex_app.embed.serve_gui`: it binds exactly
-`--port` or fails loud (never drifts to the next free port), refuses a
-second instance of this app's own GUI unless `--force` is given, and
-`--force` never kills a process it does not own -- for a foreign port
-holder it prints the process name/pid and a `kill` command instead.
+`--port` or fails loud (never drifts to the next free port), and refuses
+a second instance of this app's own GUI unless `--force` is given.
+
+`--force` stops this app's own GUI whether it is *recorded* in the
+runtime state or *orphaned* — still holding the port after dying without
+clearing that state, which is exactly the case the flag exists for.
+It never touches a process it cannot prove is ours, and ownership is
+proven from the holder's **argv**, not its name: a `comm` of `python`
+is shared by every Python server on the box.
+
+For a foreign holder it prints the name, pid and argv with a `kill`
+command, and never offers `--force` — a remedy that would refuse.
+When the port is held but the holder cannot be identified (our agent
+containers deny `/proc/<pid>/fd` even for our own processes), it says
+so plainly rather than blaming another user. The three outcomes are
+declared on `PortHolder.status`: `free`, `identified`, `unreadable`;
+`ours` is three-valued — `True`, `False`, or `None` for "we could not
+look".
 
 ### Django settings configured
 

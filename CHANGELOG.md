@@ -7,6 +7,42 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-19
+
+- fix(gui-launcher): `--force` now reclaims an **orphaned** instance of
+  our own app — one still holding the port after dying without clearing
+  its runtime state, and therefore invisible to `status()`. That is the
+  exact case the flag exists for, and it was the one case it refused,
+  then printed remedies that ignored `--force` entirely. A flag that
+  names the fix and does not perform it is the same bug as an install
+  hint that installs nothing. (scitex-writer finding, 2.31.0)
+
+- fix(gui-launcher): ownership is proven from the holder's **argv**, not
+  its process name. A `comm` of `python` names nothing and is shared by
+  every Python server on the box — terminating on that evidence would
+  terminate strangers.
+
+- fix(gui-launcher): `port_holder` no longer reports "a process owned by
+  another user" when the truth is "this `/proc` will not let us look".
+  Our agent containers deny `/proc/<pid>/fd` even for a same-uid
+  process, so the module built to prevent confident wrong answers was
+  giving one. It now returns a validated `PortHolder` dataclass whose
+  `status` is one of the declared `free` / `identified` / `unreadable`,
+  and whose `ours` is three-valued (`True` / `False` / `None` = we could
+  not look).
+
+  **Breaking (public API):** `embed.gui_port_holder()` and
+  `_gui_runtime.port_holder()` now return a `PortHolder` instead of
+  `dict | None`. Callers checking `if holder is None` should use
+  `if not holder.in_use`; `holder["pid"]` becomes `holder.pid`. Both
+  gain an optional `package` argument that populates `ours`.
+
+  The holder-identification path is proven against real listening
+  sockets on a host; inside our containers those tests **skip**, because
+  `/proc/<pid>/fd` is unreadable there. Stated rather than papered over
+  — claiming a green we did not get is the failure mode this change
+  exists to fix.
+
 ## [0.4.2] - 2026-07-13
 
 - chore: consolidate optional-dependencies into a single `[all]` extra
