@@ -292,6 +292,11 @@ def installed_app(tmp_path_factory: pytest.TempPathFactory) -> dict:
         uv = shutil.which("uv")
         if uv is None:
             raise
+        # EnvBuilder already wrote the venv shell (pyvenv.cfg + bin/)
+        # before ensurepip died; `uv venv` refuses an existing venv with
+        # exit 2 ("A virtual environment already exists ... use --clear"),
+        # so drop the half-built venv first.
+        shutil.rmtree(venv_dir, ignore_errors=True)
         subprocess.run(
             [uv, "venv", "--seed", "--python", sys.executable, str(venv_dir)],
             check=True,
