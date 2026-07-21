@@ -30,9 +30,12 @@ chat-all = [
     "litellm>=1.0.0",
 ]
 cli = [
-    # click + rich are now in base `dependencies`; this extra is a
-    # backwards-compat alias so `pip install scitex-app[cli]` keeps
-    # working.
+    # click + rich are also in base `dependencies`; this extra re-lists
+    # them so `pip install scitex-app[cli]` (the documented install
+    # remedy) stays a working, non-empty backwards-compat alias
+    # (PS-214/PS-215: an empty extra makes the remedy a no-op).
+    "click>=8.0.0",
+    "rich>=13.0.0",
 ]
 cloud = [
     "requests>=2.28.0",
@@ -71,6 +74,10 @@ all = [
     "scitex-app[cloud]",
     "scitex-app[django]",
     "scitex-app[mcp]",
+    # PS-221 closure: every public extra is a subset of `all`, so
+    # `pip install scitex-app[all]` pulls everything public.
+    "scitex-app[dev]",
+    "scitex-app[docs]",
 ]
 
 [project.scripts]
