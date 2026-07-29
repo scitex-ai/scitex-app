@@ -80,7 +80,7 @@ def test_marker_carries_the_actual_mount_prefix(tmp_path, request_path, expected
     assert f'content="{expected}"' in served
 
 
-def test_same_document_serves_differently_under_each_mount(tmp_path):
+def test_one_build_serves_differently_under_each_mount(tmp_path):
     # Arrange — the whole point: one build, two mounts, no rebuild.
     html = "<html><head></head><body></body></html>"
     # Act
@@ -88,8 +88,15 @@ def test_same_document_serves_differently_under_each_mount(tmp_path):
     embedded = _serve(tmp_path, html, EMBEDDED)
     # Assert
     assert standalone != embedded
-    assert 'content="/"' in standalone
-    assert f'content="{EMBEDDED}"' in embedded
+
+
+def test_standalone_mount_marks_the_root(tmp_path):
+    # Arrange
+    html = "<html><head></head><body></body></html>"
+    # Act
+    served = _serve(tmp_path, html, STANDALONE)
+    # Assert
+    assert 'content="/"' in served
 
 
 def test_body_is_otherwise_untouched(tmp_path):
@@ -132,6 +139,14 @@ def test_marker_still_emitted_when_document_has_no_head():
     injected = _inject_mount_meta(html, EMBEDDED)
     # Assert
     assert injected.startswith(f'<meta name="{MOUNT_META_NAME}"')
+
+
+def test_headless_document_keeps_its_own_content():
+    # Arrange — prepending the marker must not cost the document anything.
+    html = "<div>bare fragment</div>"
+    # Act
+    injected = _inject_mount_meta(html, EMBEDDED)
+    # Assert
     assert "<div>bare fragment</div>" in injected
 
 
