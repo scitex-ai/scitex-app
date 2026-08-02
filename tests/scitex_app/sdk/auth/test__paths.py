@@ -12,12 +12,14 @@ from pathlib import Path
 import pytest
 
 from scitex_app.sdk.auth import (
+    UnsafeAppName,
     UnsafeUsername,
     auth_dir_candidates,
     client_config_path,
     resolve_auth_dir,
     server_config_path,
     user_dir,
+    validate_app_name,
     validate_username,
 )
 from scitex_app.sdk.auth._paths import AUTH_DIR_ENV_TEMPLATE
@@ -338,6 +340,123 @@ def test_the_non_printable_refusal_names_the_offending_index():
         raised = exc
     # Assert
     assert "index 5" in str(raised)
+
+
+# ---------------------------------------------------------------------------
+# APP-NAME VALIDATION.
+#
+# `app` is DEVELOPER-supplied, so this is not an attacker-controlled surface and
+# the severity is low. It is validated on the same ground as AuthorizedKeysFile:
+# a package that validates one path component it builds from and not the others
+# teaches the reader a guarantee it does not have.
+#
+# The env-mapping half is the part worth having. Found by scitex-app.
+# ---------------------------------------------------------------------------
+
+
+def test_a_plain_app_name_is_accepted():
+    # Arrange
+    # Act
+    result = validate_app_name("cards")
+    # Assert
+    assert result == "cards"
+
+
+def test_a_hyphenated_app_name_is_accepted():
+    # Arrange
+    # Act
+    result = validate_app_name("my-app")
+    # Assert
+    assert result == "my-app"
+
+
+def test_a_traversal_app_name_is_refused():
+    # Arrange
+    raised = None
+    # Act
+    try:
+        validate_app_name("../../../../etc")
+    except UnsafeAppName as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_an_absolute_app_name_is_refused():
+    # Arrange
+    raised = None
+    # Act
+    try:
+        validate_app_name("/abs")
+    except UnsafeAppName as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_an_underscored_app_name_is_refused():
+    # Arrange
+    # 'my_app' and 'my-app' both map to SCITEX_MY_APP_AUTH_DIR, so admitting
+    # both would let two apps silently share one auth-directory override.
+    # Excluding underscores makes the mapping injective by construction.
+    raised = None
+    # Act
+    try:
+        validate_app_name("my_app")
+    except UnsafeAppName as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_a_capitalised_app_name_is_refused():
+    # Arrange
+    # Same collision by the other transform: upper() folds 'My-App' onto 'my-app'.
+    raised = None
+    # Act
+    try:
+        validate_app_name("My-App")
+    except UnsafeAppName as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_the_env_var_mapping_is_injective_over_valid_names():
+    # Arrange
+    # The property, asserted directly rather than by spot-checking two names:
+    # no two ADMISSIBLE app names may produce the same override variable.
+    names = ["cards", "my-app", "myapp", "a1", "a-b-c", "scitex-app"]
+    # Act
+    variables = {
+        AUTH_DIR_ENV_TEMPLATE.format(app_upper=validate_app_name(n).upper().replace("-", "_"))
+        for n in names
+    }
+    # Assert
+    assert len(variables) == len(names)
+
+
+def test_server_config_path_refuses_a_traversal_app_name(tmp_path):
+    # Arrange
+    raised = None
+    # Act
+    try:
+        server_config_path(tmp_path, "../../../../etc/passwd")
+    except UnsafeAppName as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_candidates_are_not_duplicated_when_project_is_home():
+    # Arrange
+    # auth_dir_candidates exists so "which paths did you look at?" is
+    # answerable. A list containing the same path twice answers it wrongly, and
+    # a reader comparing two identical lines will hunt for how they differ.
+    # Act
+    candidates = auth_dir_candidates("cards", Path.home())
+    # Assert
+    assert len(candidates) == len(set(candidates))
 
 
 # EOF

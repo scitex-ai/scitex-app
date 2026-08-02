@@ -29,15 +29,18 @@ trailing ``d`` means daemon in both systems, which is the point.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 __all__ = [
     "AUTH_DIR_ENV_TEMPLATE",
+    "UnsafeAppName",
     "auth_dir_candidates",
     "client_config_path",
     "resolve_auth_dir",
     "server_config_path",
     "user_dir",
+    "validate_app_name",
 ]
 
 #: ``-F configfile`` is ssh's escape hatch for "use this file, not the usual
@@ -45,6 +48,72 @@ __all__ = [
 #: the form that survives a process launched by systemd, which is how these
 #: boards actually run.
 AUTH_DIR_ENV_TEMPLATE = "SCITEX_{app_upper}_AUTH_DIR"
+
+
+#: An app name must match this to be usable. Deliberately narrow, and the
+#: narrowness is what makes the env-var mapping INJECTIVE — see
+#: :func:`validate_app_name`.
+_APP_NAME = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+
+class UnsafeAppName(ValueError):
+    """An app name that cannot be used as one path component and one env var."""
+
+
+def validate_app_name(app: str) -> str:
+    """Return ``app`` iff it is a single lowercase-hyphen component. Else raise.
+
+    TWO DEFECTS IN ONE CHECK, both found by scitex-app after the username fix.
+
+    ONE — ``app`` REACHED A PATH UNVALIDATED, in three places::
+
+        auth_dir_candidates('../../../../etc')
+            -> ['…/proj/.scitex/../../../../etc/auth', '~/.scitex/../../../../etc/auth']
+        auth_dir_candidates('/abs')          -> ['/abs/auth', '/abs/auth']
+        server_config_path('../../../../etc/passwd')
+            -> '…/auth/../../../../etc/passwdd_config'
+
+    Severity is LOW and the reason matters: ``app`` is DEVELOPER-supplied — an
+    app author writes ``get_authenticator("cards")`` — not client-supplied. This
+    is not an attacker-controlled traversal. It is fixed on the same ground as
+    the ``AuthorizedKeysFile`` guard: a package that validates one path component
+    it builds from and not the others teaches the reader a guarantee it does not
+    have.
+
+    TWO — THE ENV-VAR MAPPING WAS NOT INJECTIVE, and this is the one worth
+    acting on::
+
+        'my-app'  -> SCITEX_MY_APP_AUTH_DIR
+        'my_app'  -> SCITEX_MY_APP_AUTH_DIR
+        'My-App'  -> SCITEX_MY_APP_AUTH_DIR
+
+    ``upper()`` plus ``-``→``_`` collapses distinct names onto one variable, so
+    two apps on one host silently share an auth-directory override: setting it
+    for one redirects the other, with no diagnostic anywhere. That is a
+    no-surprises violation aimed straight at this package's thesis — identity is
+    LOCATION, and there two identities collapsed onto one location by a string
+    transform.
+
+    Restricting to ``[a-z0-9]+(-[a-z0-9]+)*`` closes both at once and makes the
+    mapping injective by construction rather than by care: within this charset
+    no two distinct names can produce the same variable, because the only
+    transform applied is ``-``→``_`` and ``_`` is not admissible in the input.
+    A charset is the right shape here precisely because ``app`` is a developer
+    constant rather than user input — this fails at the call site during
+    development, not in production against a stranger.
+    """
+    if not isinstance(app, str) or not app:
+        raise UnsafeAppName("app name must be a non-empty string")
+    if not _APP_NAME.match(app):
+        raise UnsafeAppName(
+            f"app name {app!r} must be lowercase letters, digits and single "
+            "hyphens (e.g. 'cards', 'my-app'). Underscores and capitals are "
+            "excluded so that the "
+            f"{AUTH_DIR_ENV_TEMPLATE.format(app_upper='<APP>')} override maps "
+            "one app to one variable — 'my-app', 'my_app' and 'My-App' would "
+            "otherwise all resolve to the same override"
+        )
+    return app
 
 
 def _env_override(app: str) -> Path | None:
@@ -61,6 +130,7 @@ def auth_dir_candidates(app: str, project_dir: Path | None = None) -> list[Path]
     that cannot answer it sends the reader guessing. ``ssh -v`` prints exactly
     this list for the same reason.
     """
+    validate_app_name(app)
     override = _env_override(app)
     if override is not None:
         # An explicit override is the ONLY candidate. Falling back past it would
@@ -71,7 +141,19 @@ def auth_dir_candidates(app: str, project_dir: Path | None = None) -> list[Path]
     if project_dir is not None:
         candidates.append(Path(project_dir) / ".scitex" / app / "auth")
     candidates.append(Path.home() / ".scitex" / app / "auth")
-    return candidates
+    # DE-DUPLICATE, preserving order. This function documents itself as "every
+    # directory that could hold app's auth material, best first", and it exists
+    # so that "which paths did you look at?" is answerable. A list containing the
+    # same path twice answers that question wrongly, and a reader comparing two
+    # identical lines will assume they differ and hunt for how. Reachable when
+    # project_dir happens to be the home directory.
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for candidate in candidates:
+        if candidate not in seen:
+            seen.add(candidate)
+            unique.append(candidate)
+    return unique
 
 
 def resolve_auth_dir(app: str, project_dir: Path | None = None) -> Path | None:
@@ -90,11 +172,13 @@ def resolve_auth_dir(app: str, project_dir: Path | None = None) -> Path | None:
 
 def server_config_path(auth_dir: Path, app: str) -> Path:
     """``<auth_dir>/<app>d_config`` — the sshd_config analogue."""
+    validate_app_name(app)
     return auth_dir / f"{app}d_config"
 
 
 def client_config_path(auth_dir: Path, app: str) -> Path:
     """``<auth_dir>/<app>_config`` — the ssh_config analogue."""
+    validate_app_name(app)
     return auth_dir / f"{app}_config"
 
 
