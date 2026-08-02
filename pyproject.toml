@@ -33,9 +33,16 @@ dependencies = [
 # `dependencies`) turns an install-this-extra hint into a no-op that
 # looks like a fix but installs nothing -- worse than no hint, since the
 # user believes they already tried it (scitex-writer PR #322 incident).
-# `dev`/`docs` stay separate: those are for BUILDING the package, not
-# using it.
+# `dev`/`docs` ARE referenced from `all`, and that reversed on 2026-08-03.
+# They were excluded on the ground that they build the package rather than
+# use it -- correct when `[all]` was going to be the RUNTIME install form.
+# It is not: runtime capabilities move to core, so the runtime install is
+# bare and `[all]` is the developer's give-me-everything, where the
+# toolchain is exactly what you want. scitex-dev withdrew that ADR-0005
+# decision after verifying it; PS-221 §3 requires the closure and names
+# this self-reference as the idiomatic shape.
 all = [
+    "scitex-app[dev,docs]",
     "anthropic>=0.25.0",
     "litellm>=1.0.0",
     "requests>=2.28.0",
