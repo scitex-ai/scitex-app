@@ -93,8 +93,18 @@ def hash_password(
 
 
 def _verify_scrypt(stored: str, password: str) -> bool:
-    _, _, params, salt_b64, hash_b64 = stored.split("$", 4)
+    # INSIDE the try, not before it. This unpack sat above the try until
+    # 2026-08-02, so a TRUNCATED hash — fewer than five '$'-separated fields —
+    # raised a bare ValueError that escaped as itself. `authenticate_password`
+    # catches only HashFormatError, so the CREDENTIAL_UNREADABLE outcome written
+    # precisely for a corrupt stored credential was bypassed, and the caller got
+    # an exception type it had no branch for.
+    #
+    # The lesson is narrower than "wrap more": a function that converts one error
+    # class into another must have EVERY parse step inside the conversion, or the
+    # conversion is a claim it does not honour.
     try:
+        _, _, params, salt_b64, hash_b64 = stored.split("$", 4)
         parsed = dict(pair.split("=", 1) for pair in params.split(","))
         n, r, p = int(parsed["n"]), int(parsed["r"]), int(parsed["p"])
     except Exception as exc:  # noqa: BLE001

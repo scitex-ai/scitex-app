@@ -98,16 +98,114 @@ def client_config_path(auth_dir: Path, app: str) -> Path:
     return auth_dir / f"{app}_config"
 
 
+class UnsafeUsername(ValueError):
+    """A username that is not a single literal directory name.
+
+    NOT a failed login. A login outcome says something about the credential; this
+    says the request was malformed before any credential was consulted. Raising
+    is safe here precisely because it leaks nothing: a rejected separator tells
+    an attacker only that separators are rejected, never which users exist. The
+    user-enumeration caution that makes :func:`load_identity` return ``None`` for
+    an unknown user does not apply.
+    """
+
+
+def validate_username(username: str) -> str:
+    """Return ``username`` iff it is ONE literal path component. Else raise.
+
+    THE WHOLE SECURITY PROPERTY OF THIS PACKAGE RESTS ON THIS FUNCTION, and it
+    was missing until 2026-08-02. Identity-as-location only deletes a bug class
+    while the LOCATION is one the server chose. Without this, the client chose
+    it, and the design's central claim inverted into its central hole.
+
+    MEASURED against the unfixed code, StrictModes ON (the default)::
+
+        CONTROL   'alice'                     -> accepted=True  user='alice'
+        TRAVERSAL '../../../../../outside'    -> accepted=True  user='../../../../../outside'
+        ABSOLUTE  '/tmp/…/outside'            -> accepted=True  user='/tmp/…/outside'
+        KEY AUTH  via the same escape         -> accepted=True
+
+    TWO SEPARATE ESCAPES, and the second is the one people forget::
+
+        Path('/a/users') / '../../x'  ->  climbs out
+        Path('/a/users') / '/tmp/x'   ->  Path('/tmp/x')
+
+    pathlib DISCARDS the left operand when the right is absolute. No ``..`` is
+    needed and no string inspection of the joined path would reveal it.
+
+    WHY StrictModes CANNOT CATCH THIS, which is the part worth sitting with: it
+    checks the owner and mode of whatever directory it is handed. A target owned
+    by this uid at 0700 holding a 0600 credential passes every check — because
+    those are the CORRECT permissions. The guard is not broken; it is being
+    asked about the wrong directory, so it will never alert.
+
+    AND IT INVERTS THIS PACKAGE'S OWN PROMISE. ``_users`` states that nothing
+    reads ``~/.ssh`` and that "there is no flag for this and there should not be
+    one". A username of ``../../../../.ssh`` reaches ``~/.ssh/authorized_keys``
+    and passes StrictModes CLEANLY — ~/.ssh is 0700 and authorized_keys is 0600,
+    exactly the permissions ssh itself demands. The promise was not merely
+    unenforced; the username field was the flag that should not exist.
+
+    Found by scitex-app on review, with a working exploit; reproduced here
+    before fixing. Every fixture in the original 87 tests used a well-formed
+    username, so nothing exercised the one input an attacker controls — the same
+    failure mode as the hand-typed key fixture that hid the undecodable-key bug.
+    """
+    if not isinstance(username, str) or not username:
+        raise UnsafeUsername("username must be a non-empty string")
+    # Built rather than written literally: a NUL in source is itself a hazard,
+    # and tooling that scans for one should not find it here.
+    if chr(0) in username:
+        raise UnsafeUsername("username must not contain a NUL byte")
+    if username in (os.curdir, os.pardir):
+        raise UnsafeUsername(
+            f"username {username!r} is a directory-navigation name, not a user"
+        )
+    separators = {os.sep, os.altsep, "/", "\\"} - {None}
+    for sep in separators:
+        if sep in username:
+            raise UnsafeUsername(
+                f"username {username!r} contains a path separator {sep!r}; "
+                "a username is ONE directory name, never a path"
+            )
+    if Path(username).is_absolute():
+        # Belt to the separator braces: on some platforms an absolute form can
+        # exist without a separator this loop matched (e.g. a drive-relative
+        # 'C:name'). Cheap, and the failure it guards is total.
+        raise UnsafeUsername(f"username {username!r} is an absolute path")
+    return username
+
+
 def user_dir(auth_dir: Path, username: str) -> Path:
-    """``<auth_dir>/users/<username>/``.
+    """``<auth_dir>/users/<username>/``, or raise :class:`UnsafeUsername`.
 
     IDENTITY IS THIS DIRECTORY'S NAME, which is the single most important thing
     copied from ssh. sshd never had to ask "whose key is this line?" because
     authorized_keys lives inside the target user's home — identity is LOCATION,
     not a field to be parsed and trusted. Every scheme that stores identity as a
     column beside the credential eventually reads the wrong column.
+
+    That argument holds ONLY while the server chooses the location, which is why
+    :func:`validate_username` runs first and why containment is re-checked after
+    resolution: a validated name can still be a SYMLINK pointing anywhere, and
+    ``..``-freedom is a property of the resolved path, not of the string.
     """
-    return auth_dir / "users" / username
+    validate_username(username)
+    users_root = auth_dir / "users"
+    candidate = users_root / username
+
+    # CONTAINMENT AFTER RESOLUTION, because the string check alone cannot see a
+    # symlink. Only resolve when the path exists: resolve() on a missing path is
+    # fine, but comparing a non-existent resolved path against a resolved root
+    # is still the correct test, so this runs unconditionally with strict=False.
+    resolved = candidate.resolve()
+    root = users_root.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise UnsafeUsername(
+            f"username {username!r} resolves to {resolved}, which is outside "
+            f"{root} — a user directory must live under users/"
+        )
+    return candidate
 
 
 # EOF

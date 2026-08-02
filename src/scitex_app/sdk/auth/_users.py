@@ -201,7 +201,21 @@ def load_identity(auth_dir: Path, username: str, config: AuthConfig) -> Identity
         password_hash = password_path.read_text().strip() or None
 
     return Identity(
-        name=username,
+        # THE DIRECTORY'S NAME, never the client's string. This was
+        # `name=username` until 2026-08-02, which quietly reintroduced the exact
+        # thing this design claims to delete: a second field that can DISAGREE
+        # with the location. AuthResult's docstring already promised "the
+        # DIRECTORY NAME that matched — not a string the client supplied", and
+        # the code returned the supplied string.
+        #
+        # It mattered twice. Under the traversal bug it echoed the attacker's
+        # path back as the authenticated identity, which is what an audit log
+        # records as "who did this?". And even with that fixed, on a
+        # case-insensitive filesystem "Alice" opens alice/ — so the credential
+        # checked and the identity reported would drift apart with no attack at
+        # all. Reading it off the resolved directory makes the docstring true by
+        # construction rather than by convention.
+        name=directory.name,
         directory=directory,
         keys=keys,
         password_hash=password_hash,

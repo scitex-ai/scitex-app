@@ -69,11 +69,13 @@ from ._config import (
 )
 from ._password import HashFormatError, hash_password, verify_password
 from ._paths import (
+    UnsafeUsername,
     auth_dir_candidates,
     client_config_path,
     resolve_auth_dir,
     server_config_path,
     user_dir,
+    validate_username,
 )
 from ._strictmodes import StrictModesError
 from ._users import Identity, list_identities, load_identity, parse_authorized_keys
@@ -89,6 +91,7 @@ __all__ = [
     "Method",
     "Outcome",
     "StrictModesError",
+    "UnsafeUsername",
     "Trace",
     "TraceStep",
     "Tristate",
@@ -106,6 +109,7 @@ __all__ = [
     "resolve_auth_dir",
     "server_config_path",
     "user_dir",
+    "validate_username",
     "verify_password",
 ]
 

@@ -12,11 +12,13 @@ from pathlib import Path
 import pytest
 
 from scitex_app.sdk.auth import (
+    UnsafeUsername,
     auth_dir_candidates,
     client_config_path,
     resolve_auth_dir,
     server_config_path,
     user_dir,
+    validate_username,
 )
 from scitex_app.sdk.auth._paths import AUTH_DIR_ENV_TEMPLATE
 
@@ -127,6 +129,169 @@ def test_identity_is_carried_by_the_directory_name(tmp_path):
     path = user_dir(tmp_path, "ywatanabe")
     # Assert
     assert path == tmp_path / "users" / "ywatanabe"
+
+
+# ---------------------------------------------------------------------------
+# USERNAME VALIDATION — the input an attacker controls.
+#
+# These did not exist, and their absence is why a path traversal survived 87
+# tests: every username fixture was well-formed, so nothing exercised the one
+# value a client supplies. Same failure mode as the hand-typed ed25519 fixture
+# that hid the undecodable-key bug — a fixture that looks like real input tests
+# only inputs that look real.
+#
+# Reported by scitex-app with a working exploit; reproduced before fixing.
+# ---------------------------------------------------------------------------
+
+
+def test_a_plain_name_is_accepted():
+    # Arrange
+    # Act
+    result = validate_username("ywatanabe")
+    # Assert
+    assert result == "ywatanabe"
+
+
+def test_a_traversal_username_is_refused():
+    # Arrange
+    raised = None
+    # Act
+    try:
+        validate_username("../../../../../elsewhere")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_an_absolute_username_is_refused():
+    # Arrange
+    # pathlib DISCARDS the left operand when the right is absolute:
+    # Path("/a/users") / "/tmp/x" is Path("/tmp/x"). No ".." required, and no
+    # inspection of the joined path would reveal it.
+    raised = None
+    # Act
+    try:
+        validate_username("/tmp/elsewhere")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_a_bare_parent_reference_is_refused():
+    # Arrange
+    raised = None
+    # Act
+    try:
+        validate_username("..")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_a_bare_current_reference_is_refused():
+    # Arrange
+    raised = None
+    # Act
+    try:
+        validate_username(".")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_an_embedded_forward_slash_is_refused():
+    # Arrange
+    raised = None
+    # Act
+    try:
+        validate_username("alice/bob")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_an_embedded_backslash_is_refused():
+    # Arrange
+    # Refused on every platform, not only where it is the native separator: a
+    # name legal here must not become a path when the store is read elsewhere.
+    raised = None
+    # Act
+    try:
+        validate_username("alice\\bob")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_an_empty_username_is_refused():
+    # Arrange
+    raised = None
+    # Act
+    try:
+        validate_username("")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_a_nul_byte_in_a_username_is_refused():
+    # Arrange
+    # Constructed with chr(0) rather than written literally: a NUL in source is
+    # its own hazard, and tooling that scans for one should not find it here.
+    raised = None
+    # Act
+    try:
+        validate_username("al" + chr(0) + "ice")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_user_dir_returns_a_child_of_users_for_a_plain_name(tmp_path):
+    # Arrange
+    (tmp_path / "users" / "alice").mkdir(parents=True)
+    # Act
+    resolved = user_dir(tmp_path, "alice")
+    # Assert
+    assert resolved == tmp_path / "users" / "alice"
+
+
+def test_a_symlinked_user_directory_is_refused(tmp_path):
+    # Arrange
+    # The STRING check cannot see this: "sneaky" is a perfectly good name. Only
+    # containment-after-resolve catches it, which is why user_dir resolves.
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / "users").mkdir()
+    (tmp_path / "users" / "sneaky").symlink_to(outside)
+    raised = None
+    # Act
+    try:
+        user_dir(tmp_path, "sneaky")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_the_refusal_names_the_offending_username(tmp_path):
+    # Arrange
+    raised = None
+    # Act
+    try:
+        validate_username("alice/bob")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert "alice/bob" in str(raised)
 
 
 # EOF
