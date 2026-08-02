@@ -29,7 +29,10 @@ jobs:
           # Fallback chain: prefer [all,dev] so optional-dep code paths
           # (yaml, fastmcp, textual) get exercised. Falls back to [dev] then
           # plain editable so a packaging hiccup doesn't strand CI.
-          pip install -e ".[all,dev]" || pip install -e ".[dev]" || pip install -e .
+          # ADR-0005: dev is a PEP 735 GROUP. Each fallback rung degrades to LESS
+          # TOOLING, never to fewer runtime capabilities -- `.[all]` is present
+          # in every rung that installs extras at all.
+          pip install -e ".[all]" --group dev || pip install -e ".[all]" || pip install -e .
       - name: Run tests
         run: |
           pytest tests/ --cov=src/scitex_app --cov-report=xml --cov-report=term
