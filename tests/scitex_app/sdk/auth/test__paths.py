@@ -294,4 +294,50 @@ def test_the_refusal_names_the_offending_username(tmp_path):
     assert "alice/bob" in str(raised)
 
 
+def test_a_newline_in_a_username_is_refused():
+    # Arrange
+    # NOT a traversal — authentication already fails for this name. It is an
+    # AUDIT-INTEGRITY rule: the username reaches the Trace, and a Trace is
+    # rendered into a log, so a name containing a newline can write a whole
+    # forged line such as "Accepted password for root" into the record that
+    # exists to explain what happened. sshd escapes non-printables in logged
+    # usernames for exactly this reason.
+    hostile = "alice" + chr(10) + "Accepted password for root"
+    raised = None
+    # Act
+    try:
+        validate_username(hostile)
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_a_control_character_in_a_username_is_refused():
+    # Arrange
+    raised = None
+    # Act
+    try:
+        validate_username("alice" + chr(7))
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_the_non_printable_refusal_names_the_offending_index():
+    # Arrange
+    # The offending character cannot be echoed into the message — that would
+    # reproduce the injection inside the refusal. The INDEX locates it without
+    # carrying it.
+    raised = None
+    # Act
+    try:
+        validate_username("alice" + chr(10) + "x")
+    except UnsafeUsername as exc:
+        raised = exc
+    # Assert
+    assert "index 5" in str(raised)
+
+
 # EOF

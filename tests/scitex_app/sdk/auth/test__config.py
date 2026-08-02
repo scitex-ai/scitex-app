@@ -248,4 +248,32 @@ def test_seen_records_keyword_order(config_file):
     assert config.seen == ("StrictModes", "LogLevel")
 
 
+def test_authorized_keys_file_climbing_out_is_rejected(config_file):
+    # Arrange
+    # The absolute-path guard did not achieve its OWN stated goal: its message
+    # says an absolute path "would point every user at one shared file", and
+    # '../' does that just as completely while satisfying the remedy text on a
+    # literal reading.
+    config_file.write_text("AuthorizedKeysFile ../../../../.ssh/authorized_keys\n")
+    raised = None
+    # Act
+    try:
+        parse_config(config_file)
+    except ConfigError as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_a_subdirectory_authorized_keys_file_is_still_allowed(config_file):
+    # Arrange
+    # Only climbing OUT is refused. A path deeper inside the user directory is
+    # a legitimate layout and must keep working.
+    config_file.write_text("AuthorizedKeysFile sub/keys\n")
+    # Act
+    config = parse_config(config_file)
+    # Assert
+    assert config.authorized_keys_file == "sub/keys"
+
+
 # EOF

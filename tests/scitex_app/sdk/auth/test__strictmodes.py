@@ -193,4 +193,41 @@ def test_strict_modes_error_is_a_permission_error(secret):
     assert raised is not None
 
 
+def test_a_symlinked_directory_is_diagnosed_as_a_symlink(tmp_path):
+    # Arrange
+    # Previously refused for an INCIDENTAL reason: lstat() reports a symlink's
+    # own mode as 0777, so it tripped the group/other-writable test and the
+    # remedy read "chmod 700 <path>" — which does nothing on a symlink. The
+    # outcome was safe; the diagnosis was unusable.
+    real = tmp_path / "real"
+    real.mkdir()
+    real.chmod(0o700)
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    raised = None
+    # Act
+    try:
+        check_directory(link)
+    except StrictModesError as exc:
+        raised = exc
+    # Assert
+    assert "SYMLINK" in raised.problem
+
+
+def test_the_symlink_remedy_does_not_tell_you_to_chmod_it(tmp_path):
+    # Arrange
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    raised = None
+    # Act
+    try:
+        check_directory(link)
+    except StrictModesError as exc:
+        raised = exc
+    # Assert
+    assert raised.remedy.startswith("rm ")
+
+
 # EOF

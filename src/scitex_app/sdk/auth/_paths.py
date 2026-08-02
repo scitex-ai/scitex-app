@@ -173,6 +173,33 @@ def validate_username(username: str) -> str:
         # exist without a separator this loop matched (e.g. a drive-relative
         # 'C:name'). Cheap, and the failure it guards is total.
         raise UnsafeUsername(f"username {username!r} is an absolute path")
+    if not username.isprintable():
+        # NOT a traversal — authentication already fails for these. This is an
+        # AUDIT-INTEGRITY rule, and it defends the one thing this package's
+        # design argument rests on.
+        #
+        # The username reaches the Trace, and a Trace is rendered into a log.
+        # Measured by scitex-app against the fixed code:
+        #
+        #     username    'alice\nAccepted password for root'
+        #     trace line  "no user directory .../auth/users/alice
+        #                  Accepted password for root"
+        #
+        # At DEBUG1 that is two lines, and the second reads as a successful root
+        # login. The module's whole argument for LogLevel is that ssh's value is
+        # being able to explain WHY authentication failed — and a stream a
+        # stranger can write convincing lines into explains nothing. The forged
+        # line is not even a lie the reader can catch: it is well-formed.
+        #
+        # sshd escapes non-printables in logged usernames for exactly this.
+        # Rejecting at the door beats escaping at render time, because there is
+        # more than one render site and only one door — and because a username
+        # containing a newline is not a name.
+        raise UnsafeUsername(
+            "username contains a non-printable character "
+            f"(first at index {next(i for i, c in enumerate(username) if not c.isprintable())}); "
+            "a name that can inject a line into a log is not a name"
+        )
     return username
 
 

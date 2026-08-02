@@ -143,6 +143,33 @@ def check_directory(path: Path) -> None:
     write the directory can replace ``authorized_keys`` wholesale, whatever its
     own mode says. sshd walks the whole chain for this reason.
     """
+    if path.is_symlink():
+        # A SYMLINK, DIAGNOSED AS ONE. Without this branch the outcome was still
+        # SAFE but the message was unusable: _mode_of uses lstat(), a symlink's
+        # own mode is 0777, so it tripped the group/other-writable test and the
+        # remedy read "chmod 700 <path>" — and chmod on a symlink does nothing on
+        # Linux. An operator following that exactly would watch it fail and have
+        # no next step.
+        #
+        # Found by scitex-app, who noted the outcome was safe for an INCIDENTAL
+        # reason. That is worth fixing on its own terms: a refusal whose stated
+        # remedy cannot work is a refusal the reader cannot act on, and this
+        # package's whole position on error text is that naming the fix is half
+        # the message.
+        raise StrictModesError(
+            path=path,
+            mode=_mode_of(path),
+            problem=(
+                "this is a SYMLINK, not a directory. Its own permission bits are "
+                "0777 by construction and cannot be changed, so no chmod here "
+                "can satisfy StrictModes"
+            ),
+            remedy=(
+                f"rm {path} and make it a real directory (mkdir -p {path} && "
+                f"chmod 700 {path}), or point the user at the real location by "
+                "name instead of aliasing it"
+            ),
+        )
     _refuse_if_not_ours(path)
     mode = _mode_of(path)
     if mode & GROUP_OTHER_WRITE:

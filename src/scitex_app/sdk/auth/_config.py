@@ -36,6 +36,7 @@ reads a warning on a daemon that started successfully.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -216,6 +217,27 @@ class AuthConfig:
                 f"AuthorizedKeysFile {self.authorized_keys_file!r} is absolute",
                 "make it relative to auth/users/<name>/, e.g. 'authorized_keys' "
                 "— an absolute path would point every user at one shared file",
+            )
+        if os.pardir in Path(self.authorized_keys_file).parts:
+            # THE GUARD ABOVE DID NOT ACHIEVE ITS OWN STATED GOAL. Its message
+            # says an absolute path "would point every user at one shared file"
+            # — and '../../../../.ssh/authorized_keys' points every user at one
+            # shared file just as completely, while satisfying the remedy text
+            # ("make it relative...") on a literal reading. Measured by
+            # scitex-app: absolute was REFUSED, '../' was ACCEPTED.
+            #
+            # Much lower severity than the username hole, because this value is
+            # OPERATOR-supplied and nobody hostile writes it. It is fixed anyway
+            # because a check whose message names a property it does not enforce
+            # teaches the reader something false about what is guaranteed.
+            raise ConfigError(
+                where,
+                0,
+                f"AuthorizedKeysFile {self.authorized_keys_file!r} climbs out of "
+                "the user directory with '..'",
+                "keep it inside auth/users/<name>/, e.g. 'authorized_keys' — "
+                "climbing out points every user at one shared file, which is "
+                "the same failure an absolute path would cause",
             )
 
 
