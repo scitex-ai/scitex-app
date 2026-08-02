@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# Test file for: scitex_app/sdk/auth/_paths.py
+
+"""Tests for auth-directory resolution and the ssh-parallel file names."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+from scitex_app.sdk.auth import (
+    auth_dir_candidates,
+    client_config_path,
+    resolve_auth_dir,
+    server_config_path,
+    user_dir,
+)
+from scitex_app.sdk.auth._paths import AUTH_DIR_ENV_TEMPLATE
+
+
+@pytest.fixture
+def auth_env():
+    """Set/restore the per-app auth-dir override around a test.
+
+    Real env manipulation, restored on teardown, so tests do not leak into
+    each other.
+    """
+    touched: list[str] = []
+    saved: dict[str, str | None] = {}
+
+    def _set(app, value):
+        name = AUTH_DIR_ENV_TEMPLATE.format(app_upper=app.upper().replace("-", "_"))
+        if name not in saved:
+            saved[name] = os.environ.get(name)
+            touched.append(name)
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = str(value)
+
+    try:
+        yield _set
+    finally:
+        for name in touched:
+            if saved[name] is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = saved[name]
+
+
+def test_project_candidate_comes_before_home(tmp_path):
+    # Arrange
+    # Act
+    candidates = auth_dir_candidates("cards", tmp_path)
+    # Assert
+    assert candidates[0] == tmp_path / ".scitex" / "cards" / "auth"
+
+
+def test_home_is_the_fallback_candidate(tmp_path):
+    # Arrange
+    # Act
+    candidates = auth_dir_candidates("cards", tmp_path)
+    # Assert
+    assert candidates[-1] == Path.home() / ".scitex" / "cards" / "auth"
+
+
+def test_without_a_project_only_home_is_considered():
+    # Arrange
+    # Act
+    candidates = auth_dir_candidates("cards", None)
+    # Assert
+    assert len(candidates) == 1
+
+
+def test_env_override_replaces_every_candidate(tmp_path, auth_env):
+    # Arrange
+    # Falling back PAST an explicit override would mean the operator asked for
+    # one file and silently got another.
+    auth_env("cards", tmp_path / "elsewhere")
+    # Act
+    candidates = auth_dir_candidates("cards", tmp_path)
+    # Assert
+    assert candidates == [tmp_path / "elsewhere"]
+
+
+def test_resolve_returns_none_when_nothing_is_configured(tmp_path, auth_env):
+    # Arrange
+    auth_env("neverconfigured", tmp_path / "absent")
+    # Act
+    resolved = resolve_auth_dir("neverconfigured", tmp_path)
+    # Assert
+    assert resolved is None
+
+
+def test_resolve_prefers_the_project_directory(tmp_path):
+    # Arrange
+    project_auth = tmp_path / ".scitex" / "cards" / "auth"
+    project_auth.mkdir(parents=True)
+    # Act
+    resolved = resolve_auth_dir("cards", tmp_path)
+    # Assert
+    assert resolved == project_auth
+
+
+def test_server_config_is_named_like_sshd_config(tmp_path):
+    # Arrange
+    # Act
+    path = server_config_path(tmp_path, "cards")
+    # Assert
+    assert path.name == "cardsd_config"
+
+
+def test_client_config_is_named_like_ssh_config(tmp_path):
+    # Arrange
+    # Act
+    path = client_config_path(tmp_path, "cards")
+    # Assert
+    assert path.name == "cards_config"
+
+
+def test_identity_is_carried_by_the_directory_name(tmp_path):
+    # Arrange
+    # Act
+    path = user_dir(tmp_path, "ywatanabe")
+    # Assert
+    assert path == tmp_path / "users" / "ywatanabe"
+
+
+# EOF
