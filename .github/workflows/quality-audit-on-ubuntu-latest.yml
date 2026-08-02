@@ -43,7 +43,7 @@ jobs:
           python -m pip install --upgrade pip
           # ADR-0005: dev is a PEP 735 GROUP, not an extra. `.[dev]` no longer
           # resolves and only WARNS, so it would silently install no toolchain.
-          pip install -e "." --group dev || pip install -e "."
+          pip install -e ".[dev]" || pip install -e "."
           pip install "scitex-dev[cli-audit]"
 
       - name: Run scitex-dev ecosystem audit-all

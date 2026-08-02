@@ -77,7 +77,7 @@ echo "py=$("$VENV/bin/python" -V) target=$TMPDIR/site"
 # fewer runtime capabilities. The pip rung omits --group deliberately: PEP 735
 # landed in pip 25.1 and the runner may predate it, so it installs the runtime
 # set rather than appearing to install a toolchain it cannot.
-uv pip install --python "$VENV/bin/python" --target="$TMPDIR/site" -e ".[all]" --group dev ||
+uv pip install --python "$VENV/bin/python" --target="$TMPDIR/site" -e ".[all,dev]" ||
     uv pip install --python "$VENV/bin/python" --target="$TMPDIR/site" -e ".[all]" ||
     uv pip install --python "$VENV/bin/python" --target="$TMPDIR/site" -e "." ||
     pip install --target="$TMPDIR/site" -e ".[all]"

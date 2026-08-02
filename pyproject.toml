@@ -27,44 +27,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Extras are all-or-nothing (operator directive, 2026-07-13): one [all]
-# extra, no fine-grained menu. A fine-grained extra that goes empty
-# silently (e.g. the former `cli = []` after click/rich moved to base
-# `dependencies`) turns an install-this-extra hint into a no-op that
-# looks like a fix but installs nothing -- worse than no hint, since the
-# user believes they already tried it (scitex-writer PR #322 incident).
-# `dev`/`docs` stay separate: those are for BUILDING the package, not
-# using it.
-all = [
-    "anthropic>=0.25.0",
-    "litellm>=1.0.0",
-    "requests>=2.28.0",
-    "django>=4.2",
-    "fastmcp>=2.0.0",
-]
-
-# ADR-0005: dev and docs are DEPENDENCY GROUPS, not extras.
-#
-# Operator decision 2026-08-02 (scitex-dev PR #490): a public install extra is
-# `[all]` or bare only; development tooling moves to PEP 735 groups.
-#
-# WHY GROUPS RATHER THAN JUST DROPPING dev/docs FROM `all`: scitex-dev's shipped
-# rule PS-221 requires every PUBLIC extra to be a subset of `all`, which is the
-# opposite of the new rule. Both are correct on their own terms and
-# irreconcilable ONLY because dev/docs were public extras -- development tooling
-# exposed through a mechanism designed for user-facing optional features. Groups
-# are not [project.optional-dependencies], so PS-221 never sees them and keeps
-# full force over everything it was written for. The rule needs no amendment.
-#
-# This repo's `all` already carried the right INTENT in a comment --
-# "dev/docs stay separate: those are for BUILDING the package, not using it" --
-# and PS-221 failed it anyway. The comment was right and the mechanism could not
-# express it. PEP 735 is the mechanism that can.
-#
-# Install with `uv pip install -e . --group dev` (uv >= 0.6, pip >= 25.1).
-# `.[dev]` no longer resolves and only WARNS, so any CI that used it must move
-# in lockstep or it silently installs no toolchain.
-[dependency-groups]
 dev = [
     "anthropic>=0.25.0",
     "click>=8.0.0",
@@ -85,6 +47,21 @@ docs = [
     "myst-parser>=2.0",
     "sphinx-copybutton>=0.5",
     "sphinx-autodoc-typehints>=1.25",
+]
+# Extras are all-or-nothing (operator directive, 2026-07-13): one [all]
+# extra, no fine-grained menu. A fine-grained extra that goes empty
+# silently (e.g. the former `cli = []` after click/rich moved to base
+# `dependencies`) turns an install-this-extra hint into a no-op that
+# looks like a fix but installs nothing -- worse than no hint, since the
+# user believes they already tried it (scitex-writer PR #322 incident).
+# `dev`/`docs` stay separate: those are for BUILDING the package, not
+# using it.
+all = [
+    "anthropic>=0.25.0",
+    "litellm>=1.0.0",
+    "requests>=2.28.0",
+    "django>=4.2",
+    "fastmcp>=2.0.0",
 ]
 
 [project.scripts]
