@@ -136,12 +136,21 @@ def check_public_file(path: Path) -> None:
         )
 
 
-def check_directory(path: Path) -> None:
-    """Refuse a directory others can write into.
+def check_directory(path: Path, *, stop_at: Path | None = None) -> None:
+    """Refuse a directory others can write into, and every parent above it.
 
     A writable directory defeats every check on the files inside it: whoever can
     write the directory can replace ``authorized_keys`` wholesale, whatever its
-    own mode says. sshd walks the whole chain for this reason.
+    own mode says. sshd walks the whole chain for this reason, and so does this
+    -- the walk lives in :func:`_check_ancestors`, which documents why the rule
+    for a parent is not quite the rule for the leaf.
+
+    This function checked ONLY THE LEAF until 2026-08-03 while this docstring
+    already claimed the chain. Reported by scitex-app. A docstring describing a
+    guard the code does not implement is worse than a missing guard, because it
+    is read as evidence the case is handled.
+
+    ``stop_at`` bounds the upward walk; see :func:`_check_ancestors`.
     """
     if path.is_symlink():
         # A SYMLINK, DIAGNOSED AS ONE. Without this branch the outcome was still
@@ -182,6 +191,71 @@ def check_directory(path: Path) -> None:
             ),
             remedy=f"chmod 700 {path}",
         )
+    _check_ancestors(path, stop_at=stop_at)
+
+
+def _check_ancestors(path: Path, *, stop_at: Path | None) -> None:
+    """Apply the same rule to every directory ABOVE ``path``.
+
+    THE LEAF CHECK ALONE IS NOT THE RULE, and this function is the difference
+    between imitating sshd and imitating its docstring. If ``~/.scitex`` is
+    group-writable then ``~/.scitex/cards/auth`` can be RENAMED OUT OF THE WAY
+    and replaced with an attacker's directory, whatever mode the leaf carries.
+    Checking only the leaf answers "are these bits right" when the question is
+    "can anyone else substitute this directory".
+
+    TWO DELIBERATE DIFFERENCES FROM THE LEAF RULE:
+
+    1. ROOT-OWNED ANCESTORS ARE ACCEPTED. ``/`` and ``/home`` are owned by root
+       on every normal system, so requiring our own uid the whole way up would
+       refuse every real installation. sshd makes the same allowance for the
+       same reason -- root can substitute the directory regardless, so demanding
+       otherwise buys nothing and costs everything.
+    2. THE WALK IS ON THE RESOLVED PATH. A symlink anywhere in the chain would
+       otherwise let the checked components differ from the traversed ones.
+
+    ``stop_at`` defaults to the user's home directory, which is where sshd stops
+    too: above it the components are the system's business and are root-owned.
+    A caller whose auth directory lives outside home (a test tree, a service
+    account, a mounted volume) passes its own boundary; without one the walk
+    continues to the filesystem root, which is the faithful behaviour and will
+    correctly refuse a credential directory sitting under a world-writable
+    parent such as ``/tmp``.
+    """
+    boundary = (stop_at or Path.home()).resolve()
+    current = path.resolve()
+    if current == boundary:
+        return
+    for ancestor in current.parents:
+        mode = stat.S_IMODE(ancestor.stat().st_mode)
+        owner = ancestor.stat().st_uid
+        if owner not in (os.getuid(), 0):
+            raise StrictModesError(
+                path=ancestor,
+                mode=mode,
+                problem=(
+                    f"this is a PARENT of {path}, and it is owned by uid {owner} "
+                    f"(neither this process's uid {os.getuid()} nor root). Its "
+                    "owner can rename the credential directory out of the way "
+                    "and put their own in its place, so the modes below it "
+                    "guarantee nothing"
+                ),
+                remedy=f"chown {os.getuid()} {ancestor}, or move the auth directory",
+            )
+        if mode & GROUP_OTHER_WRITE:
+            raise StrictModesError(
+                path=ancestor,
+                mode=mode,
+                problem=(
+                    f"this is a PARENT of {path} and others can write into it, "
+                    "so they can replace the credential directory itself. The "
+                    "permissions on the directory below are irrelevant once "
+                    "this one is writable"
+                ),
+                remedy=f"chmod go-w {ancestor}, or move the auth directory",
+            )
+        if ancestor == boundary:
+            return
 
 
 # EOF

@@ -184,7 +184,20 @@ def load_identity(auth_dir: Path, username: str, config: AuthConfig) -> Identity
         return None
 
     if config.strict_modes_enabled:
-        check_directory(directory)
+        # BOUNDED AT ``auth_dir``, deliberately. The walk covers every directory
+        # from ``users/<name>`` up to and including the auth directory itself,
+        # which is the chain this SDK put the credentials in and is therefore
+        # the chain it is answerable for: a group-writable ``users/`` lets
+        # anyone swap one user's directory for another's.
+        #
+        # Above ``auth_dir`` is the APPLICATION's siting decision, not ours, and
+        # walking past it would refuse on facts the SDK cannot act on — a
+        # container whose ``/`` is group-writable (measured 0775 on this very
+        # fleet's image) would make every login fail with a remedy the app
+        # author cannot perform. An app that wants the full sshd-style walk to
+        # home passes ``stop_at`` to :func:`check_directory` on its own auth
+        # directory at startup.
+        check_directory(directory, stop_at=auth_dir)
 
     keys: tuple[PublicKey, ...] = ()
     keys_path = directory / config.authorized_keys_file

@@ -150,6 +150,13 @@ def test_public_file_writable_by_other_is_refused(public):
 
 
 def test_directory_at_0700_is_accepted(tmp_path):
+    """``stop_at`` bounds the walk at the tree this test actually built.
+
+    Without it the walk continues past ``tmp_path`` to the filesystem root and
+    correctly refuses: ``/`` is mode 0775 on this fleet's container image, which
+    is a real finding about the image and nothing to do with the directory under
+    test. Declaring the boundary keeps the test measuring its own subject.
+    """
     # Arrange
     directory = tmp_path / "auth"
     directory.mkdir()
@@ -157,11 +164,57 @@ def test_directory_at_0700_is_accepted(tmp_path):
     raised = None
     # Act
     try:
-        check_directory(directory)
+        check_directory(directory, stop_at=tmp_path)
     except StrictModesError as exc:
         raised = exc
     # Assert
     assert raised is None
+
+
+def test_a_group_writable_parent_is_refused_even_when_the_leaf_is_0700(tmp_path):
+    """THE DEFECT THIS WALK EXISTS FOR, executed rather than described.
+
+    ``check_directory`` checked only the leaf until 2026-08-03 while its
+    docstring already claimed sshd's chain walk. A perfect 0700 credential
+    directory inside a group-writable parent can be renamed out of the way and
+    replaced wholesale, so the leaf's bits guarantee nothing.
+    """
+    # Arrange
+    parent = tmp_path / "parent"
+    directory = parent / "auth"
+    directory.mkdir(parents=True)
+    directory.chmod(0o700)
+    parent.chmod(0o770)
+    raised = None
+
+    # Act
+    try:
+        check_directory(directory, stop_at=tmp_path)
+    except StrictModesError as exc:
+        raised = exc
+
+    # Assert
+    assert raised is not None and raised.path == parent
+
+
+def test_the_refusal_names_the_parent_not_the_directory_checked(tmp_path):
+    """A remedy pointing at the wrong directory is a remedy nobody can run."""
+    # Arrange
+    parent = tmp_path / "parent"
+    directory = parent / "auth"
+    directory.mkdir(parents=True)
+    directory.chmod(0o700)
+    parent.chmod(0o770)
+    remedy = ""
+
+    # Act
+    try:
+        check_directory(directory, stop_at=tmp_path)
+    except StrictModesError as exc:
+        remedy = exc.remedy
+
+    # Assert
+    assert str(parent) in remedy and str(directory) not in remedy
 
 
 def test_directory_writable_by_others_is_refused(tmp_path):
