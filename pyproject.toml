@@ -26,15 +26,19 @@ dependencies = [
     "scitex-config>=0.3.6",
 ]
 
-[project.optional-dependencies]
 # Extras are all-or-nothing (operator directive, 2026-07-13): one [all]
 # extra, no fine-grained menu. A fine-grained extra that goes empty
 # silently (e.g. the former `cli = []` after click/rich moved to base
 # `dependencies`) turns an install-this-extra hint into a no-op that
 # looks like a fix but installs nothing -- worse than no hint, since the
 # user believes they already tried it (scitex-writer PR #322 incident).
-# `dev`/`docs` stay separate: those are for BUILDING the package, not
-# using it.
+#
+# `all` is the ONLY public extra, and it is USER-facing: `pip install
+# scitex-app[all]` must give every runtime capability and NO toolchain.
+# That is why dev/docs are dependency-groups below and not extras --
+# see the comment there. PS-221 (every public extra must be a subset of
+# `all`) is therefore satisfied trivially: `all` is the only member.
+[project.optional-dependencies]
 all = [
     "anthropic>=0.25.0",
     "litellm>=1.0.0",
@@ -42,6 +46,21 @@ all = [
     "django>=4.2",
     "fastmcp>=2.0.0",
 ]
+
+# PEP 735 dependency groups -- NOT installable via `pip install pkg[dev]`,
+# by design. These are for BUILDING the package, not using it (operator
+# directive, 2026-07-13, quoted above).
+#
+# They were `[project.optional-dependencies]` until 2026-08-03. As extras
+# they were PUBLIC, so PS-221 required them to be a subset of `all`, which
+# would have put pytest/sphinx/scitex-dev into every user's environment
+# that ran the documented "give me everything" install. The rule was right
+# and the mechanism could not express the intent; groups can. PS-221 keeps
+# full force over `[project.optional-dependencies]`, which still holds the
+# one extra it was written to police.
+#
+# Install with: pip install -e . --group dev   (pip >= 25.1)
+[dependency-groups]
 dev = [
     "anthropic>=0.25.0",
     "click>=8.0.0",
@@ -112,6 +131,21 @@ library_dirs = ["src", "tests", "examples"]
 # because these primitives are threaded through scitex_app.embed by
 # design, not a one-off oversight.
 mcp_parity_exempt = true
+
+# §6a — per-package env-var allowlist. ONE entry, an EXACT name (not a
+# prefix), for a var that is being REMOVED.
+#
+# `LLM_MODEL` is operator-facing and predates the SCITEX_APP_* convention, so
+# it is migrated rather than renamed (constitution §3: a published contract is
+# a MIGRATION -- alias first, then remove). `SCITEX_APP_LLM_MODEL` is the
+# supported name and takes precedence; `LLM_MODEL` still works and logs a
+# deprecation warning, which is the only reason `os.getenv("LLM_MODEL")`
+# survives in _chat/_backends.py for §6a to find.
+#
+# DELETE THIS ENTRY when the alias is removed. It is scoped to the exact
+# legacy name on purpose: a prefix entry would also silence any NEW unprefixed
+# var, which is exactly the "catch-all noise silencer" the rule warns against.
+env_allowlist = ["LLM_MODEL"]
 
 [tool.scitex_dev.audit]
 # PS-168 — Per-package secret + env-var prefix in GitHub Actions workflows.

@@ -43,12 +43,47 @@ def test_all_extra_exists(pyproject_data):
     assert "all" in extras
 
 
-def test_only_all_dev_docs_extras_declared(pyproject_data):
+def test_all_is_the_only_public_extra(pyproject_data):
+    """`all` is the sole `[project.optional-dependencies]` entry.
+
+    `dev`/`docs` were extras until 2026-08-03. As extras they were PUBLIC, so
+    PS-221 (every public extra must be a subset of `all`) required them inside
+    `all` -- which would have put pytest and sphinx into a USER's environment,
+    against the directive in this module's docstring. They are dependency
+    groups now; see the next two tests, which is where that guard moved.
+    """
     # Arrange
     extras = pyproject_data["project"]["optional-dependencies"]
     # Act
     # Assert
-    assert set(extras) == {"all", "dev", "docs"}
+    assert set(extras) == {"all"}
+
+
+def test_dev_and_docs_are_declared_as_dependency_groups(pyproject_data):
+    """The build toolchain still has to EXIST -- just not as an extra.
+
+    Without this, deleting `[dependency-groups]` outright would satisfy the
+    test above and silently leave CI with no toolchain to install.
+    """
+    # Arrange
+    groups = pyproject_data.get("dependency-groups", {})
+    # Act
+    # Assert
+    assert set(groups) == {"dev", "docs"}
+
+
+def test_no_dependency_group_is_empty(pyproject_data):
+    """Same empty-is-worse-than-absent rule as extras, applied to groups.
+
+    An empty group makes `pip install --group dev` a no-op that looks like it
+    worked -- the scitex-writer PR #322 failure shape, one table over.
+    """
+    # Arrange
+    groups = pyproject_data.get("dependency-groups", {})
+    # Act
+    empty = [name for name, deps in groups.items() if not deps]
+    # Assert
+    assert empty == []
 
 
 _THIS_FILE = Path(__file__).resolve()

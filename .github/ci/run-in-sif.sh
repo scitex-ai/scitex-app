@@ -68,14 +68,25 @@ export PATH="$VENV/bin:$PATH"
 
 echo "py=$("$VENV/bin/python" -V) target=$TMPDIR/site"
 
-# Install scitex-app + its [all,dev] extras WITH deps into the writable target.
-# Fallback chain mirrors scitex-app's historical bare-uv/pip workflow so a
-# packaging hiccup in an optional extra doesn't strand CI: [all,dev] → [dev] →
-# bare. uv first (fast resolver), pip as a final safety net.
-uv pip install --python "$VENV/bin/python" --target="$TMPDIR/site" -e ".[all,dev]" ||
-    uv pip install --python "$VENV/bin/python" --target="$TMPDIR/site" -e ".[dev]" ||
-    uv pip install --python "$VENV/bin/python" --target="$TMPDIR/site" -e "." ||
-    pip install --target="$TMPDIR/site" -e ".[dev]"
+# Install scitex-app's [all] runtime extra + its dev TOOLCHAIN with deps into
+# the writable target. uv first (fast resolver), pip as a final safety net.
+#
+# ADR-0005: dev is a PEP 735 GROUP, so it is requested with `--group dev`, not
+# `.[dev]`. This matters for the fallback chain: an unknown EXTRA makes pip/uv
+# WARN and still exit 0, so a rung spelled `.[all,dev]` would swallow the
+# missing toolchain and never fall through. `--group` on a tool that does not
+# support it fails LOUDLY, which is what makes the chain below meaningful.
+#
+# Every rung degrades to less TOOLING, never to fewer runtime capabilities:
+# `.[all]` is present in every rung that installs extras at all. The last rung
+# omits --group deliberately: PEP 735 landed in pip 25.1 and this SIF's pip may
+# predate it, so it installs the runtime set rather than appearing to install a
+# toolchain it cannot. A leg that reaches that rung will fail at pytest, which
+# is the honest outcome -- not a green run with no tests.
+uv pip install --python "$VENV/bin/python" --target="$TMPDIR/site" -e ".[all]" --group dev ||
+    uv pip install --python "$VENV/bin/python" --target="$TMPDIR/site" -e ".[all]" ||
+    pip install --target="$TMPDIR/site" -e ".[all]" --group dev ||
+    pip install --target="$TMPDIR/site" -e ".[all]"
 
 export PYTHONPATH="$TMPDIR/site:$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 
