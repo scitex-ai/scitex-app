@@ -398,6 +398,25 @@ class TestValidateProjectStructure:
 # ---------------------------------------------------------------------------
 
 
+def require(condition: bool, message: str) -> None:
+    """Fail the test if a HARNESS PRECONDITION does not hold.
+
+    Not an assertion about the code under test -- it checks that the payload
+    this test plants is actually reachable, so that a later ``None`` means
+    "the containment check refused it" and not "the target never existed".
+    That distinction is the whole reason these tests are trustworthy: the
+    first measurement of these defects reported three PASSes that were really
+    non-existent targets, and an instrument that did not run is not a clean
+    negative.
+
+    Deliberately raises instead of asserting, so each test keeps exactly ONE
+    assertion (STX-TQ007) -- when a test fails you learn immediately whether
+    the CONTRACT broke or the harness did.
+    """
+    if not condition:
+        raise RuntimeError(f"harness precondition failed: {message}")
+
+
 @pytest.fixture
 def escape_target(tmp_path):
     """A real, readable directory tree OUTSIDE the base dir.
@@ -496,7 +515,7 @@ class TestResolveUserProjectDirContainment:
         root, _outside = escape_target
         victim = root / "data" / "users" / "bob" / "proj" / "myapp"
         victim.mkdir(parents=True)
-        assert victim.is_dir()
+        require(victim.is_dir(), "victim.is_dir()")
         # Act
         result = resolve_user_project_dir("alice/../bob", "myapp", base_dir=root)
         # Assert
@@ -533,10 +552,10 @@ class TestResolveUserProjectDirContainment:
         (target / "manifest.json").write_text('{"secret": "leaked"}')
         link = root / "data" / "users" / "alice"
         link.symlink_to(outside / "alice", target_is_directory=True)
-        assert link.resolve() == (outside / "alice").resolve()
-        assert not str(link.resolve()).startswith(str(root.resolve()))
-        assert (link / "proj" / "myapp").is_dir()
-        assert "leaked" in (link / "proj" / "myapp" / "manifest.json").read_text()
+        require(link.resolve() == (outside / "alice").resolve(), "link.resolve() == (outside / 'alice').resolve()")
+        require(not str(link.resolve()).startswith(str(root.resolve())), "not str(link.resolve()).startswith(str(root.resolve()))")
+        require((link / "proj" / "myapp").is_dir(), "(link / 'proj' / 'myapp').is_dir()")
+        require("leaked" in (link / "proj" / "myapp" / "manifest.json").read_text(), "'leaked' in (link / 'proj' / 'myapp' / 'manifest.json').read_text()")
         # Act
         result = resolve_user_project_dir("alice", "myapp", base_dir=root)
         # Assert
@@ -563,7 +582,7 @@ class TestResolvePublishedProjectDirContainment:
         root, _outside = escape_target
         victim = root / "data" / "users" / "alice" / "proj" / "myapp"
         victim.mkdir(parents=True)
-        assert victim.is_dir()
+        require(victim.is_dir(), "victim.is_dir()")
         # Act
         result = resolve_published_project_dir(
             "../users/alice/proj/myapp", base_dir=root
@@ -581,9 +600,9 @@ class TestResolvePublishedProjectDirContainment:
         (target / "manifest.json").write_text('{"secret": "leaked"}')
         link = root / "data" / "projects" / "myproj"
         link.symlink_to(target, target_is_directory=True)
-        assert link.resolve() == target.resolve()
-        assert not str(link.resolve()).startswith(str(root.resolve()))
-        assert "leaked" in (link / "manifest.json").read_text()
+        require(link.resolve() == target.resolve(), "link.resolve() == target.resolve()")
+        require(not str(link.resolve()).startswith(str(root.resolve())), "not str(link.resolve()).startswith(str(root.resolve()))")
+        require("leaked" in (link / "manifest.json").read_text(), "'leaked' in (link / 'manifest.json').read_text()")
         # Act
         result = resolve_published_project_dir("myproj", base_dir=root)
         # Assert
@@ -610,8 +629,8 @@ class TestProjectSubdirContainment:
         (outside / "index_partial.html").write_text("<div>other tenant</div>")
         link = project_dir / "templates"
         link.symlink_to(outside, target_is_directory=True)
-        assert link.is_dir()
-        assert "other tenant" in (link / "index_partial.html").read_text()
+        require(link.is_dir(), "link.is_dir()")
+        require("other tenant" in (link / "index_partial.html").read_text(), "'other tenant' in (link / 'index_partial.html').read_text()")
         # Act
         result = resolve_template_dir(project_dir)
         # Assert
@@ -635,8 +654,8 @@ class TestProjectSubdirContainment:
         (outside / "id_rsa").write_text("PRIVATE KEY")
         link = project_dir / "static"
         link.symlink_to(outside, target_is_directory=True)
-        assert link.is_dir()
-        assert "PRIVATE KEY" in (link / "id_rsa").read_text()
+        require(link.is_dir(), "link.is_dir()")
+        require("PRIVATE KEY" in (link / "id_rsa").read_text(), "'PRIVATE KEY' in (link / 'id_rsa').read_text()")
         # Act
         result = resolve_static_dir(project_dir)
         # Assert
@@ -661,8 +680,8 @@ class TestProjectSubdirContainment:
         secret.write_text('{"secret": "leaked"}')
         link = project_dir / "manifest.json"
         link.symlink_to(secret)
-        assert link.is_file()
-        assert "leaked" in link.read_text()
+        require(link.is_file(), "link.is_file()")
+        require("leaked" in link.read_text(), "'leaked' in link.read_text()")
         # Act
         result = resolve_manifest(project_dir)
         # Assert
@@ -686,7 +705,7 @@ class TestFindPartialTemplateContainment:
         templates_dir.mkdir(parents=True)
         outsider = tmp_path / "outsider.html"
         outsider.write_text("<div>outside</div>")
-        assert (templates_dir / ".." / ".." / "outsider.html").is_file()
+        require((templates_dir / ".." / ".." / "outsider.html").is_file(), "(templates_dir / '..' / '..' / 'outsider.html').is_file()")
         # Act
         result = find_partial_template(templates_dir, "../../outsider.html")
         # Assert
@@ -712,8 +731,8 @@ class TestFindPartialTemplateContainment:
         (outside / "index_partial.html").write_text("<div>other tenant</div>")
         link = templates_dir / "evil"
         link.symlink_to(outside, target_is_directory=True)
-        assert link.is_dir()
-        assert "other tenant" in (link / "index_partial.html").read_text()
+        require(link.is_dir(), "link.is_dir()")
+        require("other tenant" in (link / "index_partial.html").read_text(), "'other tenant' in (link / 'index_partial.html').read_text()")
         # Act
         result = find_partial_template(templates_dir)
         # Assert
