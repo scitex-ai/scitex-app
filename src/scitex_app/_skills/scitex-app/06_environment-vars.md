@@ -54,12 +54,18 @@ export DJANGO_DEBUG="false"
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `ANTHROPIC_API_KEY` | API key for Anthropic chat backend | — |
-| `LLM_MODEL` | LLM model identifier for chat features | `claude-sonnet-4-20250514` |
+| `SCITEX_APP_LLM_MODEL` | LLM model identifier for chat features | `anthropic/claude-sonnet-4-20250514` |
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-export LLM_MODEL="claude-opus-4-5"
+export SCITEX_APP_LLM_MODEL="anthropic/claude-opus-4-5"
 ```
+
+The unprefixed `LLM_MODEL` still works and logs a deprecation warning. Rename
+it — the generic name can collide with another tool in the same environment,
+which would silently change which model you talk to. If both are set they are
+not merged: the prefixed one wins and the conflict is logged, so the pick is
+never silent.
 
 ## Usage Examples
 

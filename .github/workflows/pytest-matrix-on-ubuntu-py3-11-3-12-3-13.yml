@@ -25,14 +25,18 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
+          # pip>=25.1 is REQUIRED, not preferred: `--group` is how the dev
+          # toolchain is requested now that dev is a PEP 735 group, and an
+          # older pip rejects the flag outright (loudly, which is correct).
           python -m pip install --upgrade pip
-          # Fallback chain: prefer [all,dev] so optional-dep code paths
-          # (yaml, fastmcp, textual) get exercised. Falls back to [dev] then
-          # plain editable so a packaging hiccup doesn't strand CI.
-          # ADR-0005: dev is a PEP 735 GROUP. Each fallback rung degrades to LESS
-          # TOOLING, never to fewer runtime capabilities -- `.[all]` is present
-          # in every rung that installs extras at all.
-          pip install -e ".[all,dev]" || pip install -e ".[all]" || pip install -e .
+          # `[all]` is the runtime extra; `--group dev` is the toolchain.
+          # NO `||` fallback chain here, deliberately. The old chain started
+          # with `.[all,dev]`, and once dev stopped being an extra pip would
+          # have WARNED about the unknown extra and still exited 0 -- so the
+          # fallback could never fire and the leg would run with no pytest
+          # plugins while looking installed. A gate that cannot fail is not a
+          # gate; if this install breaks, the job must go red.
+          pip install -e ".[all]" --group dev
       - name: Run tests
         run: |
           pytest tests/ --cov=src/scitex_app --cov-report=xml --cov-report=term

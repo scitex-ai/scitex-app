@@ -1,0 +1,145 @@
+# scitex-dev project-type config
+# Drives which rule families the auditor applies.
+# See: scitex-dev ecosystem audit-project --help
+#
+# Deliberately does NOT set `project-type:`. The auditor already infers it
+# correctly here (it produces a complete, correct finding set without this
+# file), and pinning it would change which rule FAMILIES run — a change that
+# can silently drop rules. This file adds exemptions only.
+
+audit:
+  # PS-210 §2 (dev-extras-incomplete) — a rule-level skip, which is the
+  # BLUNTEST mechanism available and is used only because PS-210 supports
+  # nothing finer: `exemption_for()` is consulted by exactly four checks
+  # (config-layout, no-print, runner-destinations, logs-path), and PS-210 is
+  # not one of them. A per-site `exemptions:` entry for it would sit in this
+  # file looking handled while suppressing nothing, and a dead exemption is
+  # worse than none — so it is not written.
+  #
+  # WHY IT FIRES (read from the implementation, not from its message):
+  # `_check_dev_extras_complete.py::_extras_index` builds its `dev` set from
+  # `project.optional-dependencies.dev` ONLY. dev is a PEP 735 group here, so
+  # that table is absent, the rule sees an EMPTY dev set, and it reports every
+  # `[all]` member as missing from it. The rule is not group-aware.
+  #
+  # Its message ("tests import it unguarded") does not describe this repo:
+  # tests/ contains no reference to anthropic, litellm or requests. It reached
+  # us via its TRANSITIVE branch instead — dep imported in src/, tests import
+  # scitex_app. That branch is sound; only the dev-set lookup is wrong.
+  #
+  # COMPENSATING CONTROL, so this is not a gate merely switched off: the
+  # property PS-210 protects is "a fresh dev install can collect and run the
+  # suite". The pytest matrix installs exactly that
+  # (`pip install -e ".[all]" --group dev`) and runs the full suite on
+  # 3.11/3.12/3.13 with no `||` fallback, so a dev dep that goes missing fails
+  # collection loudly on three legs. That is stronger than the heuristic being
+  # skipped, because it EXECUTES the install rather than modelling it.
+  #
+  # REMOVE THIS SKIP once PS-210 reads `[dependency-groups]`. Reported
+  # upstream; CI installs scitex-dev from PyPI, so the fix arrives without a
+  # change here. This is a bridge, not a standing exception.
+  skip:
+    - PS-210
+
+  exemptions:
+    # PS-224 (runner-destination-unregistered) — every job below targets
+    # `ubuntu-latest` DELIBERATELY, and each is exempted individually with its
+    # own reason rather than by skipping the rule, so a NEW unregistered
+    # destination still fails the gate. Do not collapse these into a
+    # rule-level skip: PS-224 exists to catch a self-hosted label no runner
+    # advertises, which queues forever and never fails. That failure mode is
+    # real and this repo stays covered against it.
+    #
+    # The shared premise for entries 1-6: constitution §4 — "CI defaults to
+    # GitHub-hosted runners. Most of our repositories are public, so hosted
+    # minutes are free — the cost objection that once justified self-hosting
+    # mostly does not apply. Prefer the boring, managed option first." This
+    # repo is public and none of these jobs is long, GPU-bound, or data-heavy
+    # (the full matrix finishes in well under a minute), so the criterion that
+    # would justify self-hosting — developer speed — is not met.
+    #
+    # PS-224's message argues from "the no-hosted-runners directive", which is
+    # the STALE premise. Reported upstream to scitex-dev rather than absorbed
+    # silently in N repos; if the rule is re-premised, entries 1-6 should be
+    # deleted, not kept.
+    PS-224:
+      - path: .github/workflows/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml::test
+        line: 0
+        reason: >-
+          Hosted by choice per constitution §4 (public repo, free minutes,
+          managed option preferred). The 3.11/3.12/3.13 matrix is the reason:
+          hosted runners supply all three interpreters as a first-class
+          feature, whereas the registered Spartan destinations would need
+          three toolchains installed and kept current on a persistent machine.
+          Runtime is ~20s per leg, so there is no developer-speed argument for
+          self-hosting.
+      - path: .github/workflows/quality-audit-on-ubuntu-latest.yml::audit
+        line: 0
+        reason: >-
+          Hosted by choice per constitution §4. Short (~40s), no GPU, no large
+          data. Also the audit must run in a CLEAN environment: a persistent
+          self-hosted runner carries machine-local config that can make the
+          audit pass or fail for reasons unrelated to the commit, which is
+          exactly the "runner problem reads like a code failure" trap
+          constitution §4 warns about.
+      - path: .github/workflows/import-smoke-on-ubuntu-py3-12.yml::install-check
+        line: 0
+        reason: >-
+          Hosted by choice per constitution §4, and REQUIRED here: this job
+          verifies that a fresh `pip install` of the package works for a real
+          user. A persistent runner with a warm cache or a leaked editable
+          install is the one environment where a broken install can still
+          appear to succeed — the gate would stop measuring what it exists to
+          measure.
+      - path: .github/workflows/rtd-sphinx-build-on-ubuntu-latest.yml::sphinx
+        line: 0
+        reason: >-
+          Hosted by choice per constitution §4. Short docs build, no GPU, no
+          large data. Mirrors the Read the Docs build environment, which is
+          itself an ephemeral hosted container — matching it is the point.
+      - path: .github/workflows/newb-docs-quality-on-ubuntu-latest.yml::newb
+        line: 0
+        reason: >-
+          Hosted by choice per constitution §4. Short docs-quality check, no
+          GPU, no large data, no self-hosting criterion met.
+      - path: .github/workflows/auto-merge-to-develop.yaml::automerge
+        line: 0
+        reason: >-
+          Hosted by choice per constitution §4. Pure GitHub API calls — it
+          runs `gh` against the repo and touches no build toolchain, so a
+          self-hosted destination would add a persistent machine to the path
+          of an automated merge while buying nothing.
+
+      # Entries 7-8 rest on SECURITY, not on constitution §4, and they must
+      # NOT be deleted if the hosted-runner premise changes. PS-224's own
+      # message says so: "DO NOT RE-POINT THIS JOB ... Resolving this needs a
+      # decision, not a re-point." The decision is recorded here.
+      #
+      # Threat model is identical to scitex-agent-container's (see
+      # sac/.scitex/dev/config.yaml, which reached the same conclusion
+      # independently): the registered Spartan destinations are PERSISTENT and
+      # their $HOME is the operator's real home, holding the live fleet
+      # credential at ~/.claude/.credentials.json.
+      - path: .github/workflows/cla.yml::CLAssistant
+        line: 0
+        reason: >-
+          Deliberately GitHub-hosted as a named security exception, not a
+          compliance gap. Runs a third-party action under the `issue_comment`
+          and `pull_request_target` triggers, which are UNAUTHENTICATED on a
+          public repo and which the fork-PR approval gate does NOT cover, and
+          it carries GH_PERSONAL_ACCESS_TOKEN and GITHUB_TOKEN. The registered
+          Spartan destinations are persistent and their $HOME is the
+          operator's real home holding the live fleet credential, so
+          re-pointing would let any stranger run third-party code next to that
+          credential by commenting on an issue. An ephemeral hosted VM is the
+          correct isolation: a compromise costs one disposable runner. Revisit
+          only when an ephemeral/isolated self-hosted runner exists for
+          untrusted-trigger workflows.
+      - path: .github/workflows/cla.yml::owner-bypass
+        line: 0
+        reason: >-
+          Same workflow, same unauthenticated `issue_comment` /
+          `pull_request_target` triggers, same GITHUB_TOKEN, therefore the
+          same named security exception as CLAssistant above. Exempted as its
+          own entry rather than folded into the file, so that a THIRD job
+          added to cla.yml still fails the gate and gets its own decision.

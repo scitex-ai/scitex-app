@@ -40,10 +40,15 @@ jobs:
 
       - name: Install package + audit tooling
         run: |
+          # pip>=25.1 is REQUIRED: `--group` is how the dev toolchain is
+          # requested now that dev is a PEP 735 group.
           python -m pip install --upgrade pip
-          # ADR-0005: dev is a PEP 735 GROUP, not an extra. `.[dev]` no longer
-          # resolves and only WARNS, so it would silently install no toolchain.
-          pip install -e ".[dev]" || pip install -e "."
+          # ADR-0005: dev is a PEP 735 GROUP, not an extra. `.[dev]` would not
+          # resolve and pip only WARNS about an unknown extra -- it still exits
+          # 0. The previous `pip install -e ".[dev]" || pip install -e "."`
+          # therefore had a fallback that could never fire, and would have
+          # installed no toolchain while reporting success.
+          pip install -e "." --group dev
           pip install "scitex-dev[cli-audit]"
 
       - name: Run scitex-dev ecosystem audit-all
