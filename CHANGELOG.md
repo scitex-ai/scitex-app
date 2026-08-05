@@ -7,6 +7,66 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-05
+
+- **security(paths): caller-supplied path components are now validated and
+  contained.** `scitex_app.paths` joined `owner` / `repo` / `slug` straight
+  onto a filesystem root with no validation and no containment check. On the
+  hub these were not exploitable for traversal only because Django's `<str:>`
+  URL converter excludes `/` — a property of the **routing layer**, not of
+  this module. Every other consumer lost that: a CLI caller, a service
+  embedding the package, or a future `<path:>` route on the hub itself, which
+  would have silently re-opened it. A guard that holds only because of what
+  some caller upstream happens to do is not a guard.
+
+  Measured before the fix: **3 of 14** behaviours safe. Cross-tenant reach was
+  real, not theoretical — `owner="alice"`, `repo="../../bob/proj/bobrepo"`
+  returned bob's actual project directory. An absolute component escaped the
+  base directory entirely, because `Path("/a/b") / "/c"` is `Path("/c")`:
+  pathlib silently discards the root. After: **14 of 14**.
+
+  Both checks are required and neither substitutes for the other. Per-segment
+  validation alone misses a symlink planted inside the root; containment alone
+  misses cross-tenant reach, because `owner="alice/../bob"` lands on a
+  directory that is still *inside* the base dir.
+
+  Fixed across the whole family, not just the two functions first reported:
+  `resolve_user_project_dir`, `resolve_published_project_dir` (identical
+  defect on `slug`), `parse_dev_module_name`, `resolve_manifest`,
+  `resolve_template_dir`, `resolve_static_dir`, and `find_partial_template`
+  (whose caller-supplied `filename` was never validated — a traversal filename
+  read any file on the host).
+
+  **Not a breaking change for correct callers.** A refusal returns `None`,
+  which is the module's existing "not found" answer, so a probe stays a 404
+  rather than becoming a 500. Refusals are logged with `%r`, so a hostile name
+  cannot inject control characters into your logs. Package-side half of
+  scitex-hub #527.
+
+- **Breaking (install surface): `dev` and `docs` are PEP 735 dependency
+  groups, not extras.** Requesting either as a bracketed extra no longer
+  resolves; use `pip install -e . --group dev` (pip ≥ 25.1), or `--group
+  docs` to build the documentation. `[all]` is unchanged and remains the only
+  public extra.
+
+  This keeps the build toolchain out of the user-facing install: `[all]` must
+  give every runtime capability and no pytest, ruff or sphinx. Groups are not
+  `[project.optional-dependencies]`, so the closure rule that would otherwise
+  force the toolchain into `[all]` no longer applies to them.
+
+  If you install the toolchain with an unknown extra, note that pip **warns
+  and still exits 0** — so a `pip install -e ".[dev]" || fallback` chain will
+  never reach its fallback and will silently install nothing. Request groups
+  with `--group`, which fails loudly on a tool that does not support them.
+
+- deprecate(chat): `LLM_MODEL` is renamed to `SCITEX_APP_LLM_MODEL`. The old
+  name still works and logs a deprecation warning; it is aliased rather than
+  renamed because it was a published, documented contract. If both are set the
+  prefixed one wins **and the conflict is logged** — the pick is never silent.
+  The unprefixed name is being retired because it is generic enough to collide
+  with another tool in the same environment, which would quietly change which
+  model you talk to.
+
 ## [0.5.0] - 2026-07-19
 
 - fix(gui-launcher): `--force` now reclaims an **orphaned** instance of
