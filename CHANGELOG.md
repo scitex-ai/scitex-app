@@ -7,6 +7,43 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-05
+
+- **fix(gui-launcher): `--force` could SIGTERM an unrelated process.**
+  `argv_is_ours()` scanned the whole argv including `argv[0]` — the
+  *interpreter* path. A project-local venv puts the project name in that path,
+  so `/home/x/<project>/.venv/bin/python` claimed **every** process started
+  from that venv as ours: a test run, a jupyter kernel, an unrelated dev
+  server. Since `serve_gui(--force)` terminates on `holder.ours`, the flag
+  could kill a stranger whose only connection to us was the directory its
+  interpreter happened to live under — precisely the failure `--force` exists
+  to avoid.
+
+  0.5.0's own note claimed ownership "is proven from the holder's argv, not
+  its name". The proof was weaker than the sentence: the documented
+  counter-example (`myscitex_writerx` does not match) is about **token
+  boundaries** and said nothing about **path segments**.
+
+  `argv[0]` now contributes only its last two path components — the program
+  and the directory immediately containing it. One level up is what a program
+  *is*; three levels up is only where it lives. Everything after `argv[0]` is
+  matched whole, so module paths still count:
+
+  | argv[0] | verdict |
+  |---|---|
+  | `/opt/venv/…/scitex_writer/__main__.py` | ours — parent names it |
+  | `/usr/local/bin/scitex-writer-gui` | ours — script names it |
+  | `/home/x/<project>/.venv/bin/python` | **not** ours |
+  | `/home/x/<project>/.venv/bin/jupyter` | **not** ours |
+
+  All four are pinned by tests, so the boundary cannot drift silently in
+  either direction. Reported by scitex-scholar with a deterministic
+  reproduction in which only `argv[0]` differed.
+
+  Known residual, documented in the docstring rather than left implied: a
+  stranger run as `python /home/x/<package>/run.py` still matches, because a
+  script living inside the package tree is real argv evidence.
+
 ## [0.6.0] - 2026-08-05
 
 - **security(paths): caller-supplied path components are now validated and
