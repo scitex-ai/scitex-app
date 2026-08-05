@@ -35,9 +35,11 @@ audit:
   # collection loudly on three legs. That is stronger than the heuristic being
   # skipped, because it EXECUTES the install rather than modelling it.
   #
-  # REMOVE THIS SKIP once PS-210 reads `[dependency-groups]`. Reported
-  # upstream; CI installs scitex-dev from PyPI, so the fix arrives without a
-  # change here. This is a bridge, not a standing exception.
+  # REMOVE THIS SKIP once PS-210 reads `[dependency-groups]`. Reported as
+  # scitex-dev#496 (rule gap) and scitex-dev#497 (the summary's masking
+  # accounting, found while verifying this skip). CI installs scitex-dev from
+  # PyPI, so the fix arrives without a change here. A bridge, not a standing
+  # exception.
   skip:
     - PS-210
 
@@ -59,9 +61,10 @@ audit:
     # would justify self-hosting — developer speed — is not met.
     #
     # PS-224's message argues from "the no-hosted-runners directive", which is
-    # the STALE premise. Reported upstream to scitex-dev rather than absorbed
-    # silently in N repos; if the rule is re-premised, entries 1-6 should be
-    # deleted, not kept.
+    # the STALE premise. Reported as scitex-dev#498 rather than absorbed
+    # silently in N repos -- six near-identical exemptions here would become
+    # six in every public leaf package. If the rule is re-premised, entries
+    # 1-6 should be DELETED, not kept.
     PS-224:
       - path: .github/workflows/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml::test
         line: 0
