@@ -203,9 +203,52 @@ def argv_is_ours(argv: tuple[str, ...], package: str) -> bool:
     box shares it -- killing on that basis would kill strangers. The
     argv, by contrast, carries the module or console-script that was
     actually run.
+
+    ``argv[0]`` contributes only its last TWO path components -- the
+    program and the directory immediately containing it. Distant ancestors
+    are ignored. Everything after ``argv[0]`` is matched whole, so a module
+    path still counts (see :func:`_normalize`).
+
+    WHY argv[0] IS TREATED DIFFERENTLY (scitex-scholar, 2026-08-04):
+    ``argv[0]`` is usually the INTERPRETER, not the thing that was run, and
+    a project-local venv puts the project name high up in its path. Under
+    the old whole-argv scan,
+    ``/home/x/scitex-scholar/.venv/bin/python`` claimed EVERY process
+    started from that venv as ours -- a pytest run, a jupyter kernel, an
+    unrelated dev server. Measured on one box with only argv[0] differing:
+    the venv path gave ``ours=True`` for a bare ``socket.bind`` + ``sleep``
+    script with no relation to the GUI.
+
+    That is not cosmetic, because :func:`terminate` fires on ``ours``: it
+    made ``--force`` able to SIGTERM a stranger, which is the exact failure
+    ``--force`` exists to avoid.
+
+    WHY TWO COMPONENTS AND NOT JUST THE BASENAME: a package run by its own
+    module path puts the evidence in the IMMEDIATE parent --
+    ``.../site-packages/scitex_writer/__main__.py`` is genuinely ours, and
+    basename alone (``__main__.py``) would throw that away. One level up is
+    what the program IS; three levels up is only where it happens to live.
+    Both real shapes therefore keep working:
+
+        /opt/venv/.../scitex_writer/__main__.py   -> ours   (parent names it)
+        /usr/local/bin/scitex-app-gui             -> ours   (script names it)
+        /home/x/scitex-scholar/.venv/bin/python   -> NOT    (bin/python)
+        /home/x/scitex-scholar/.venv/bin/jupyter  -> NOT    (bin/jupyter)
+
+    KNOWN RESIDUAL, stated rather than implied: a stranger run as
+    ``python /home/x/<package>/run.py`` still matches, because the token is
+    in ``argv[1]`` and a script living inside the package tree is real argv
+    evidence. Narrower than the interpreter case, and not closed here.
     """
+    if not argv:
+        return False
     token = _normalize(package)
-    return any(token in _normalize(arg) for arg in argv)
+    head, *rest = argv
+    # os.path.split twice, not Path().parts: argv is foreign text that may
+    # not be a well-formed path at all, and split degrades quietly on it.
+    parent, name = os.path.split(head)
+    considered = [name, os.path.basename(parent), *rest]
+    return any(token in _normalize(arg) for arg in considered)
 
 
 @dataclass(frozen=True)
