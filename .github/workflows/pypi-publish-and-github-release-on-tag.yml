@@ -1,6 +1,6 @@
 name: release
 
-# Tag-driven release pipeline — SELF-HOSTED (Spartan CPU) via the scitex-ci SIF.
+# Tag-driven release pipeline — GITHUB-HOSTED (ubuntu-latest).
 #
 # The intended operator flow is:
 #
@@ -8,34 +8,45 @@ name: release
 #
 # Everything else fires automatically:
 #
-#   1. test          — matrix pytest INSIDE the SIF. Must pass or the pipeline
-#                      halts; nothing is published until tests are green on the
-#                      tagged commit.
-#   2. build         — wheel + sdist built INSIDE the SIF, uploaded as artifact.
-#   3. publish       — PyPI via MANUAL OIDC trusted publishing INSIDE the SIF.
+#   1. test          — matrix pytest. Must pass or the pipeline halts; nothing
+#                      is published until tests are green on the tagged commit.
+#   2. build         — wheel + sdist, uploaded as artifact.
+#   3. publish       — PyPI via trusted publishing (pypa/gh-action-pypi-publish).
 #   4. release       — GitHub Release with CHANGELOG notes + artifacts.
 #
 # develop→main promotion is a DELIBERATE, separate PR (operator policy);
 # this pipeline never auto-syncs main.
 #
-# WHY the SIF (operator standardization 2026-06-18, fleet canary 2026-06-21):
-# the Spartan compute runners have NO Python on the bare node, so the old
-# `actions/setup-python@v5` step failed at init ("version 3.x not found for
-# this OS"). The working pytest-matrix CI runs INSIDE the pre-built, reused
-# scitex-ci SIF (`apptainer exec ci-cpu.sif`), which bakes python 3.11/3.12/
-# 3.13 + pip + uv + fd at /opt/venv-<ver>. This release pipeline mirrors that:
-#   - test/build run `bash .github/ci/exec-in-sif.sh <inner>.sh <pyver>`.
-#   - publish CANNOT use pypa/gh-action-pypi-publish (a Docker action; the
-#     compute nodes have no Docker), so it does MANUAL OIDC trusted publishing
-#     inside the SIF (.github/ci/publish-in-sif.sh): GitHub OIDC JWT →
-#     PyPI mint-token → twine upload. Trust config on PyPI is unchanged.
-#   - actions/checkout, upload/download-artifact, codecov are JS actions and
-#     run fine on the self-hosted runner.
-# fail-loud: a missing SIF/shim/interpreter is a HARD error, never a
-# bare-runner fallback.
+# WHY GITHUB-HOSTED (2026-08-09): the operator ruled on 2026-08-05
+# 「スパルタンのCIは全面的にやめましょう」 — stop Spartan CI entirely. Spartan's
+# scheduler queues jobs behind other work, and this is the SHIPPING path, so a
+# queued runner delays a release rather than just a PR check. This repo is
+# public, so GitHub-hosted minutes are free.
 #
-# runs-on driven by repo Actions Variable CI_RUNS_ON; SIF + apptainer paths
-# come from SCITEX_CI_SIF / SCITEX_CI_APPTAINER (same as pytest-matrix).
+# WHAT THIS REPLACED, and why the old rationale no longer holds. The pipeline
+# previously ran every job inside the scitex-ci Apptainer SIF on a Spartan
+# compute node, because those nodes have no Python on the bare runner (so
+# actions/setup-python failed "version not found for this OS") and no Docker
+# (so pypa/gh-action-pypi-publish, a Docker action, could not run — hence a
+# hand-rolled OIDC JWT → PyPI mint-token → twine upload in
+# .github/ci/publish-in-sif.sh). Neither constraint applies on ubuntu-latest:
+# setup-python works, and the standard publish action replaces the manual mint
+# entirely. The SIF's own justification cited the pytest matrix as precedent —
+# and that matrix (pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml) already runs
+# on ubuntu-latest, so the precedent now points the other way.
+#
+# TRUSTED PUBLISHING IS UNCHANGED AND MUST STAY THAT WAY: PyPI matches on
+# (repository, workflow FILENAME, environment name). This file keeps its name
+# and the publish job keeps `environment: pypi`, so the existing PyPI trust
+# configuration continues to match. Renaming either would break publishing at
+# the point of no return — after the tag is pushed.
+#
+# The test/build steps mirror pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml
+# deliberately, including its pip>=25.1 + `--group dev` install with NO `||`
+# fallback chain: dev is a PEP 735 group, not an extra, and a chain starting
+# at `.[all,dev]` would make pip WARN about an unknown extra and still exit 0,
+# so the leg would run with no pytest plugins while looking installed. A gate
+# that cannot fail is not a gate.
 #
 # Manual re-run: the workflow also accepts a `version` input via
 # workflow_dispatch so you can re-publish without re-tagging.
@@ -50,13 +61,9 @@ on:
         required: true
         type: string
 
-env:
-  SCITEX_CI_APPTAINER: ${{ vars.SCITEX_CI_APPTAINER }}
-  SCITEX_CI_SIF: ${{ vars.SCITEX_CI_SIF }}
-
 jobs:
   test:
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["self-hosted","Linux","X64","scitex-ci"]') }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -75,18 +82,26 @@ jobs:
         with:
           ref: ${{ steps.ver.outputs.version }}
           fetch-depth: 0
-      # SIF-based self-hosted test run — mirrors pytest-matrix exactly. No
-      # setup-python (the bare Spartan node has no Python tool cache; that step
-      # failed "version not found for this OS"); no apt fd-install (fd is baked
-      # in the SIF). exec-in-sif.sh apptainer-execs the reused ci-cpu.sif and
-      # run-in-sif.sh layers THIS (tagged) checkout + [all,dev] into a writable
-      # target, then runs pytest. fail-loud on a missing SIF/shim.
-      - name: Run tests in the reused CI SIF (apptainer exec — deps layered, not on the bare runner)
-        run: bash .github/ci/exec-in-sif.sh run-in-sif.sh ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          # pip>=25.1 is REQUIRED, not preferred: `--group` is how the dev
+          # toolchain is requested now that dev is a PEP 735 group, and an
+          # older pip rejects the flag outright (loudly, which is correct).
+          python -m pip install --upgrade pip
+          # `[all]` is the runtime extra; `--group dev` is the toolchain.
+          # No `||` fallback chain, deliberately — see the header.
+          pip install -e ".[all]" --group dev
+      - name: Run tests
+        run: |
+          pytest tests/ --cov=src/scitex_app --cov-report=xml --cov-report=term
 
   build:
     needs: test
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["self-hosted","Linux","X64","scitex-ci"]') }}
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
@@ -103,12 +118,17 @@ jobs:
         with:
           ref: ${{ steps.ver.outputs.version }}
           fetch-depth: 0
-      # Build INSIDE the SIF (no setup-python on the bare Spartan node).
-      # build-in-sif.sh installs the `build` frontend into a writable --target
-      # inside the SIF, then `python -m build` → dist/. fail-loud on empty dist.
-      - name: Build wheel + sdist in the CI SIF (apptainer exec)
-        run: bash .github/ci/exec-in-sif.sh build-in-sif.sh 3.12
-      # upload-artifact is a JS action — runs fine on the self-hosted runner.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build wheel + sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+          # fail-loud: an empty dist/ must stop the pipeline here, not surface
+          # later as a confusing publish or an empty GitHub Release.
+          ls -1 dist/*.whl dist/*.tar.gz >/dev/null
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -116,33 +136,25 @@ jobs:
 
   publish:
     needs: build
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["self-hosted","Linux","X64","scitex-ci"]') }}
+    runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/p/scitex-app
-    # id-token: write is what populates ACTIONS_ID_TOKEN_REQUEST_{TOKEN,URL},
-    # which publish-in-sif.sh uses to mint the OIDC JWT. Keep it.
+    # id-token: write is what lets the publish action exchange a GitHub OIDC
+    # token for a short-lived PyPI token. Keep it.
     permissions:
       id-token: write
     steps:
-      # Need the repo checked out so .github/ci/exec-in-sif.sh +
-      # publish-in-sif.sh are on disk (the build job uploaded only dist/).
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
-      # Manual OIDC trusted publishing INSIDE the SIF — pypa/gh-action-pypi-
-      # publish is a Docker action and the Spartan compute nodes have no Docker.
-      # publish-in-sif.sh: GitHub OIDC JWT (audience=pypi) → PyPI mint-token →
-      # twine upload dist/*. apptainer exec (no --cleanenv) passes the
-      # ACTIONS_ID_TOKEN_REQUEST_* env vars into the SIF. fail-loud at each step.
-      - name: Publish to PyPI via manual OIDC trusted publishing in the SIF
-        run: bash .github/ci/exec-in-sif.sh publish-in-sif.sh 3.12
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
 
   release:
     needs: [build, publish]
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["self-hosted","Linux","X64","scitex-ci"]') }}
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
