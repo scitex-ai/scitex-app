@@ -130,15 +130,44 @@ def test_prefix_is_html_escaped(tmp_path):
     assert "<script>alert(1)</script>" not in served
 
 
-def test_marker_still_emitted_when_document_has_no_head():
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<div>bare fragment</div>",
+        # <header> is NOT <head>. A substring search for "<head" matches it,
+        # which put the marker inside the <header> element instead of at the
+        # front -- findable, so the contract held, but not where the docstring
+        # says. The plain fragment above cannot catch that; this case can.
+        "<html><body><header>nav</header><div>x</div></body></html>",
+        "<html><body><HEADER>nav</HEADER></body></html>",
+    ],
+)
+def test_marker_still_emitted_when_document_has_no_head(html):
     # Arrange — dropping the prefix silently is the exact failure mode
     # this feature exists to remove, so an unusual document must not
     # lose it. A leading <meta> is hoisted into the head by the parser.
-    html = "<div>bare fragment</div>"
     # Act
     injected = _inject_mount_meta(html, EMBEDDED)
     # Assert
     assert injected.startswith(f'<meta name="{MOUNT_META_NAME}"')
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<html><head><title>x</title></head><body></body></html>",
+        '<html><head lang="en"><title>x</title></head><body></body></html>',
+        "<html><HEAD><title>x</title></HEAD><body></body></html>",
+    ],
+)
+def test_real_head_still_receives_the_marker_inside_it(html):
+    # Arrange — the counterpart to the case above: tightening the match
+    # must not stop recognising a genuine <head>, with or without
+    # attributes, in either case.
+    # Act
+    injected = _inject_mount_meta(html, EMBEDDED)
+    # Assert
+    assert injected.lower().index(MOUNT_META_NAME) < injected.lower().index("</head>")
 
 
 def test_headless_document_keeps_its_own_content():
