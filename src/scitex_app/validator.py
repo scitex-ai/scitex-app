@@ -28,8 +28,11 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Required manifest fields
-MANIFEST_REQUIRED_FIELDS = {"name", "slug", "label", "version", "icon"}
+# Required manifest fields. NOTE: `version` is intentionally NOT required — the
+# app version is the single source of truth of the installed `pip_package` (the
+# dist name), read at runtime via importlib.metadata. A hand-written manifest
+# `version` is forbidden (see validate_manifest).
+MANIFEST_REQUIRED_FIELDS = {"name", "slug", "label", "pip_package", "icon"}
 
 # Valid privilege types
 VALID_PRIVILEGE_TYPES = {"filesystem", "network", "api"}
@@ -141,16 +144,24 @@ class AppValidator:
                         f"{', '.join(sorted(missing))}"
                     )
 
+                # The app version is the SINGLE SOURCE OF TRUTH: the installed
+                # package's own version, read at runtime via importlib.metadata
+                # from `pip_package`. A hand-written `version` in the manifest is
+                # FORBIDDEN — it inevitably drifts from the package (2026-07
+                # incident: manifests stuck at "0.14.0" while the packages
+                # shipped 2.25.0 / 0.29.9 / 1.4.2, so every app tile showed a
+                # wrong version). Declare `pip_package` (the dist name) instead.
+                if "version" in manifest:
+                    self._result.add_error(
+                        "manifest.json must NOT declare 'version' — it drifts "
+                        "from the package. The version is derived at runtime "
+                        "from the installed 'pip_package' (importlib.metadata). "
+                        "Remove the 'version' key."
+                    )
+
                 # Validate field types
                 if "name" in manifest and not isinstance(manifest["name"], str):
                     self._result.add_error("manifest.name must be a string")
-                if "version" in manifest and not re.match(
-                    r"^\d+\.\d+\.\d+", str(manifest["version"])
-                ):
-                    self._result.add_warning(
-                        f"manifest.version '{manifest['version']}' "
-                        "doesn't follow semver"
-                    )
 
                 self._result.privileges = manifest.get("privileges", [])
                 return

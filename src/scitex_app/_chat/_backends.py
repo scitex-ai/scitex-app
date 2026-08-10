@@ -100,12 +100,54 @@ class LiteLLMChatBackend:
             yield {"type": "error", "error": str(e)}
 
 
+_DEFAULT_LLM_MODEL = "anthropic/claude-sonnet-4-20250514"
+
+
+def _resolve_default_model() -> str:
+    """Return the configured default LLM model id.
+
+    ``SCITEX_APP_LLM_MODEL`` is the supported name. ``LLM_MODEL`` is a
+    DEPRECATED alias kept because it was a published contract (documented in
+    the environment-vars skill), so it is migrated rather than renamed: it
+    still works and warns. The unprefixed name is being retired because it is
+    generic enough to collide with any other tool in the same environment,
+    which would silently change which model a user talks to.
+
+    Precedence is prefixed-over-legacy, so a user midway through the
+    migration who has BOTH set gets the new one and a warning naming the
+    conflict -- never a silent pick.
+    """
+    prefixed = os.getenv("SCITEX_APP_LLM_MODEL")
+    legacy = os.getenv("LLM_MODEL")
+    if prefixed:
+        if legacy and legacy != prefixed:
+            logger.warning(
+                "Both SCITEX_APP_LLM_MODEL and the deprecated LLM_MODEL are "
+                "set and they disagree (%r vs %r). Using SCITEX_APP_LLM_MODEL; "
+                "unset LLM_MODEL to silence this.",
+                prefixed,
+                legacy,
+            )
+        return prefixed
+    if legacy:
+        logger.warning(
+            "LLM_MODEL is deprecated and will be removed; rename it to "
+            "SCITEX_APP_LLM_MODEL (same value, %r).",
+            legacy,
+        )
+        return legacy
+    return _DEFAULT_LLM_MODEL
+
+
 def get_chat_backend(
     model: Optional[str] = None,
 ) -> "AnthropicChatBackend | LiteLLMChatBackend":
     """Auto-detect and return the best available chat backend.
 
     Priority: Anthropic SDK (if key set) > LiteLLM > error.
+
+    The default model comes from ``SCITEX_APP_LLM_MODEL``; see
+    :func:`_resolve_default_model` for the deprecated ``LLM_MODEL`` alias.
     """
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if api_key:
@@ -123,8 +165,7 @@ def get_chat_backend(
         import litellm  # noqa: F401
 
         return LiteLLMChatBackend(
-            default_model=model
-            or os.getenv("LLM_MODEL", "anthropic/claude-sonnet-4-20250514"),
+            default_model=model or _resolve_default_model(),
         )
     except ImportError:
         pass

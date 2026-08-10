@@ -171,7 +171,10 @@ def _manifest_json(
         "slug": slug,
         "label": label,
         "app_name": name,
-        "version": "0.1.0",
+        # SSoT: the app version derives at runtime from the installed
+        # `pip_package` (the dist name) via importlib.metadata. A hand-written
+        # `version` is forbidden by the validator — declare `pip_package`.
+        "pip_package": slug,
         "icon": icon,
         "subtitle": desc[:80],
         "about": desc[:200],

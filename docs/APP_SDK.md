@@ -157,11 +157,11 @@ All cloud modules auto-configure from `SCITEX_API_TOKEN` and `SCITEX_API_URL` en
 `scitex_app._chat` provides Server-Sent Events streaming for app AI features:
 
 ```python
-from scitex_app.chat import stream_response
+from scitex_app import chat
 
 # In a Django view
 def my_chat_view(request):
-    return stream_response(request, backend="openai", model="gpt-4")
+    return chat.stream_response(request, backend="openai", model="gpt-4")
 ```
 
 ## App Validation Pipeline

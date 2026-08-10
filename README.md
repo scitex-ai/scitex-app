@@ -232,7 +232,7 @@ scitex (orchestrator, core compute, CLI, MCP)
 - App scaffolding, validation, and submission (`scitex-app app init/validate/submit`)
 - Dev-install workflow (`scitex-app app dev-install`)
 - `FilesBackend` protocol and implementations (filesystem, cloud, custom)
-- `ScitexAppConfig` Django base class (`from scitex_app._django import ScitexAppConfig`)
+- `ScitexAppConfig` Django base class (`from scitex_app.embed import ScitexAppConfig`)
 - `AppValidator` for security and privilege checking
 - Path resolution utilities for project/workspace discovery
 

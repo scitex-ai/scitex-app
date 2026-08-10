@@ -253,23 +253,38 @@ def main(ctx):
 @click.option("--port", "-p", default=8050, help="Server port")
 @click.option("--host", "-h", default="127.0.0.1", help="Host to bind")
 @click.option("--no-browser", is_flag=True, help="Don't open browser")
-@click.option("--force", is_flag=True, help="Kill existing process on port")
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Stop a previous instance of this app's own GUI, then serve.",
+)
 def gui(port, host, no_browser, force):
-    """Launch standalone GUI with workspace shell."""
-    if force:
-        import subprocess
-        subprocess.run(
-            ["fuser", "-k", f"{{port}}/tcp"],
-            capture_output=True,
+    """Launch standalone GUI with workspace shell.
+
+    Binds exactly --port, or fails loud with the process holding it --
+    never silently drifts to the next free port. Refuses a second
+    instance of this app's own GUI unless --force is given; --force
+    never kills a process it does not own.
+    """
+    import functools
+
+    from scitex_app.embed import run_standalone, serve_gui
+
+    raise SystemExit(
+        serve_gui(
+            "{slug}",
+            ".",
+            port,
+            host,
+            force,
+            functools.partial(
+                run_standalone,
+                app_module="{name}",
+                port=port,
+                host=host,
+                open_browser=not no_browser,
+            ),
         )
-
-    from scitex_app._standalone import run_standalone
-
-    run_standalone(
-        app_module="{name}",
-        port=port,
-        host=host,
-        open_browser=not no_browser,
     )
 '''
 
