@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -101,6 +102,11 @@ class ScitexAppConfig(AppConfig):
 #: Client code reads this to build API URLs that work under any mount.
 MOUNT_META_NAME = "stx-mount"
 
+#: The <head> opening tag, and NOT <header>. The delimiter after the name is
+#: required, so `<header` cannot match: `<head>`, `<head lang="en">` do, and
+#: the search stops at that tag's own closing `>`.
+_HEAD_OPEN_TAG = re.compile(r"<head(?:\s[^>]*)?>", re.IGNORECASE)
+
 
 def _inject_mount_meta(html: str, mount_prefix: str) -> str:
     """Return `html` with a <meta> carrying `mount_prefix` in its head.
@@ -114,14 +120,17 @@ def _inject_mount_meta(html: str, mount_prefix: str) -> str:
     When there is no <head> the tag is prepended instead. That is still
     correct — the HTML parser hoists a leading <meta> into the head — and
     it means the prefix is never silently dropped for an unusual document.
+
+    The opening tag is matched as `<head>` or `<head ...>` specifically.
+    A plain substring search for "<head" also matches `<header`, which put
+    the marker inside a <header> element for documents that have one and no
+    real head. The tag stayed findable, so the contract held, but the
+    placement contradicted the paragraph above.
     """
     tag = f'<meta name="{MOUNT_META_NAME}" content="{escape(mount_prefix)}">'
-    lowered = html.lower()
-    head_open = lowered.find("<head")
-    if head_open != -1:
-        insert_at = lowered.find(">", head_open)
-        if insert_at != -1:
-            return html[: insert_at + 1] + tag + html[insert_at + 1 :]
+    match = _HEAD_OPEN_TAG.search(html)
+    if match:
+        return html[: match.end()] + tag + html[match.end() :]
     return tag + html
 
 
