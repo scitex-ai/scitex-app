@@ -16,7 +16,7 @@ tags: [scitex-app-manifest-schema]
   "slug": "my-awesome-app",
   "label": "My Awesome App",
   "app_name": "my_awesome_app",
-  "version": "0.1.0",
+  "pip_package": "my-awesome-app",
   "icon": "fas fa-flask",
   "subtitle": "Short subtitle (80 chars max)",
   "about": "Longer about text (200 chars max)",
@@ -62,8 +62,23 @@ tags: [scitex-app-manifest-schema]
 
 ## Required fields
 
-`name`, `slug`, `label`, `version`, `icon` — missing any causes a
+`name`, `slug`, `label`, `pip_package`, `icon` — missing any causes a
 validation error.
+
+`pip_package` is the **dist name** of the installed pip package that
+backs this app (e.g. `my-awesome-app`). It is the SINGLE SOURCE OF
+TRUTH for the app version: the version is read at runtime from the
+installed package via `importlib.metadata.version(pip_package)` — never
+hand-written.
+
+## Forbidden fields
+
+`version` — **do NOT** declare a `version` in `manifest.json`. A
+hand-written version inevitably drifts from the package it ships in
+(2026-07 incident: manifests were stuck at `0.14.0` while the packages
+had already shipped `2.25.0` / `0.29.9` / `1.4.2`, so every app tile in
+scitex-hub showed a wrong version). The validator **rejects** any
+manifest that declares `version`; derive it from `pip_package` instead.
 
 ## Privilege types and valid scopes
 

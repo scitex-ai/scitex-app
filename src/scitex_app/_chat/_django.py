@@ -5,12 +5,12 @@
 Usage::
 
     # In your Django app's urls.py:
-    from scitex_app.chat import chat_urlpatterns
-    urlpatterns += chat_urlpatterns
+    from scitex_app import chat
+    urlpatterns += chat.chat_urlpatterns
 
     # Or mount directly:
-    from scitex_app.chat import chat_stream_view
-    path("api/chat/stream", chat_stream_view, name="chat-stream"),
+    from scitex_app import chat
+    path("api/chat/stream", chat.chat_stream_view, name="chat-stream"),
 """
 
 from __future__ import annotations

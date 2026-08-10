@@ -74,7 +74,7 @@ files = get_files(backend="s3", bucket="my-bucket")
 
 ```python
 # myapp/_django/apps.py
-from scitex_app._django import ScitexAppConfig
+from scitex_app.embed import ScitexAppConfig
 
 class MyAppConfig(ScitexAppConfig):
     name = "myapp._django"
@@ -96,7 +96,7 @@ class MyAppConfig(ScitexAppConfig):
 ```python
 # myapp/_django/views.py
 from pathlib import Path
-from scitex_app._django import scitex_editor_page, scitex_api_dispatch
+from scitex_app.embed import scitex_editor_page, scitex_api_dispatch
 
 STATIC_DIR = Path(__file__).parent / "static" / "myapp"
 
@@ -128,7 +128,7 @@ api_dispatch = scitex_api_dispatch(
 
 ```python
 # myapp/_django/urls.py
-from scitex_app._django import scitex_urlpatterns
+from scitex_app.embed import scitex_urlpatterns
 from . import views
 
 urlpatterns = scitex_urlpatterns(views)

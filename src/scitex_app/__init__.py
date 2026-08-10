@@ -89,6 +89,7 @@ __all__ = [
     "scaffold",
     "validate",
     "chat",
+    "embed",
     "paths",
     # `validator` is the legacy submodule re-export (still kept for
     # back-compat); the function `validate` above is the flat-API
@@ -110,6 +111,10 @@ def __getattr__(name: str):
             from . import _chat
 
             return _chat
+        if name == "embed":
+            from . import embed as _embed
+
+            return _embed
         if name == "paths":
             from . import paths as _paths
 

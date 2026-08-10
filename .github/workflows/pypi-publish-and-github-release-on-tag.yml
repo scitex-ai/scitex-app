@@ -1,20 +1,52 @@
 name: release
 
-# Tag-driven release pipeline. The intended operator flow is:
+# Tag-driven release pipeline — GITHUB-HOSTED (ubuntu-latest).
+#
+# The intended operator flow is:
 #
 #     git tag vX.Y.Z && git push origin vX.Y.Z
 #
 # Everything else fires automatically:
 #
-#   1. test          — matrix pytest. Must pass or the pipeline halts;
-#                      nothing is published until tests are green on the
-#                      tagged commit.
-#   2. build         — wheel + sdist, uploaded as workflow artifact.
-#   3. publish       — PyPI via OIDC trusted publisher.
+#   1. test          — matrix pytest. Must pass or the pipeline halts; nothing
+#                      is published until tests are green on the tagged commit.
+#   2. build         — wheel + sdist, uploaded as artifact.
+#   3. publish       — PyPI via trusted publishing (pypa/gh-action-pypi-publish).
 #   4. release       — GitHub Release with CHANGELOG notes + artifacts.
-#   5. sync-main     — open a develop→main PR (admin-merge) so main
-#                      always equals the latest released commit. Skipped
-#                      if main already matches.
+#
+# develop→main promotion is a DELIBERATE, separate PR (operator policy);
+# this pipeline never auto-syncs main.
+#
+# WHY GITHUB-HOSTED (2026-08-09): the operator ruled on 2026-08-05
+# 「スパルタンのCIは全面的にやめましょう」 — stop Spartan CI entirely. Spartan's
+# scheduler queues jobs behind other work, and this is the SHIPPING path, so a
+# queued runner delays a release rather than just a PR check. This repo is
+# public, so GitHub-hosted minutes are free.
+#
+# WHAT THIS REPLACED, and why the old rationale no longer holds. The pipeline
+# previously ran every job inside the scitex-ci Apptainer SIF on a Spartan
+# compute node, because those nodes have no Python on the bare runner (so
+# actions/setup-python failed "version not found for this OS") and no Docker
+# (so pypa/gh-action-pypi-publish, a Docker action, could not run — hence a
+# hand-rolled OIDC JWT → PyPI mint-token → twine upload in
+# .github/ci/publish-in-sif.sh). Neither constraint applies on ubuntu-latest:
+# setup-python works, and the standard publish action replaces the manual mint
+# entirely. The SIF's own justification cited the pytest matrix as precedent —
+# and that matrix (pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml) already runs
+# on ubuntu-latest, so the precedent now points the other way.
+#
+# TRUSTED PUBLISHING IS UNCHANGED AND MUST STAY THAT WAY: PyPI matches on
+# (repository, workflow FILENAME, environment name). This file keeps its name
+# and the publish job keeps `environment: pypi`, so the existing PyPI trust
+# configuration continues to match. Renaming either would break publishing at
+# the point of no return — after the tag is pushed.
+#
+# The test/build steps mirror pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml
+# deliberately, including its pip>=25.1 + `--group dev` install with NO `||`
+# fallback chain: dev is a PEP 735 group, not an extra, and a chain starting
+# at `.[all,dev]` would make pip WARN about an unknown extra and still exit 0,
+# so the leg would run with no pytest plugins while looking installed. A gate
+# that cannot fail is not a gate.
 #
 # Manual re-run: the workflow also accepts a `version` input via
 # workflow_dispatch so you can re-publish without re-tagging.
@@ -31,7 +63,7 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["self-hosted","Linux","X64","scitex-ci"]') }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -50,24 +82,26 @@ jobs:
         with:
           ref: ${{ steps.ver.outputs.version }}
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install (best-effort fallback chain)
+      - name: Install dependencies
         run: |
+          # pip>=25.1 is REQUIRED, not preferred: `--group` is how the dev
+          # toolchain is requested now that dev is a PEP 735 group, and an
+          # older pip rejects the flag outright (loudly, which is correct).
           python -m pip install --upgrade pip
-          pip install -e ".[all,dev]" || pip install -e ".[dev]" || pip install -e .
-      - name: Run pytest
+          # `[all]` is the runtime extra; `--group dev` is the toolchain.
+          # No `||` fallback chain, deliberately — see the header.
+          pip install -e ".[all]" --group dev
+      - name: Run tests
         run: |
-          if [ -d tests ]; then
-            pytest tests/ -x
-          else
-            echo "no tests/ directory — skipping pytest"
-          fi
+          pytest tests/ --cov=src/scitex_app --cov-report=xml --cov-report=term
 
   build:
     needs: test
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["self-hosted","Linux","X64","scitex-ci"]') }}
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
@@ -84,13 +118,17 @@ jobs:
         with:
           ref: ${{ steps.ver.outputs.version }}
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install build tools
-        run: pip install build
-      - name: Build distribution
-        run: python -m build
+      - name: Build wheel + sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+          # fail-loud: an empty dist/ must stop the pipeline here, not surface
+          # later as a confusing publish or an empty GitHub Release.
+          ls -1 dist/*.whl dist/*.tar.gz >/dev/null
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -98,10 +136,12 @@ jobs:
 
   publish:
     needs: build
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["self-hosted","Linux","X64","scitex-ci"]') }}
+    runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/p/scitex-app
+    # id-token: write is what lets the publish action exchange a GitHub OIDC
+    # token for a short-lived PyPI token. Keep it.
     permissions:
       id-token: write
     steps:
@@ -109,11 +149,12 @@ jobs:
         with:
           name: dist
           path: dist
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
 
   release:
     needs: [build, publish]
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["self-hosted","Linux","X64","scitex-ci"]') }}
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
@@ -144,41 +185,3 @@ jobs:
             --title "${{ needs.build.outputs.version }}" \
             --notes-file release-notes.md \
             dist/*
-
-  sync-main:
-    # Open develop→main PR so main always equals the latest released
-    # commit. Branch-protected mains require PR review; this job tries
-    # admin-merge but leaves the PR open if that isn't allowed.
-    needs: publish
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["self-hosted","Linux","X64","scitex-ci"]') }}
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: develop
-      - name: Open develop→main PR if diverged
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -e
-          git fetch origin main
-          AHEAD=$(git rev-list --count origin/main..origin/develop)
-          if [ "$AHEAD" -eq 0 ]; then
-            echo "main already up-to-date with develop."
-            exit 0
-          fi
-          EXISTING=$(gh pr list --base main --head develop --state open --json number --jq '.[0].number // empty')
-          if [ -z "$EXISTING" ]; then
-            PR_URL=$(gh pr create --base main --head develop \
-              --title "release: sync main with develop" \
-              --body "Auto-opened by the release pipeline so main equals the latest released commit.")
-            EXISTING=$(echo "$PR_URL" | grep -oE '[0-9]+$')
-            echo "Created PR #${EXISTING}"
-          else
-            echo "Reusing existing PR #${EXISTING}"
-          fi
-          gh pr merge "$EXISTING" --merge --admin \
-            || echo "Admin merge unavailable; PR left open for manual merge."

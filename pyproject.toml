@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "scitex-app"
-version = "0.2.11"
+version = "0.6.1"
 description = "SciTeX App SDK — write-once interface for local + cloud apps"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -15,37 +15,52 @@ keywords = ["scitex", "app-sdk", "files", "storage", "cloud", "local"]
 # click + rich are runtime deps for the canonical CLI surface
 # (scripts entry-point `scitex-app = "scitex_app._cli:main"` imports
 # them at module top). Importing scitex_app._cli without them blew
-# up CI when the [dev,cli] extra-install hit a resolver fallback.
+# up CI when the extra-install hit a resolver fallback.
+# scitex-config's local_state.runtime_path() is what _gui_runtime.py
+# uses to resolve the fleet-standard runtime-state-db path
+# (<proj-root>/.scitex/<pkg-short>/runtime/...) for the shared GUI
+# launcher's state file -- needed unconditionally, not just under [dev].
 dependencies = [
     "click>=8.0.0",
     "rich>=13.0.0",
+    "scitex-config>=0.3.6",
 ]
 
+# Extras are all-or-nothing (operator directive, 2026-07-13): one [all]
+# extra, no fine-grained menu. A fine-grained extra that goes empty
+# silently (e.g. the former `cli = []` after click/rich moved to base
+# `dependencies`) turns an install-this-extra hint into a no-op that
+# looks like a fix but installs nothing -- worse than no hint, since the
+# user believes they already tried it (scitex-writer PR #322 incident).
+#
+# `all` is the ONLY public extra, and it is USER-facing: `pip install
+# scitex-app[all]` must give every runtime capability and NO toolchain.
+# That is why dev/docs are dependency-groups below and not extras --
+# see the comment there. PS-221 (every public extra must be a subset of
+# `all`) is therefore satisfied trivially: `all` is the only member.
 [project.optional-dependencies]
-chat = [
-    "anthropic>=0.25.0",
-]
-chat-all = [
+all = [
     "anthropic>=0.25.0",
     "litellm>=1.0.0",
-]
-cli = [
-    # click + rich are also in base `dependencies`; this extra re-lists
-    # them so `pip install scitex-app[cli]` (the documented install
-    # remedy) stays a working, non-empty backwards-compat alias
-    # (PS-214/PS-215: an empty extra makes the remedy a no-op).
-    "click>=8.0.0",
-    "rich>=13.0.0",
-]
-cloud = [
     "requests>=2.28.0",
-]
-django = [
     "django>=4.2",
-]
-mcp = [
     "fastmcp>=2.0.0",
 ]
+
+# PEP 735 dependency groups -- NOT installable via `pip install pkg[dev]`,
+# by design. These are for BUILDING the package, not using it (operator
+# directive, 2026-07-13, quoted above).
+#
+# They were `[project.optional-dependencies]` until 2026-08-03. As extras
+# they were PUBLIC, so PS-221 required them to be a subset of `all`, which
+# would have put pytest/sphinx/scitex-dev into every user's environment
+# that ran the documented "give me everything" install. The rule was right
+# and the mechanism could not express the intent; groups can. PS-221 keeps
+# full force over `[project.optional-dependencies]`, which still holds the
+# one extra it was written to police.
+#
+# Install with: pip install -e . --group dev   (pip >= 25.1)
+[dependency-groups]
 dev = [
     "anthropic>=0.25.0",
     "click>=8.0.0",
@@ -66,18 +81,6 @@ docs = [
     "myst-parser>=2.0",
     "sphinx-copybutton>=0.5",
     "sphinx-autodoc-typehints>=1.25",
-]
-all = [
-    "scitex-app[chat]",
-    "scitex-app[chat-all]",
-    "scitex-app[cli]",
-    "scitex-app[cloud]",
-    "scitex-app[django]",
-    "scitex-app[mcp]",
-    # PS-221 closure: every public extra is a subset of `all`, so
-    # `pip install scitex-app[all]` pulls everything public.
-    "scitex-app[dev]",
-    "scitex-app[docs]",
 ]
 
 [project.scripts]
@@ -110,6 +113,39 @@ concurrency = ["multiprocessing", "thread"]
 
 [tool.scitex-linter]
 library_dirs = ["src", "tests", "examples"]
+
+[tool.scitex_dev]
+# §6 MCP-tool <-> Python-API parity exemption (scitex-dev
+# _mcp_parity.py). scitex-app's public surface is a mix: agent-actionable
+# file/app-ops functions already have full MCP mirrors (app_read_file,
+# app_scaffold, app_validate, ...), but scitex_app.embed exposes Django
+# HOST-INTEGRATION primitives (run_standalone, scitex_api_dispatch,
+# scitex_editor_page, scitex_urlpatterns) that are structurally not
+# MCP-tool-shaped: run_standalone blocks forever running a dev webserver
+# (would hang an MCP call), and the other three are wiring-time factory
+# functions returning non-JSON-serializable callables, used at
+# urls.py/views.py import time — not agent-invocable actions. This is the
+# same false-positive shape §6 already exempts for classes (see
+# _mcp_parity.py docstring); functions used purely as framework
+# integration points hit the same false positive. Package-level exemption
+# because these primitives are threaded through scitex_app.embed by
+# design, not a one-off oversight.
+mcp_parity_exempt = true
+
+# §6a — per-package env-var allowlist. ONE entry, an EXACT name (not a
+# prefix), for a var that is being REMOVED.
+#
+# `LLM_MODEL` is operator-facing and predates the SCITEX_APP_* convention, so
+# it is migrated rather than renamed (constitution §3: a published contract is
+# a MIGRATION -- alias first, then remove). `SCITEX_APP_LLM_MODEL` is the
+# supported name and takes precedence; `LLM_MODEL` still works and logs a
+# deprecation warning, which is the only reason `os.getenv("LLM_MODEL")`
+# survives in _chat/_backends.py for §6a to find.
+#
+# DELETE THIS ENTRY when the alias is removed. It is scoped to the exact
+# legacy name on purpose: a prefix entry would also silence any NEW unprefixed
+# var, which is exactly the "catch-all noise silencer" the rule warns against.
+env_allowlist = ["LLM_MODEL"]
 
 [tool.scitex_dev.audit]
 # PS-168 — Per-package secret + env-var prefix in GitHub Actions workflows.

@@ -8,22 +8,12 @@ Basic
 
    pip install scitex-app
 
-CLI support
------------
-
-.. code-block:: bash
-
-   pip install scitex-app[cli]
-
-MCP support
------------
-
-.. code-block:: bash
-
-   pip install scitex-app[mcp]
+``click``, ``rich``, and ``scitex-config`` are base dependencies, always installed.
 
 All features
 ------------
+
+Chat (anthropic/litellm), cloud, Django integration, and MCP tools:
 
 .. code-block:: bash
 
@@ -36,4 +26,10 @@ Development
 
    git clone git@github.com:ywatanabe1989/scitex-app.git
    cd scitex-app
-   pip install -e ".[dev]"
+   python -m pip install --upgrade pip
+   pip install -e ".[all]" --group dev
+
+``dev`` and ``docs`` are PEP 735 dependency groups, not extras, so they are
+requested with ``--group`` (pip 25.1+) and are not installable as ``.[dev]``.
+They build the package rather than use it, which is why they stay out of
+``pip install scitex-app[all]``.

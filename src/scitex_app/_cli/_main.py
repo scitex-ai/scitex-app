@@ -12,7 +12,8 @@ except ImportError:
 
     def main(argv=None):
         print(
-            "ERROR: click is not installed. Install with: pip install scitex-app[cli]",
+            "ERROR: click is not installed (a base scitex-app dependency)."
+            " Reinstall with: pip install scitex-app",
             file=sys.stderr,
         )
         raise SystemExit(1)

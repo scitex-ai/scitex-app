@@ -8,16 +8,22 @@ Provides:
 - Django view that any app can mount
 - Chat session models and CRUD views
 
+``chat`` is exposed on the ``scitex_app`` package via a lazy
+``__getattr__`` (PEP 562), not as a real importable submodule — so
+``from scitex_app.chat import X`` raises ``ModuleNotFoundError``. Use
+the bare ``from scitex_app import chat`` form (which does trigger the
+package's ``__getattr__``), then attribute-access from there.
+
 Usage (Django)::
 
     # urls.py
-    from scitex_app.chat import chat_urlpatterns
-    urlpatterns += chat_urlpatterns
+    from scitex_app import chat
+    urlpatterns += chat.chat_urlpatterns
 
 Usage (standalone)::
 
-    from scitex_app.chat import stream_chat
-    for event in stream_chat("Hello", system_prompt="You are helpful."):
+    from scitex_app import chat
+    for event in chat.stream_chat("Hello", system_prompt="You are helpful."):
         print(event)
 """
 

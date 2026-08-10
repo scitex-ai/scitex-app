@@ -1,7 +1,7 @@
 ---
 description: |
   [TOPIC] scitex-app Installation
-  [DETAILS] pip install scitex-app; zero runtime deps (stdlib SDK); smoke verify with scitex-app version + app init.
+  [DETAILS] pip install scitex-app; small base deps (click/rich/scitex-config); pip install scitex-app[all] for chat/cloud/django/mcp; smoke verify with scitex-app version + app init.
 tags: [scitex-app-installation]
 ---
 
@@ -13,14 +13,17 @@ tags: [scitex-app-installation]
 pip install scitex-app
 ```
 
-Pure Python, **zero runtime dependencies**. The SDK uses only the
-standard library so it can run inside locked-down workspace
-environments.
+Base dependencies (`click`, `rich`, `scitex-config`) are small and
+runtime-agnostic — the file-ops SDK core still runs anywhere.
 
-## Optional MCP extra
+## Optional extras
+
+Extras are all-or-nothing — one `[all]` extra covers chat (anthropic/
+litellm), cloud (requests), Django integration, and MCP tools
+(fastmcp):
 
 ```bash
-pip install 'scitex-app[mcp]'         # AI-agent MCP tools
+pip install 'scitex-app[all]'
 ```
 
 ## Umbrella

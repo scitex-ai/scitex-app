@@ -5,8 +5,8 @@ Provides a minimal Django server with the full workspace shell
 
 Any app can use this to run locally with the same UX as scitex-hub:
 
-    from scitex_app._standalone import run_standalone
-    run_standalone(app_module="figrecipe._django", port=5050)
+    from scitex_app.embed import run_standalone
+    run_standalone(app_module="figrecipe._django")
 """
 
 from __future__ import annotations
@@ -79,7 +79,18 @@ def run_standalone(
     if desktop:
         try:
             import webview
-
+        except ImportError:
+            print(
+                "pywebview not installed. Falling back to browser.\n"
+                "Install with: pip install pywebview"
+            )
+            if open_browser:
+                threading.Timer(1.5, webbrowser.open, args=[url]).start()
+        else:
+            # Guard narrowed to the optional import only: a failure inside
+            # webview.create_window/start must propagate, not be mistaken
+            # for "pywebview not installed" and silently downgrade to a
+            # shell-less server (scitex-writer _server.run(), fixed 2.30.0).
             threading.Thread(
                 target=_run_server, args=(host, port, hot_reload), daemon=True
             ).start()
@@ -90,13 +101,6 @@ def run_standalone(
             webview.create_window("SciTeX App", url, width=1400, height=900)
             webview.start()
             return
-        except ImportError:
-            print(
-                "pywebview not installed. Falling back to browser.\n"
-                "Install with: pip install pywebview"
-            )
-            if open_browser:
-                threading.Timer(1.5, webbrowser.open, args=[url]).start()
 
     _run_server(host, port, hot_reload)
 
