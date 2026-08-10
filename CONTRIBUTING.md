@@ -26,8 +26,15 @@ See [CLA.md](CLA.md) for full details.
 ```bash
 git clone git@github.com:ywatanabe1989/scitex-app.git
 cd scitex-app
-pip install -e ".[dev]"
+python -m pip install --upgrade pip   # --group needs pip >= 25.1
+pip install -e ".[all]" --group dev
 ```
+
+`dev` and `docs` are [PEP 735](https://peps.python.org/pep-0735/) dependency
+groups, not extras, so they are requested with `--group` and are *not*
+installable as `.[dev]`. That is deliberate: they build the package rather than
+use it, so they must stay out of `pip install scitex-app[all]`, which is the
+user-facing install. Use `--group docs` to build the documentation.
 
 ## Branch Workflow
 

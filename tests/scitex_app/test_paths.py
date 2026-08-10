@@ -386,4 +386,368 @@ class TestValidateProjectStructure:
         assert ok is False
 
 
+# ---------------------------------------------------------------------------
+# Path containment
+#
+# Every refusal below is PAIRED with a positive control, because a negative
+# assertion passes for free when the thing it looks for cannot exist at all.
+# For the symlink cases the control is stronger than "a valid input still
+# works": it first proves the escape target really is reachable and readable
+# THROUGH the planted link, so "it was refused" is a statement about the
+# containment check and not about a link that never resolved anywhere.
+# ---------------------------------------------------------------------------
+
+
+def require(condition: bool, message: str) -> None:
+    """Fail the test if a HARNESS PRECONDITION does not hold.
+
+    Not an assertion about the code under test -- it checks that the payload
+    this test plants is actually reachable, so that a later ``None`` means
+    "the containment check refused it" and not "the target never existed".
+    That distinction is the whole reason these tests are trustworthy: the
+    first measurement of these defects reported three PASSes that were really
+    non-existent targets, and an instrument that did not run is not a clean
+    negative.
+
+    Deliberately raises instead of asserting, so each test keeps exactly ONE
+    assertion (STX-TQ007) -- when a test fails you learn immediately whether
+    the CONTRACT broke or the harness did.
+    """
+    if not condition:
+        raise RuntimeError(f"harness precondition failed: {message}")
+
+
+@pytest.fixture
+def escape_target(tmp_path):
+    """A real, readable directory tree OUTSIDE the base dir.
+
+    Returns ``(root, outside)``. ``root`` is the base dir handed to the
+    functions under test; ``outside`` is its sibling, holding content that a
+    successful traversal would expose.
+    """
+    root = tmp_path / "root"
+    (root / "data" / "users").mkdir(parents=True)
+    (root / "data" / "projects").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    return root, outside
+
+
+class TestParseDevModuleNameRefusesUnsafeSegments:
+    def test_dotdot_segments_are_refused(self):
+        # Arrange
+        module_name = "dev__..__.."
+        # Act
+        result = parse_dev_module_name(module_name)
+        # Assert
+        assert result is None
+
+    def test_slash_in_segment_is_refused(self):
+        # Arrange
+        module_name = "dev__a/b__c"
+        # Act
+        result = parse_dev_module_name(module_name)
+        # Assert
+        assert result is None
+
+    def test_backslash_in_segment_is_refused(self):
+        # Arrange
+        module_name = "dev__alice__..\\..\\etc"
+        # Act
+        result = parse_dev_module_name(module_name)
+        # Assert
+        assert result is None
+
+    def test_nul_byte_in_segment_is_refused(self):
+        # Arrange
+        module_name = "dev__alice__myapp\0.png"
+        # Act
+        result = parse_dev_module_name(module_name)
+        # Assert
+        assert result is None
+
+    def test_single_dot_segment_is_refused(self):
+        # Arrange
+        module_name = "dev__.__myapp"
+        # Act
+        result = parse_dev_module_name(module_name)
+        # Assert
+        assert result is None
+
+    def test_empty_segment_is_refused(self):
+        # Arrange
+        module_name = "dev____myapp"
+        # Act
+        result = parse_dev_module_name(module_name)
+        # Assert
+        assert result is None
+
+    def test_positive_control_ordinary_name_still_parses(self):
+        # Arrange
+        module_name = "dev__alice__myapp"
+        # Act
+        result = parse_dev_module_name(module_name)
+        # Assert
+        assert result == ("alice", "myapp")
+
+    def test_positive_control_dotted_name_still_parses(self):
+        # Arrange
+        module_name = "dev__alice.b__my.app"
+        # Act
+        result = parse_dev_module_name(module_name)
+        # Assert
+        assert result == ("alice.b", "my.app")
+
+
+class TestResolveUserProjectDirContainment:
+    def test_dotdot_owner_and_repo_are_refused(self, escape_target):
+        # Arrange
+        root, _outside = escape_target
+        # Act
+        result = resolve_user_project_dir("..", "..", base_dir=root)
+        # Assert
+        assert result is None
+
+    def test_traversal_owner_reaching_another_tenant_is_refused(
+        self, escape_target
+    ):
+        # Arrange
+        root, _outside = escape_target
+        victim = root / "data" / "users" / "bob" / "proj" / "myapp"
+        victim.mkdir(parents=True)
+        require(victim.is_dir(), "victim.is_dir()")
+        # Act
+        result = resolve_user_project_dir("alice/../bob", "myapp", base_dir=root)
+        # Assert
+        assert result is None
+
+    def test_positive_control_that_tenant_is_reachable_under_its_own_name(
+        self, escape_target
+    ):
+        # Arrange
+        root, _outside = escape_target
+        victim = root / "data" / "users" / "bob" / "proj" / "myapp"
+        victim.mkdir(parents=True)
+        # Act
+        result = resolve_user_project_dir("bob", "myapp", base_dir=root)
+        # Assert
+        assert result == victim
+
+    def test_absolute_owner_is_refused(self, escape_target):
+        # Arrange
+        root, outside = escape_target
+        (outside / "proj" / "myapp").mkdir(parents=True)
+        # Act
+        result = resolve_user_project_dir(str(outside), "myapp", base_dir=root)
+        # Assert
+        assert result is None
+
+    def test_symlinked_owner_dir_pointing_outside_root_is_refused(
+        self, escape_target
+    ):
+        # Arrange
+        root, outside = escape_target
+        target = outside / "alice" / "proj" / "myapp"
+        target.mkdir(parents=True)
+        (target / "manifest.json").write_text('{"secret": "leaked"}')
+        link = root / "data" / "users" / "alice"
+        link.symlink_to(outside / "alice", target_is_directory=True)
+        require(link.resolve() == (outside / "alice").resolve(), "link.resolve() == (outside / 'alice').resolve()")
+        require(not str(link.resolve()).startswith(str(root.resolve())), "not str(link.resolve()).startswith(str(root.resolve()))")
+        require((link / "proj" / "myapp").is_dir(), "(link / 'proj' / 'myapp').is_dir()")
+        require("leaked" in (link / "proj" / "myapp" / "manifest.json").read_text(), "'leaked' in (link / 'proj' / 'myapp' / 'manifest.json').read_text()")
+        # Act
+        result = resolve_user_project_dir("alice", "myapp", base_dir=root)
+        # Assert
+        assert result is None
+
+    def test_positive_control_real_dir_in_same_layout_still_resolves(
+        self, escape_target
+    ):
+        # Arrange
+        root, _outside = escape_target
+        proj = root / "data" / "users" / "alice" / "proj" / "myapp"
+        proj.mkdir(parents=True)
+        # Act
+        result = resolve_user_project_dir("alice", "myapp", base_dir=root)
+        # Assert
+        assert result == proj
+
+
+class TestResolvePublishedProjectDirContainment:
+    def test_traversal_slug_reaching_the_users_tree_is_refused(
+        self, escape_target
+    ):
+        # Arrange
+        root, _outside = escape_target
+        victim = root / "data" / "users" / "alice" / "proj" / "myapp"
+        victim.mkdir(parents=True)
+        require(victim.is_dir(), "victim.is_dir()")
+        # Act
+        result = resolve_published_project_dir(
+            "../users/alice/proj/myapp", base_dir=root
+        )
+        # Assert
+        assert result is None
+
+    def test_symlinked_slug_pointing_outside_root_is_refused(
+        self, escape_target
+    ):
+        # Arrange
+        root, outside = escape_target
+        target = outside / "published"
+        target.mkdir()
+        (target / "manifest.json").write_text('{"secret": "leaked"}')
+        link = root / "data" / "projects" / "myproj"
+        link.symlink_to(target, target_is_directory=True)
+        require(link.resolve() == target.resolve(), "link.resolve() == target.resolve()")
+        require(not str(link.resolve()).startswith(str(root.resolve())), "not str(link.resolve()).startswith(str(root.resolve()))")
+        require("leaked" in (link / "manifest.json").read_text(), "'leaked' in (link / 'manifest.json').read_text()")
+        # Act
+        result = resolve_published_project_dir("myproj", base_dir=root)
+        # Assert
+        assert result is None
+
+    def test_positive_control_real_slug_still_resolves(self, escape_target):
+        # Arrange
+        root, _outside = escape_target
+        proj = root / "data" / "projects" / "myproj"
+        proj.mkdir(parents=True)
+        # Act
+        result = resolve_published_project_dir("myproj", base_dir=root)
+        # Assert
+        assert result == proj
+
+
+class TestProjectSubdirContainment:
+    def test_symlinked_templates_dir_pointing_outside_is_refused(self, tmp_path):
+        # Arrange
+        project_dir = tmp_path / "proj"
+        project_dir.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "index_partial.html").write_text("<div>other tenant</div>")
+        link = project_dir / "templates"
+        link.symlink_to(outside, target_is_directory=True)
+        require(link.is_dir(), "link.is_dir()")
+        require("other tenant" in (link / "index_partial.html").read_text(), "'other tenant' in (link / 'index_partial.html').read_text()")
+        # Act
+        result = resolve_template_dir(project_dir)
+        # Assert
+        assert result is None
+
+    def test_positive_control_real_templates_dir_still_resolves(self, tmp_path):
+        # Arrange
+        project_dir = tmp_path / "proj"
+        (project_dir / "templates").mkdir(parents=True)
+        # Act
+        result = resolve_template_dir(project_dir)
+        # Assert
+        assert result == project_dir / "templates"
+
+    def test_symlinked_static_dir_pointing_outside_is_refused(self, tmp_path):
+        # Arrange
+        project_dir = tmp_path / "proj"
+        project_dir.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "id_rsa").write_text("PRIVATE KEY")
+        link = project_dir / "static"
+        link.symlink_to(outside, target_is_directory=True)
+        require(link.is_dir(), "link.is_dir()")
+        require("PRIVATE KEY" in (link / "id_rsa").read_text(), "'PRIVATE KEY' in (link / 'id_rsa').read_text()")
+        # Act
+        result = resolve_static_dir(project_dir)
+        # Assert
+        assert result is None
+
+    def test_positive_control_real_static_dir_still_resolves(self, tmp_path):
+        # Arrange
+        project_dir = tmp_path / "proj"
+        (project_dir / "static").mkdir(parents=True)
+        # Act
+        result = resolve_static_dir(project_dir)
+        # Assert
+        assert result == project_dir / "static"
+
+    def test_symlinked_manifest_pointing_outside_is_refused(self, tmp_path):
+        # Arrange
+        project_dir = tmp_path / "proj"
+        project_dir.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        secret = outside / "secret.json"
+        secret.write_text('{"secret": "leaked"}')
+        link = project_dir / "manifest.json"
+        link.symlink_to(secret)
+        require(link.is_file(), "link.is_file()")
+        require("leaked" in link.read_text(), "'leaked' in link.read_text()")
+        # Act
+        result = resolve_manifest(project_dir)
+        # Assert
+        assert result == {}
+
+    def test_positive_control_real_manifest_still_reads(self, tmp_path):
+        # Arrange
+        project_dir = tmp_path / "proj"
+        project_dir.mkdir()
+        (project_dir / "manifest.json").write_text('{"name": "test"}')
+        # Act
+        result = resolve_manifest(project_dir)
+        # Assert
+        assert result == {"name": "test"}
+
+
+class TestFindPartialTemplateContainment:
+    def test_traversal_filename_is_refused(self, tmp_path):
+        # Arrange
+        templates_dir = tmp_path / "proj" / "templates"
+        templates_dir.mkdir(parents=True)
+        outsider = tmp_path / "outsider.html"
+        outsider.write_text("<div>outside</div>")
+        require((templates_dir / ".." / ".." / "outsider.html").is_file(), "(templates_dir / '..' / '..' / 'outsider.html').is_file()")
+        # Act
+        result = find_partial_template(templates_dir, "../../outsider.html")
+        # Assert
+        assert result is None
+
+    def test_positive_control_custom_filename_still_found(self, tmp_path):
+        # Arrange
+        templates_dir = tmp_path / "proj" / "templates"
+        templates_dir.mkdir(parents=True)
+        custom = templates_dir / "outsider.html"
+        custom.write_text("<div>inside</div>")
+        # Act
+        result = find_partial_template(templates_dir, "outsider.html")
+        # Assert
+        assert result == custom
+
+    def test_symlinked_subdir_pointing_outside_is_refused(self, tmp_path):
+        # Arrange
+        templates_dir = tmp_path / "proj" / "templates"
+        templates_dir.mkdir(parents=True)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "index_partial.html").write_text("<div>other tenant</div>")
+        link = templates_dir / "evil"
+        link.symlink_to(outside, target_is_directory=True)
+        require(link.is_dir(), "link.is_dir()")
+        require("other tenant" in (link / "index_partial.html").read_text(), "'other tenant' in (link / 'index_partial.html').read_text()")
+        # Act
+        result = find_partial_template(templates_dir)
+        # Assert
+        assert result is None
+
+    def test_positive_control_real_nested_subdir_still_found(self, tmp_path):
+        # Arrange
+        templates_dir = tmp_path / "proj" / "templates"
+        nested = templates_dir / "myapp" / "index_partial.html"
+        nested.parent.mkdir(parents=True)
+        nested.write_text("<div>nested</div>")
+        # Act
+        result = find_partial_template(templates_dir)
+        # Assert
+        assert result == nested
+
+
 # EOF
