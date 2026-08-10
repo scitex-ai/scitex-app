@@ -210,7 +210,7 @@ def test_stop_terminates_recorded_process(state_file):
     _gui_runtime.write_state(child.pid, 31298, "127.0.0.1", "/proj", state_file)
     # Act
     result = _gui_runtime.stop(state_file, timeout=5.0)
-    child.wait(timeout=5)
+    child.wait()
     # Assert
     assert result["stopped"] and result["terminated"]
 
@@ -221,7 +221,7 @@ def test_stop_clears_state_file(state_file):
     _gui_runtime.write_state(child.pid, 31298, "127.0.0.1", "/proj", state_file)
     # Act
     _gui_runtime.stop(state_file, timeout=5.0)
-    child.wait(timeout=5)
+    child.wait()
     # Assert
     assert not state_file.exists()
 
@@ -490,13 +490,20 @@ def test_an_undeclared_status_is_rejected():
 # terminate -- the primitive --force uses to reclaim an orphan of our own.
 # =============================================================================
 
-
+# A BARE `child.wait()` HERE IS DELIBERATE -- DO NOT ADD A `timeout=`.
+# These waits only REAP a child whose exit is already guaranteed; they assert
+# nothing about the code under test. A timeout on them is not a safety net, it
+# is an accidental assertion about how fast this machine starts an interpreter.
+# Measured 2026-08-11 with `timeout=5`: TimeoutExpired locally under load, green
+# on hosted CI for py3.11/3.12/3.13 in the SAME commit -- a red that said nothing
+# about the change. Raising the number only moves the threshold; removing it
+# deletes the failure mode. `pid_alive` and `status` above already reap this way.
 def test_terminate_stops_a_live_process():
     # Arrange
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     # Act
     result = _gui_runtime.terminate(child.pid, timeout=5.0)
-    child.wait(timeout=5)
+    child.wait()
     # Assert
     assert result["terminated"] is True
 
@@ -504,7 +511,7 @@ def test_terminate_stops_a_live_process():
 def test_terminate_is_idempotent_on_an_already_dead_process():
     # Arrange
     child = subprocess.Popen([sys.executable, "-c", ""])
-    child.wait(timeout=5)
+    child.wait()
     # Act
     result = _gui_runtime.terminate(child.pid, timeout=5.0)
     # Assert
