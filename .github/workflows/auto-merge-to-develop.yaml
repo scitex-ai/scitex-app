@@ -4,6 +4,14 @@ name: auto-merge-to-develop
 # so this file lives on main but acts ONLY on PRs whose base is develop.
 # codecov + readthedocs checks are ignored (advisory). Fail-safe: if a merge
 # is blocked by branch policy the PR simply stays open.
+#
+# Keep `runs-on: ubuntu-latest`. This job holds `contents: write` and merges on
+# its own, so putting it on a persistent self-hosted runner would place a
+# long-lived machine — one whose $HOME carries the fleet credential — in the
+# path of an automated merge, buying nothing: the job is pure `gh` API calls
+# with no build toolchain. Weaker case than cla.yml (check_suite is not
+# outsider-triggerable), recorded for the same reason: this note moved here
+# 2026-08-11 from a PS-224 exemption that was retired as inert.
 on:
   check_suite:
     types: [completed]

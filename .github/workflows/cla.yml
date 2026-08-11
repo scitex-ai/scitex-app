@@ -12,6 +12,27 @@ name: CLA Assistant
 #                                         doesn't get rejected by main's
 #                                         branch-protection rule that requires
 #                                         CLAssistant. Operator-direct: 2026-06-04.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# DO NOT MOVE THESE JOBS OFF `ubuntu-latest`. This is a SECURITY decision, not a
+# CI-placement preference, and it is recorded here — in the file someone editing
+# the runner would actually open — rather than only in an auditor config.
+#
+# Both jobs run on `issue_comment` and `pull_request_target`, which are
+# UNAUTHENTICATED on a public repo and are NOT covered by the fork-PR approval
+# gate, and they carry GH_PERSONAL_ACCESS_TOKEN. The registered self-hosted
+# destinations are PERSISTENT and their $HOME is the operator's real home,
+# holding the live fleet credential at ~/.claude/.credentials.json. An
+# outsider-triggerable job must not land there. A compromise on an ephemeral
+# hosted VM costs one disposable runner; on that pool it costs the fleet.
+#
+# Relocated here 2026-08-11 from `.scitex/dev/config.yaml`, where it lived as a
+# PS-224 exemption. Those exemptions were retired once measured inert on the
+# version CI resolves (scitex-dev v0.47.0: identical findings with and without
+# them) — but a dead exemption is a bad home for a live security decision, and
+# deleting it would have deleted this reasoning with it. The auditor rule may
+# change again; this constraint does not.
+# ─────────────────────────────────────────────────────────────────────────────
 
 on:
   issue_comment:
