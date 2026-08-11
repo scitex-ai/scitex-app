@@ -43,188 +43,43 @@ audit:
   skip:
     - PS-210
 
-  exemptions:
-    # PS-224 (runner-destination-unregistered) — every job below targets
-    # `ubuntu-latest` DELIBERATELY, and each is exempted individually with its
-    # own reason rather than by skipping the rule, so a NEW unregistered
-    # destination still fails the gate. Do not collapse these into a
-    # rule-level skip: PS-224 exists to catch a self-hosted label no runner
-    # advertises, which queues forever and never fails. That failure mode is
-    # real and this repo stays covered against it.
-    #
-    # The shared premise for entries 1-6. CITATION REPAIRED 2026-08-05: these
-    # entries previously quoted a constitution §4 passage beginning "CI
-    # defaults to GitHub-hosted runners ... Prefer the boring, managed option
-    # first." THAT TEXT NO LONGER EXISTS — §4 was rewritten on 2026-08-05 and
-    # the sentence returns zero matches. An exemption whose stated reason
-    # quotes a source that does not say it is not reviewable, which is the one
-    # property that makes a per-site exemption better than a blanket skip. So
-    # the reason is re-grounded below rather than left pointing at a ghost.
-    #
-    # ATTRIBUTE CAREFULLY. §4 was rewritten by the scitex-hub agent, not typed
-    # by the operator; the file carries its own warning that "an agent's summary
-    # and an operator ruling look identical" there, that two agents have already
-    # acted on it believing otherwise, and that one should "cite the operator's
-    # words rather than this file."
-    #
-    # CORRECTION 2026-08-11 — THIS COMMENT ITSELF WAS WRONG. It said the
-    # constitution "is UNTRACKED". It is not, and has not been since 2026-07-18.
-    # Measured today, not inferred:
-    #   git -C ~/.dotfiles ls-files --error-unmatch \
-    #     src/.claude/to_claude/commands/constitution.md   -> tracked
-    #   git log --follow on that path                      -> 6 commits, back to
-    #                                                         f9d999a1 (07-18)
-    # So DO read that history before citing any line as a ruling. The correction
-    # is the dotfiles agent's (2026-08-11); I reproduced it here before adopting
-    # it, because a claim about provenance is exactly the kind that should not be
-    # taken on someone else's word.
-    #
-    # THE REAL HAZARD, which "untracked" was a wrong explanation for: the copy
-    # agents READ is a different inode from the copy git tracks (measured today:
-    # 6629020 vs 2865832, byte-identical at that moment). ~/.claude/commands is a
-    # symlink, but into a plain local directory rather than into the repo — so an
-    # edit to the live copy carries no author and no diff until someone mirrors
-    # it back. That is drift with no audit trail, which is the property that
-    # actually matters here and is why the advice below is unchanged.
-    #
-    # Hence the operator's verbatim instruction (Telegram, 2026-08-05), which is
-    # what these entries actually rest on:
-    #
-    #   「スパルタンのCIは全面的にやめましょう。…CIはなるべくコアの大きい
-    #     コアの多い計算機を使って早く回す。…公開レポジトリについては無料
-    #     だが、スピードが遅いことに注意する位のゆるい感じで」
-    #
-    #   — Spartan CI is dropped entirely; run CI on the fastest machine
-    #     available; hosted runners are free for public repos, just slow.
-    #
-    # THE CONCLUSION IS UNCHANGED AND NOW BETTER SUPPORTED. Every registered
-    # destination PS-224 would steer these jobs toward is a Spartan label, and
-    # Spartan CI is exactly what that instruction drops. This repo is public
-    # (hosted minutes free) and none of these jobs is long, GPU-bound or
-    # data-heavy — the full matrix finishes in well under a minute — so the
-    # "slow" caveat costs nothing here and the developer-speed argument for
-    # self-hosting is not met. Entries 1-6 therefore stand on the operator's
-    # own sentence, not on the rewritten paragraph.
-    #
-    # PS-224's message argues from "the no-hosted-runners directive", which is
-    # the STALE premise. Reported as scitex-dev#498 rather than absorbed
-    # silently in N repos -- six near-identical exemptions here would become
-    # six in every public leaf package. If the rule is re-premised, entries
-    # 1-6 should be DELETED, not kept.
-    #
-    # THAT CONDITION MAY NOW BE MET — MEASURED 2026-08-11, scitex-dev v0.43.1:
-    #   with these exemptions     -> 0 unmasked errors
-    #   with them REMOVED         -> 0 unmasked errors
-    # Identical. On this version they mask nothing. That REVERSES the two-arm
-    # result of 2026-08-05 (v0.42.0), where removing them took the audit from
-    # 0 errors to 8 — which is why they were kept then and why the reversal is
-    # recorded rather than quietly acted on.
-    #
-    # NOT DELETED YET, deliberately. The measurement above is from the venv this
-    # agent runs; CI installs scitex-dev from PyPI and may resolve a different
-    # version, and this exact trap has bitten here before — same __version__,
-    # different behaviour by install path. Deleting on a local reading alone
-    # could take the CI leg from green to 8 errors. Verify the version CI
-    # actually resolves, re-run both arms there, and delete only if the delta is
-    # zero on THAT version. Tracked as
-    # app-ps224-exemptions-now-inert-verify-ci-version-20260811.
-    #
-    # RE-VERIFY BEFORE CITING §4 AGAIN. Measured drift of the live copy:
-    #   87da8dc -> 1b61275 -> a330306   (2026-08-05 .. 2026-08-11)
-    # Three hashes in a week, and the 08-05 rewrite deleted a sentence these
-    # exemptions had quoted. There IS a commit history to diff (see above), but
-    # it records the TRACKED copy, which lags the live one until someone mirrors
-    # it — so the history tells you what was published, not necessarily what the
-    # agent read. Grep the sentence you intend to quote, in the copy you are
-    # actually quoting, before you quote it.
-    PS-224:
-      - path: .github/workflows/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml::test
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above: public repo so hosted minutes are free, and every registered
-          destination is a Spartan label, which that instruction drops for CI
-          outright. The 3.11/3.12/3.13 matrix is the reason:
-          hosted runners supply all three interpreters as a first-class
-          feature, whereas the registered Spartan destinations would need
-          three toolchains installed and kept current on a persistent machine.
-          Runtime is ~20s per leg, so there is no developer-speed argument for
-          self-hosting.
-      - path: .github/workflows/quality-audit-on-ubuntu-latest.yml::audit
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above. Short (~40s), no GPU, no large data. Also the audit must run
-          in a CLEAN environment: a persistent self-hosted runner carries
-          machine-local config that can make the audit pass or fail for
-          reasons unrelated to the commit. That is the failure mode the
-          constitution documents from the 2026-07-31 scitex-cards incident —
-          four runners sharing one tool cache produced seven failures across
-          five pull requests in an afternoon, every one cleared by a plain
-          rerun, with the tell being DURATION (14-30s versus 62-66s passing).
-          A green/red that a rerun flips was never about the commit.
-      - path: .github/workflows/import-smoke-on-ubuntu-py3-12.yml::install-check
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above, and REQUIRED here: this job
-          verifies that a fresh `pip install` of the package works for a real
-          user. A persistent runner with a warm cache or a leaked editable
-          install is the one environment where a broken install can still
-          appear to succeed — the gate would stop measuring what it exists to
-          measure.
-      - path: .github/workflows/rtd-sphinx-build-on-ubuntu-latest.yml::sphinx
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above. Short docs build, no GPU, no
-          large data. Mirrors the Read the Docs build environment, which is
-          itself an ephemeral hosted container — matching it is the point.
-      - path: .github/workflows/newb-docs-quality-on-ubuntu-latest.yml::newb
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above. Short docs-quality check, no GPU, no large data, no
-          self-hosting criterion met.
-      - path: .github/workflows/auto-merge-to-develop.yaml::automerge
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above. Pure GitHub API calls — it
-          runs `gh` against the repo and touches no build toolchain, so a
-          self-hosted destination would add a persistent machine to the path
-          of an automated merge while buying nothing.
+  # NO `exemptions:` BLOCK — deliberately, and this note is why.
+  #
+  # Until 2026-08-11 this file carried 8 PS-224 (runner-destination-unregistered)
+  # exemptions, each with a written reason. They are gone because they were
+  # MEASURED INERT, not because the reasoning was abandoned.
+  #
+  # Two-arm, on the version that actually gates the merge:
+  #   scitex-dev v0.47.0, exemptions present   -> 0 unmasked errors, 41 lines
+  #   scitex-dev v0.47.0, exemptions REMOVED   -> 0 unmasked errors, 41 lines
+  # Identical. PS-224 raises nothing here on v0.47.0, so the entries suppressed
+  # nothing and only looked like they did.
+  #
+  # WHY THE LOCAL RUN WAS NOT ENOUGH: this agent's venv has v0.43.1, four minor
+  # versions behind CI. The local two-arm agreed, but agreeing for the wrong
+  # reason is not evidence — arm B was re-run on a throwaway branch through the
+  # `quality` workflow so the measurement came from v0.47.0 itself. On 2026-08-05
+  # the same two-arm on v0.42.0 gave 0 vs 8, which is why these entries existed
+  # and why scitex-dev's advice to delete them was refused then. The rule was
+  # re-premised in between (scitex-dev#498).
+  #
+  # A DEAD EXEMPTION IS WORSE THAN NONE — the same principle already applied to
+  # PS-210 below. It reads as handled, and worse, it would MASK a genuine future
+  # finding: if someone later re-points one of these jobs at a self-hosted label,
+  # PS-224 under its new premise should fire, and a stale entry naming that file
+  # could swallow it.
+  #
+  # THE SECURITY REASONING WAS NOT DELETED, IT WAS RELOCATED. Entries 7-8
+  # (cla.yml, auto-merge-to-develop) never rested on the runner-speed premise —
+  # they recorded that an outsider-triggerable job carrying
+  # GH_PERSONAL_ACCESS_TOKEN must not land on a persistent runner whose $HOME
+  # holds the live fleet credential. That now lives as a comment in each of those
+  # two workflow files, where someone editing `runs-on` will actually see it.
+  # PS-224's own message says "DO NOT RE-POINT THIS JOB ... Resolving this needs
+  # a decision, not a re-point"; the decision is still recorded, just somewhere a
+  # reader of the workflow cannot miss it.
+  #
+  # IF PS-224 STARTS FIRING AGAIN, do not reflexively re-add exemptions: re-read
+  # its message first, because it fired here originally from a premise
+  # ("the no-hosted-runners directive") that the operator had already dropped.
 
-      # Entries 7-8 rest on SECURITY, not on constitution §4, and they must
-      # NOT be deleted if the hosted-runner premise changes. PS-224's own
-      # message says so: "DO NOT RE-POINT THIS JOB ... Resolving this needs a
-      # decision, not a re-point." The decision is recorded here.
-      #
-      # Threat model is identical to scitex-agent-container's (see
-      # sac/.scitex/dev/config.yaml, which reached the same conclusion
-      # independently): the registered Spartan destinations are PERSISTENT and
-      # their $HOME is the operator's real home, holding the live fleet
-      # credential at ~/.claude/.credentials.json.
-      - path: .github/workflows/cla.yml::CLAssistant
-        line: 0
-        reason: >-
-          Deliberately GitHub-hosted as a named security exception, not a
-          compliance gap. Runs a third-party action under the `issue_comment`
-          and `pull_request_target` triggers, which are UNAUTHENTICATED on a
-          public repo and which the fork-PR approval gate does NOT cover, and
-          it carries GH_PERSONAL_ACCESS_TOKEN and GITHUB_TOKEN. The registered
-          Spartan destinations are persistent and their $HOME is the
-          operator's real home holding the live fleet credential, so
-          re-pointing would let any stranger run third-party code next to that
-          credential by commenting on an issue. An ephemeral hosted VM is the
-          correct isolation: a compromise costs one disposable runner. Revisit
-          only when an ephemeral/isolated self-hosted runner exists for
-          untrusted-trigger workflows.
-      - path: .github/workflows/cla.yml::owner-bypass
-        line: 0
-        reason: >-
-          Same workflow, same unauthenticated `issue_comment` /
-          `pull_request_target` triggers, same GITHUB_TOKEN, therefore the
-          same named security exception as CLAssistant above. Exempted as its
-          own entry rather than folded into the file, so that a THIRD job
-          added to cla.yml still fails the gate and gets its own decision.
