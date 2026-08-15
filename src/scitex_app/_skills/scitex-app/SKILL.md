@@ -49,7 +49,7 @@ scitex.app.get_files(...)
 
 ### Core SDK / interfaces
 - [05_standalone](05_standalone.md)
-- [06_environment-vars](06_environment-vars.md)
+- [20_env-vars](20_env-vars.md)
 - [07_backend-validation](07_backend-validation.md) — App validation pipeline + minimal-app checklist
 
 ### Workflows / references

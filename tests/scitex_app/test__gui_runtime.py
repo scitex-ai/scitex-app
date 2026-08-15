@@ -210,7 +210,7 @@ def test_stop_terminates_recorded_process(state_file):
     _gui_runtime.write_state(child.pid, 31298, "127.0.0.1", "/proj", state_file)
     # Act
     result = _gui_runtime.stop(state_file, timeout=5.0)
-    child.wait(timeout=5)
+    child.wait()
     # Assert
     assert result["stopped"] and result["terminated"]
 
@@ -221,7 +221,7 @@ def test_stop_clears_state_file(state_file):
     _gui_runtime.write_state(child.pid, 31298, "127.0.0.1", "/proj", state_file)
     # Act
     _gui_runtime.stop(state_file, timeout=5.0)
-    child.wait(timeout=5)
+    child.wait()
     # Assert
     assert not state_file.exists()
 
@@ -377,6 +377,72 @@ def test_a_bare_interpreter_name_proves_nothing():
     assert ours is False
 
 
+def test_empty_argv_proves_nothing():
+    # Arrange
+    argv = ()
+    # Act
+    ours = _gui_runtime.argv_is_ours(argv, "scitex-writer")
+    # Assert
+    assert ours is False
+
+
+# -----------------------------------------------------------------------------
+# argv[0] is the INTERPRETER, not the program. A project-local venv puts the
+# project name in that path, so scanning it whole claimed every process started
+# from that venv as ours -- and `terminate` fires on `ours`, so --force could
+# SIGTERM a stranger. Reported by scitex-scholar 2026-08-04, reproduced with
+# only argv[0] differing. These pin the boundary from BOTH sides: a distant
+# ancestor is not evidence, the immediate parent still is.
+# -----------------------------------------------------------------------------
+
+
+def test_a_venv_interpreter_under_a_package_named_directory_is_not_ours():
+    # Arrange
+    argv = ("/home/x/scitex-scholar/.venv/bin/python", "/tmp/bind_and_sleep.py")
+    # Act
+    ours = _gui_runtime.argv_is_ours(argv, "scitex-scholar")
+    # Assert
+    assert ours is False
+
+
+def test_pytest_run_from_a_package_named_venv_is_not_ours():
+    # Arrange
+    argv = ("/home/x/scitex-scholar/.venv/bin/python", "-m", "pytest")
+    # Act
+    ours = _gui_runtime.argv_is_ours(argv, "scitex-scholar")
+    # Assert
+    assert ours is False
+
+
+def test_a_foreign_console_script_in_a_package_named_venv_is_not_ours():
+    """The same defect wearing a console script instead of `python`."""
+    # Arrange
+    argv = ("/home/x/scitex-scholar/.venv/bin/jupyter",)
+    # Act
+    ours = _gui_runtime.argv_is_ours(argv, "scitex-scholar")
+    # Assert
+    assert ours is False
+
+
+def test_the_immediate_parent_directory_still_proves_ownership():
+    """The other side of the boundary: one level up is what the program IS."""
+    # Arrange
+    argv = ("/opt/venv/lib/python3.12/site-packages/scitex_writer/__main__.py",)
+    # Act
+    ours = _gui_runtime.argv_is_ours(argv, "scitex-writer")
+    # Assert
+    assert ours is True
+
+
+def test_our_own_console_script_is_still_ours_from_any_bin_directory():
+    # Arrange
+    argv = ("/usr/local/bin/scitex-writer-gui", "--port", "7777")
+    # Act
+    ours = _gui_runtime.argv_is_ours(argv, "scitex-writer")
+    # Assert
+    assert ours is True
+
+
 # =============================================================================
 # PortHolder validates its own shape, so a malformed answer fails where it is
 # built rather than three layers downstream.
@@ -424,13 +490,20 @@ def test_an_undeclared_status_is_rejected():
 # terminate -- the primitive --force uses to reclaim an orphan of our own.
 # =============================================================================
 
-
+# A BARE `child.wait()` HERE IS DELIBERATE -- DO NOT ADD A `timeout=`.
+# These waits only REAP a child whose exit is already guaranteed; they assert
+# nothing about the code under test. A timeout on them is not a safety net, it
+# is an accidental assertion about how fast this machine starts an interpreter.
+# Measured 2026-08-11 with `timeout=5`: TimeoutExpired locally under load, green
+# on hosted CI for py3.11/3.12/3.13 in the SAME commit -- a red that said nothing
+# about the change. Raising the number only moves the threshold; removing it
+# deletes the failure mode. `pid_alive` and `status` above already reap this way.
 def test_terminate_stops_a_live_process():
     # Arrange
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     # Act
     result = _gui_runtime.terminate(child.pid, timeout=5.0)
-    child.wait(timeout=5)
+    child.wait()
     # Assert
     assert result["terminated"] is True
 
@@ -438,7 +511,7 @@ def test_terminate_stops_a_live_process():
 def test_terminate_is_idempotent_on_an_already_dead_process():
     # Arrange
     child = subprocess.Popen([sys.executable, "-c", ""])
-    child.wait(timeout=5)
+    child.wait()
     # Act
     result = _gui_runtime.terminate(child.pid, timeout=5.0)
     # Assert

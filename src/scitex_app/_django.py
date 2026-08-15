@@ -16,12 +16,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 try:
     from django.apps import AppConfig
     from django.http import HttpResponse, JsonResponse
+    from django.utils.html import escape
     from django.views.decorators.csrf import csrf_exempt
 except ImportError as e:
     raise ImportError(
@@ -96,12 +98,63 @@ class ScitexAppConfig(AppConfig):
         return errors
 
 
+#: Name of the <meta> tag carrying the app's mount prefix to the browser.
+#: Client code reads this to build API URLs that work under any mount.
+MOUNT_META_NAME = "stx-mount"
+
+#: The <head> opening tag, and NOT <header>. The delimiter after the name is
+#: required, so `<header` cannot match: `<head>`, `<head lang="en">` do, and
+#: the search stops at that tag's own closing `>`.
+_HEAD_OPEN_TAG = re.compile(r"<head(?:\s[^>]*)?>", re.IGNORECASE)
+
+
+def _inject_mount_meta(html: str, mount_prefix: str) -> str:
+    """Return `html` with a <meta> carrying `mount_prefix` in its head.
+
+    Deliberately a STRING INSERTION rather than a Django template render.
+    A built SPA's index.html routinely contains `{{` / `{%` inside inlined
+    JS, which the template engine would try to interpret; running these
+    files through it would break bundles for reasons that have nothing to
+    do with mounting. This adds exactly one tag and touches nothing else.
+
+    When there is no <head> the tag is prepended instead. That is still
+    correct — the HTML parser hoists a leading <meta> into the head — and
+    it means the prefix is never silently dropped for an unusual document.
+
+    The opening tag is matched as `<head>` or `<head ...>` specifically.
+    A plain substring search for "<head" also matches `<header`, which put
+    the marker inside a <header> element for documents that have one and no
+    real head. The tag stayed findable, so the contract held, but the
+    placement contradicted the paragraph above.
+    """
+    tag = f'<meta name="{MOUNT_META_NAME}" content="{escape(mount_prefix)}">'
+    match = _HEAD_OPEN_TAG.search(html)
+    if match:
+        return html[: match.end()] + tag + html[match.end() :]
+    return tag + html
+
+
 def scitex_editor_page(
     static_dir: Path,
     index_file: str = "index.html",
     fallback_message: str = "React build not found. Run: npm run build",
 ) -> Callable:
     """Factory: create a view that serves the React SPA from static_dir.
+
+    The served HTML carries a ``<meta name="stx-mount" content="...">``
+    naming the prefix the app is mounted under — "/" standalone, or
+    "/apps/u/<module>/" as a scitex-hub built-in app.
+
+    This is what lets ONE codebase run in both modes. `scitex_urlpatterns`
+    is already prefix-agnostic on the server side (its patterns are
+    relative, so `include()` works under any root), but until now nothing
+    told the BROWSER where it was mounted. Client code had no supported
+    way to learn it, so leaves hardcoded "/" — which works perfectly
+    standalone and breaks silently once embedded.
+
+    The value is derived server-side from ``request.path``: this view is
+    registered at the mount root (``path("", ...)``), so its request path
+    IS the prefix. Never guess it client-side.
 
     Args:
         static_dir: Path to the app's static/built files.
@@ -112,7 +165,8 @@ def scitex_editor_page(
     def view(request):
         html_path = static_dir / index_file
         if html_path.exists():
-            return HttpResponse(html_path.read_text())
+            mount_prefix = request.path if request.path.endswith("/") else request.path + "/"
+            return HttpResponse(_inject_mount_meta(html_path.read_text(), mount_prefix))
         return HttpResponse(
             f"<html><body><h1>{fallback_message}</h1></body></html>",
             status=503,

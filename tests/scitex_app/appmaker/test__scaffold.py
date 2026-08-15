@@ -18,6 +18,7 @@ STX-TQ002 (AAA markers) + STX-TQ007 (one assert per test) compliant.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import venv
@@ -280,8 +281,27 @@ def installed_app(tmp_path_factory: pytest.TempPathFactory) -> dict:
     init_app(target_dir=wrapper_root, name=name, label="Demo Install")
 
     venv_dir = tmp_path_factory.mktemp("install") / "v"
-    builder = venv.EnvBuilder(with_pip=True, clear=True)
-    builder.create(str(venv_dir))
+    try:
+        builder = venv.EnvBuilder(with_pip=True, clear=True)
+        builder.create(str(venv_dir))
+    except subprocess.CalledProcessError:
+        # uv-managed CPython distributions (e.g. the self-hosted CI pool)
+        # ship without a working `ensurepip`, so EnvBuilder(with_pip=True)
+        # dies bootstrapping pip. Seed the venv via uv instead — same
+        # result: a fresh venv whose own pip installs the scaffolded app.
+        uv = shutil.which("uv")
+        if uv is None:
+            raise
+        # EnvBuilder already wrote the venv shell (pyvenv.cfg + bin/)
+        # before ensurepip died; `uv venv` refuses an existing venv with
+        # exit 2 ("A virtual environment already exists ... use --clear"),
+        # so drop the half-built venv first.
+        shutil.rmtree(venv_dir, ignore_errors=True)
+        subprocess.run(
+            [uv, "venv", "--seed", "--python", sys.executable, str(venv_dir)],
+            check=True,
+            capture_output=True,
+        )
 
     pip = _venv_bin(venv_dir) / "pip"
     install_proc = subprocess.run(

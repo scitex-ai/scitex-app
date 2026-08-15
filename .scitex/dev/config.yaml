@@ -1,0 +1,85 @@
+# scitex-dev project-type config
+# Drives which rule families the auditor applies.
+# See: scitex-dev ecosystem audit-project --help
+#
+# Deliberately does NOT set `project-type:`. The auditor already infers it
+# correctly here (it produces a complete, correct finding set without this
+# file), and pinning it would change which rule FAMILIES run — a change that
+# can silently drop rules. This file adds exemptions only.
+
+audit:
+  # PS-210 §2 (dev-extras-incomplete) — a rule-level skip, which is the
+  # BLUNTEST mechanism available and is used only because PS-210 supports
+  # nothing finer: `exemption_for()` is consulted by exactly four checks
+  # (config-layout, no-print, runner-destinations, logs-path), and PS-210 is
+  # not one of them. A per-site `exemptions:` entry for it would sit in this
+  # file looking handled while suppressing nothing, and a dead exemption is
+  # worse than none — so it is not written.
+  #
+  # WHY IT FIRES (read from the implementation, not from its message):
+  # `_check_dev_extras_complete.py::_extras_index` builds its `dev` set from
+  # `project.optional-dependencies.dev` ONLY. dev is a PEP 735 group here, so
+  # that table is absent, the rule sees an EMPTY dev set, and it reports every
+  # `[all]` member as missing from it. The rule is not group-aware.
+  #
+  # Its message ("tests import it unguarded") does not describe this repo:
+  # tests/ contains no reference to anthropic, litellm or requests. It reached
+  # us via its TRANSITIVE branch instead — dep imported in src/, tests import
+  # scitex_app. That branch is sound; only the dev-set lookup is wrong.
+  #
+  # COMPENSATING CONTROL, so this is not a gate merely switched off: the
+  # property PS-210 protects is "a fresh dev install can collect and run the
+  # suite". The pytest matrix installs exactly that
+  # (`pip install -e ".[all]" --group dev`) and runs the full suite on
+  # 3.11/3.12/3.13 with no `||` fallback, so a dev dep that goes missing fails
+  # collection loudly on three legs. That is stronger than the heuristic being
+  # skipped, because it EXECUTES the install rather than modelling it.
+  #
+  # REMOVE THIS SKIP once PS-210 reads `[dependency-groups]`. Reported as
+  # scitex-dev#496 (rule gap) and scitex-dev#497 (the summary's masking
+  # accounting, found while verifying this skip). CI installs scitex-dev from
+  # PyPI, so the fix arrives without a change here. A bridge, not a standing
+  # exception.
+  skip:
+    - PS-210
+
+  # NO `exemptions:` BLOCK — deliberately, and this note is why.
+  #
+  # Until 2026-08-11 this file carried 8 PS-224 (runner-destination-unregistered)
+  # exemptions, each with a written reason. They are gone because they were
+  # MEASURED INERT, not because the reasoning was abandoned.
+  #
+  # Two-arm, on the version that actually gates the merge:
+  #   scitex-dev v0.47.0, exemptions present   -> 0 unmasked errors, 41 lines
+  #   scitex-dev v0.47.0, exemptions REMOVED   -> 0 unmasked errors, 41 lines
+  # Identical. PS-224 raises nothing here on v0.47.0, so the entries suppressed
+  # nothing and only looked like they did.
+  #
+  # WHY THE LOCAL RUN WAS NOT ENOUGH: this agent's venv has v0.43.1, four minor
+  # versions behind CI. The local two-arm agreed, but agreeing for the wrong
+  # reason is not evidence — arm B was re-run on a throwaway branch through the
+  # `quality` workflow so the measurement came from v0.47.0 itself. On 2026-08-05
+  # the same two-arm on v0.42.0 gave 0 vs 8, which is why these entries existed
+  # and why scitex-dev's advice to delete them was refused then. The rule was
+  # re-premised in between (scitex-dev#498).
+  #
+  # A DEAD EXEMPTION IS WORSE THAN NONE — the same principle already applied to
+  # PS-210 below. It reads as handled, and worse, it would MASK a genuine future
+  # finding: if someone later re-points one of these jobs at a self-hosted label,
+  # PS-224 under its new premise should fire, and a stale entry naming that file
+  # could swallow it.
+  #
+  # THE SECURITY REASONING WAS NOT DELETED, IT WAS RELOCATED. Entries 7-8
+  # (cla.yml, auto-merge-to-develop) never rested on the runner-speed premise —
+  # they recorded that an outsider-triggerable job carrying
+  # GH_PERSONAL_ACCESS_TOKEN must not land on a persistent runner whose $HOME
+  # holds the live fleet credential. That now lives as a comment in each of those
+  # two workflow files, where someone editing `runs-on` will actually see it.
+  # PS-224's own message says "DO NOT RE-POINT THIS JOB ... Resolving this needs
+  # a decision, not a re-point"; the decision is still recorded, just somewhere a
+  # reader of the workflow cannot miss it.
+  #
+  # IF PS-224 STARTS FIRING AGAIN, do not reflexively re-add exemptions: re-read
+  # its message first, because it fired here originally from a premise
+  # ("the no-hosted-runners directive") that the operator had already dropped.
+
