@@ -44,11 +44,22 @@ jobs:
             [ "$base" = "develop" ] || { echo "skip #$pr (base=$base, not develop)"; continue; }
             draft=$(gh pr view "$pr" --repo "$REPO" --json isDraft --jq .isDraft 2>/dev/null || echo true)
             [ "$draft" = "true" ] && continue
+            # An UNKNOWN check counts as PENDING, never as green. gh reports
+            # `conclusion` as an EMPTY STRING (not null, not absent) while a
+            # check is QUEUED or IN_PROGRESS, and jq's `//` falls back only on
+            # null/false — never on "" — so the old trailing `. != ""` silently
+            # discarded exactly the checks meaning "we do not know yet", and a
+            # PR pushed shortly before a tick read as fully green. Measured in
+            # the fleet: 9 queued checks -> the filter counted 0 pending.
+            # This merges with --admin (bypassing branch protection), so the
+            # unknown case must fail CLOSED.
             pending=$(gh pr view "$pr" --repo "$REPO" --json statusCheckRollup --jq '
               [ .statusCheckRollup[]
                 | select(((.name // .context // "") | ascii_downcase | test("codecov|readthedocs")) | not)
-                | (.conclusion // .state // "")
-                | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED" and . != "") ] | length' 2>/dev/null || echo 1)
+                | (if (.conclusion // "") != "" then .conclusion
+                   elif (.state // "") != "" then .state
+                   else "PENDING" end)
+                | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length' 2>/dev/null || echo 1)
             if [ "$pending" = "0" ]; then
               gh pr merge "$pr" --repo "$REPO" --merge --admin --delete-branch && echo "MERGED #$pr -> develop" || echo "blocked #$pr"
             else
