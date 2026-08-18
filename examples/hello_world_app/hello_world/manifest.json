@@ -1,0 +1,8 @@
+{
+  "name": "hello_world",
+  "slug": "hello-world",
+  "label": "Hello World",
+  "version": "0.1.0",
+  "icon": "fas fa-hand-spock",
+  "frontend_type": "django"
+}
