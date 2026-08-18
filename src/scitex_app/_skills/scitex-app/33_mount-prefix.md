@@ -81,6 +81,22 @@ Use `??` or an explicit `is None` if you need a fallback at all. *(scitex-schola
 hit exactly this migrating, and found it only because a guard test that should
 have flipped kept passing.)*
 
+**Migrating from 0.7.x is ONE coordinated change, and the half-fix is worse
+than not starting.** Two things inverted together, so fixing either alone
+produces a new bug rather than a partial cure:
+
+| | 0.7.x | now |
+|---|---|---|
+| root value | `"/"` | `""` — and falsy, so defaults eat it |
+| who carries the slash | the base | the **endpoint** |
+
+Drop the default but leave `base + "api/x"` and you get `<prefix>api/x`. Flip
+the join but leave the default and you get `//api/x`. Change the template but
+not the JS and the `||` in the bundle restores the old value anyway. Grep for
+all three — template default, base read, every fetch site — before changing
+one. *(scitex-writer found this: their bundle does `(root?.dataset.apiBase) || "/"`
+then `v + "api/file"`, so all three faces are present in one app.)*
+
 **This reversed in 0.8.0, and the reason is the only part worth memorising.**
 0.7.0–0.7.1 published the opposite (prefix ends in `/`, endpoint does not
 start with one). Both conventions produce *identical* correct output, so
