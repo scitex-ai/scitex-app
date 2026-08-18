@@ -7,6 +7,43 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-18
+
+- **docs(mount-prefix): the SDK does not inject into templates you render
+  yourself.** 0.7.0's contract page said "if you serve your shell through
+  `scitex_editor_page`, the marker is present" and never stated the other case.
+
+  scitex-scholar nearly shipped through the gap. Their view does
+  `render_to_string(...)` — a Django template, not a built SPA shell — so
+  nothing injected the marker. Their four client-side changes would have read no
+  marker, hit the `?? "/"` fallback, and reproduced the previous behaviour
+  exactly, while looking correct in the diff. The page still renders; only the
+  API calls 404, and only under a prefix. It was five sites, not four, and the
+  fifth would have made the other four useless.
+
+  The page now carries a second "does not" beside the asset-rewriting one, with
+  the two-line derivation to copy so a leaf's copy cannot drift from the SDK's,
+  and explains why this is **not** an SDK gap: a template-rendered app is
+  *writer-shaped*, not *SPA-shaped* — the case `data-api-base` was invented for,
+  where the server already owns the HTML. `scitex_editor_page` exists only
+  because a built SPA's `index.html` is opaque bytes the server did not author.
+  Same contract, two shapes; automatic injection covers one.
+
+  Also records a foot-gun the page's own example invites: two classic `<script>`
+  tags each declaring `const STX_MOUNT` share one global scope, so the second is
+  a `SyntaxError` that breaks the **whole page**, not just that file.
+
+- **Why a patch release for a documentation change.** The contract page ships
+  *inside the wheel* (`scitex_app/_skills/scitex-app/33_mount-prefix.md`), so a
+  doc fix that is not released does not exist for the people it is written for —
+  and the misleading version is the one currently on PyPI. That is the same
+  failure 0.7.0 was cut to end, one level down: 0.7.0 existed only because a
+  working contract had been sitting unreleased on `develop` while three
+  consumer apps each invented their own answer to a question the SDK had already
+  answered. Shipping the correction immediately is the consistent move.
+
+  No code changed. `scitex_app` behaves identically to 0.7.0.
+
 ## [0.7.0] - 2026-08-18
 
 - **feat(django): the SDK now tells the browser where the app is mounted.**
