@@ -1,0 +1,80 @@
+name: ci
+
+# ============================================================================
+# CANONICAL scitex CI — thin org-reusable caller.
+#
+# Job bodies live ONCE, org-side, in scitex-ai/.github@main. This file carries
+# only triggers, concurrency, and thin `uses:` calls, so a fix made org-side
+# reaches this repo without anyone copying it here.
+#
+# WHY THIS FILE EXISTS: scitex-app was running six LOCAL FORKS of workflows the
+# org now provides as reusables (PS-231). Measured 2026-08-18, the forks were
+# already stale in ways that mattered — the org copy of auto-merge-to-develop
+# carries the QUEUED-checks fix this repo landed as #76, and the org copy of
+# cla carries the owner-bypass this repo added by operator direction. A local
+# copy does not track upstream fixes; it only looks like it does.
+#
+# STAGE A OF FOUR — DELIBERATELY OVERLAPPING WITH THE LEGACY WORKFLOWS.
+# The legacy files still exist and still run. Both sets publish for now, and
+# that duplication is intentional, not an oversight:
+#
+#   A. add this caller alongside the legacy workflows   <-- we are here
+#   B. read the check names GitHub actually publishes, off a real run
+#   C. point branch protection at those measured names
+#   D. delete the legacy workflows
+#
+# The naive orders both deadlock. Switching protection first requires contexts
+# nothing publishes yet; deleting the legacy files first orphans the contexts
+# protection still requires. GitHub does not fail either case — it reports the
+# missing context as 'expected' and waits forever, so every PR in the repo
+# hangs with no error anywhere. Overlapping the two sets means whichever names
+# are required are always satisfiable, and stage C stays reversible because
+# the old workflows are still publishing underneath it.
+#
+# RUNNER SELECTION: nothing is passed, so each reusable applies its own
+# default. Those defaults are GitHub-hosted BY DESIGN — a default must fail
+# safe, and a self-hosted default does not: on 2026-08-15 all four spartan-cpu
+# runners went offline and every silent caller requested a label no online
+# machine served, queueing 57 runs across ~30 repositories with no failure
+# reported. Slower is a degradation; never is an outage. Spartan stays
+# PREFERRED where it is faster (operator, 2026-08-13) — but preference belongs
+# in an explicit `runs_on`, not in a default nobody chose. This repo already
+# moved its release pipeline to GitHub-hosted deliberately (#68), so inheriting
+# the hosted default is consistent rather than accidental.
+#
+# NOT COVERED HERE: cla and auto-merge-to-develop. Both are driven by events
+# this workflow does not carry (pull_request_target / issue_comment, and
+# check_suite), so they need their own callers with their own triggers rather
+# than a job in this file. They remain local forks until then, and remain
+# flagged by PS-231 — which is correct: the finding should stay red while it is
+# still true.
+# ============================================================================
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Cancel superseded PR runs; never cancel a protected-branch run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pytest-matrix:
+    uses: scitex-ai/.github/.github/workflows/pytest-matrix.yml@main
+    secrets: inherit
+
+  import-smoke:
+    uses: scitex-ai/.github/.github/workflows/import-smoke.yml@main
+    secrets: inherit
+
+  quality-audit:
+    uses: scitex-ai/.github/.github/workflows/quality-audit.yml@main
+    secrets: inherit
+
+  rtd-sphinx-build:
+    uses: scitex-ai/.github/.github/workflows/rtd-sphinx-build.yml@main
+    secrets: inherit
