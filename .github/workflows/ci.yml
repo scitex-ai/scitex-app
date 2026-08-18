@@ -63,9 +63,42 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  pytest-matrix:
-    uses: scitex-ai/.github/.github/workflows/pytest-matrix.yml@main
-    secrets: inherit
+  # pytest-matrix IS DELIBERATELY ABSENT — second casualty of the same defect
+  # that took out rtd-sphinx-build, and found the same way: by measuring.
+  #
+  #   pytest-matrix / pytest-matrix-on-ubuntu-py3.11 / .12 / .13   FAILURE
+  #   python -m pytest: error: unrecognized arguments: --cov=src/scitex_app
+  #                     --cov-report=xml --cov-report=term
+  #   ##[error]Process completed with exit code 4
+  #
+  # The org reusable installs:
+  #
+  #   uv pip install -e ".[all,dev]" || uv pip install -e ".[dev]" || uv pip install -e .
+  #
+  # scitex-app declares `all` as an EXTRA but `dev` as a PEP 735 dependency
+  # GROUP, and `pytest-cov>=4.0.0` lives in that group. So `.[all,dev]` fails,
+  # `.[dev]` fails, and the chain lands on a bare `-e .` that installs no test
+  # dependencies at all. pytest-cov is absent, the reusable's own `--cov` flags
+  # are then unrecognised, and pytest exits 4.
+  #
+  # NOTE THE `||` CHAIN, because it is the reason this is not obvious: the
+  # install step SUCCEEDS. The failure is degraded silently into a bare install
+  # and only surfaces two steps later as an argument-parsing error that says
+  # nothing about dependencies. "I could not install the dev group" travels as
+  # "installed fine".
+  #
+  # This is the THIRD instance of one unhandled packaging idiom in this repo:
+  #   PS-210      `_extras_index` builds its dev set from
+  #               project.optional-dependencies.dev only -> sees an EMPTY dev set
+  #   rtd         installs `.[docs]` -> docs is a group -> sphinx missing -> 127
+  #   pytest      installs `.[all,dev]` -> dev is a group -> pytest-cov missing -> 4
+  # Not three bugs. One idiom the tooling does not know about, surfacing three
+  # times, and it will keep recurring as repos adopt the modern spelling.
+  #
+  # So the legacy pytest-matrix workflow STAYS, PS-231 stays true of it, and
+  # branch protection must NOT be moved onto the caller contexts — they can
+  # never pass here. Retire this note when the org reusable accepts a
+  # dependency_group input.
 
   import-smoke:
     uses: scitex-ai/.github/.github/workflows/import-smoke.yml@main
