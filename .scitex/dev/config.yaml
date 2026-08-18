@@ -98,6 +98,65 @@ audit:
   # inferred; figrecipe caught (2) and (3) in a draft of this entry.
   exemptions:
     PS-231:
+      - path: .github/workflows/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml
+        line: 0
+        reason: >-
+          TIME-BOXED — delete when the org reusable accepts a `dependency_group`
+          input. Same upstream gap, same card, same burn-down condition as the
+          rtd-sphinx-build entry below:
+          dev-corpus-release-turned-15-repos-red-and-notified-none-of-them-20260818.
+
+          THE DUPLICATION IS REAL AND THE RULE IS RIGHT. This file genuinely
+          re-implements the org reusable. It is exempted because converting it
+          is MEASURED to produce three permanently-red REQUIRED contexts — and
+          these are the only three contexts branch protection requires on
+          develop and main, so the blast radius is every PR in the repo.
+
+          MEASURED HERE on a throwaway probe branch, 2026-08-18, with the legacy
+          workflows deleted and the audit otherwise clean:
+          "pytest-matrix / pytest-matrix-on-ubuntu-py3.11 / .12 / .13" all
+          FAILURE, with "python -m pytest: error: unrecognized arguments:
+          --cov=src/scitex_app --cov-report=xml --cov-report=term" and exit
+          code 4, while "quality-audit / audit" and
+          "import-smoke / import-smoke-on-ubuntu-py3-12" were SUCCESS in the
+          same run.
+
+          MECHANISM — MEASURED HERE. The org reusable installs
+          `uv pip install -e ".[all,dev]" || uv pip install -e ".[dev]" ||
+          uv pip install -e .`. This repo declares `all` as an EXTRA but `dev`
+          as a PEP 735 dependency GROUP, with pytest-cov>=4.0.0 inside that
+          group. Both bracketed forms fail, the chain lands on a bare `-e .`
+          that installs no test dependencies, pytest-cov is absent, and the
+          reusable's own --cov flags are then unrecognised.
+
+          NOTE THE `||` CHAIN, because it is why this is invisible until it is
+          not: the install STEP SUCCEEDS. The failure degrades silently into a
+          bare install and resurfaces two steps later as an argument-parsing
+          error naming nothing about dependencies. "I could not install the dev
+          group" travels downstream as "installed fine". Reported upstream as a
+          defect in its own right — a fallback chain must report which arm it
+          landed on, or fail on the first.
+
+          THIS IS THE SAME UNHANDLED IDIOM AS THE rtd ENTRY, third instance in
+          this repo: PS-210 builds its dev set from
+          project.optional-dependencies.dev only and sees an EMPTY dev set;
+          rtd installs `.[docs]` and loses sphinx; this installs `.[all,dev]`
+          and loses pytest-cov. Not three bugs — one packaging idiom the
+          tooling does not know, which will recur as repos adopt the modern
+          spelling. ONE org-side `dependency_group` input retires both entries
+          here and unblocks every PEP 735 repo in the fleet.
+
+          DO NOT convert this file before that input exists, and do NOT move
+          branch protection onto the caller contexts. The failure is not a red
+          PR you can retry: the context IS published and is deterministically
+          red forever, so every PR blocks with no route out except a repo-admin
+          protection edit.
+
+          WHY THIS IS NOT A GATE SWITCHED OFF: scoped to ONE rule and ONE path.
+          Four of this repo's six PS-231 findings are FIXED by conversion in the
+          same change (import-smoke, quality-audit, cla, auto-merge-to-develop);
+          only the two measured incompatible are exempted, each with its own
+          evidence.
       - path: .github/workflows/rtd-sphinx-build-on-ubuntu-latest.yml
         line: 0
         reason: >-

@@ -1,5 +1,21 @@
 name: auto-merge-to-develop
 
+# ─────────────────────────────────────────────────────────────────────────────
+# RUNNER PLACEMENT IS A SECURITY CONSTRAINT HERE TOO, for a different reason
+# than cla.yml's. This job holds `contents: write` and merges on its own, so
+# putting it on a persistent self-hosted runner would place a long-lived
+# machine — one whose $HOME carries the fleet credential — in the merge path.
+# The exposure is weaker than cla.yml's (this trigger is not
+# outsider-triggerable), but the note is recorded for the same reason: it moved
+# here 2026-08-11 from a PS-224 exemption that was retired as inert, because a
+# dead exemption is a bad home for a live security decision.
+#
+# `runs_on` is passed explicitly below rather than inherited, on the same
+# reasoning as cla.yml: a destination with a security property must not be
+# inherited from someone else's default, which can be changed upstream by a
+# review nobody here sees.
+# ─────────────────────────────────────────────────────────────────────────────
+#
 # Thin caller. The body lives ONCE, org-side, in scitex-ai/.github@main.
 #
 # This file used to be a local fork, and the fork was already stale in the way
@@ -22,4 +38,8 @@ on:
 jobs:
   auto-merge-to-develop:
     uses: scitex-ai/.github/.github/workflows/auto-merge-to-develop.yml@main
+    with:
+      # JSON array STRING — consumed by fromJSON in the callee. A YAML list
+      # decodes to something fromJSON rejects and the job queues forever.
+      runs_on: '["ubuntu-latest"]'
     secrets: inherit

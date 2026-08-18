@@ -1,10 +1,39 @@
 name: CLA Assistant
 
+# ─────────────────────────────────────────────────────────────────────────────
+# RUNNER PLACEMENT IS A SECURITY CONSTRAINT HERE, NOT A CI-PLACEMENT PREFERENCE,
+# and it is recorded in the file someone editing the runner would actually open
+# rather than only in an auditor config.
+#
+# Both jobs run on `issue_comment` and `pull_request_target`, which are
+# UNAUTHENTICATED on a public repo and are NOT covered by the fork-PR approval
+# gate, and they carry GH_PERSONAL_ACCESS_TOKEN. The registered self-hosted
+# destinations are PERSISTENT and their $HOME is the operator's real home,
+# holding the live fleet credential at ~/.claude/.credentials.json. An
+# outsider-triggerable job must not land there. A compromise on an ephemeral
+# hosted VM costs one disposable runner; on that pool it costs the fleet.
+#
+# Originally relocated here 2026-08-11 from a retired PS-224 exemption, because
+# a dead exemption is a bad home for a live security decision. I deleted this
+# block when I first converted the file to a caller, and PS-224 fired on the
+# result — correctly. Restored, and the constraint is now ENFORCED rather than
+# merely described: `runs_on` is passed explicitly below.
+#
+# WHY PASSED EXPLICITLY WHEN THE CALLEE ALREADY DEFAULTS TO ubuntu-latest.
+# PS-224's own words: "The caller names no `runs-on`, so the destination lives
+# in the callee and NEITHER FILE shows the exposure on its own." That is right,
+# and it is worse than an audit inconvenience — inheriting a security-relevant
+# destination from someone else's default means the property can be revoked
+# upstream, silently, by a change nobody here reviews. A default is not a
+# decision anyone makes; it is one they never see. So this caller states the
+# destination itself, at the site where the exposure is decidable.
+# ─────────────────────────────────────────────────────────────────────────────
+#
 # Thin caller. The body lives ONCE, org-side, in scitex-ai/.github@main.
 #
 # WHAT THE ORG VERSION ALREADY CARRIES, checked before deleting our fork rather
-# than assumed — this repo's local copy existed for these two behaviours and
-# both are upstream now:
+# than assumed — this repo's copy existed for these two behaviours, both now
+# upstream:
 #
 #   owner-bypass   `if: github.event_name == 'push' && github.actor ==
 #                  inputs.owner_login` — posts a synthetic CLAssistant=success
@@ -13,20 +42,34 @@ name: CLA Assistant
 #                  requiring CLAssistant. Added here by operator direction on
 #                  2026-06-04; now an org input.
 #   owner_allowlist / owner_login
-#                  default to "bot*,ywatanabe1989" and "ywatanabe1989", which
-#                  are exactly the values this repo's fork hard-coded. Nothing
-#                  is passed below because the defaults already match; passing
-#                  them would be restating the default as if it were a choice.
+#                  default to "bot*,ywatanabe1989" and "ywatanabe1989", exactly
+#                  the values this repo's fork hard-coded. Not restated below:
+#                  unlike `runs_on`, these carry no security property that an
+#                  upstream default change could silently revoke.
 #
-# `secrets: inherit` is required, not decorative: the callee declares
-# GH_PERSONAL_ACCESS_TOKEN as a REQUIRED secret.
+# SECRETS ARE PASSED BY NAME, NOT INHERITED — and this is the substantive
+# security change in this file, not the `runs_on` line above.
 #
-# WHY DELEGATING IS A STRICT IMPROVEMENT HERE. Our fork was missing the
-# signature-store branch handling that made this check red for three days in
-# August 2026 — the action aborts trying to OPEN `cla-signatures` and then
-# reports "Committers of pull request N have to sign the CLA", which accuses a
-# contributor for what is a missing branch. A local copy does not track fixes
-# made org-side; it only looks like it does.
+# `secrets: inherit` forwards EVERY secret this repository holds into the
+# callee. On a job an outsider can start via `issue_comment` or
+# `pull_request_target`, that is the whole secret store behind an
+# unauthenticated trigger. The callee needs exactly one of them, and declares
+# it: `secrets: GH_PERSONAL_ACCESS_TOKEN: required: true`. Its own comment
+# says `inherit` "keeps working for callers that have not migrated" — i.e.
+# naming the secret IS the migration, and inherit is the back-compat path.
+#
+# I reached this the slow way and the record is worth keeping. My first
+# attempt at satisfying PS-224 was to pass `runs_on` explicitly, reasoning
+# from the rule's message ("the caller names no `runs-on`"). It fired again.
+# Reading `_workflow_exposure.py` rather than its message shows why: the check
+# is `"uses" in job` AND `job.get("secrets") == "inherit"` AND an
+# attacker-triggerable event, and the module says outright that it "ignores
+# `runs-on` entirely". A `uses:` job cannot declare `runs-on` at all, so no
+# caller could ever have satisfied the reading I took from the text.
+#
+# The rule's NAME points at the runner; its CHECK points at secret
+# propagation. Trusting the name cost one CI cycle. The fix that works is also
+# the fix that is actually right — forward one secret instead of all of them.
 
 on:
   issue_comment:
@@ -40,4 +83,11 @@ on:
 jobs:
   cla:
     uses: scitex-ai/.github/.github/workflows/cla.yml@main
-    secrets: inherit
+    with:
+      # JSON array STRING — the callee feeds it to fromJSON. A YAML list
+      # decodes to something fromJSON rejects, and the resulting label
+      # mismatch makes the job QUEUE FOREVER rather than fail, which is
+      # indistinguishable from "still waiting" in the run list.
+      runs_on: '["ubuntu-latest"]'
+    secrets:
+      GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
