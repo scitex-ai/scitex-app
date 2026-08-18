@@ -16,7 +16,9 @@ in its source tree. Two outcomes:
   (which installs every peer) catches cross-package renames.
 """
 
+import ast
 import importlib
+from pathlib import Path
 
 import pytest
 
@@ -52,3 +54,76 @@ def test_cross_package_import(module_name):
     module = importlib.import_module(module_name)
     # Assert
     assert module.__name__ == module_name
+
+
+# ===== HAND-WRITTEN: cross-package SYMBOL gate =====
+#
+# The block above checks that peer MODULES import. It does not check that the
+# SYMBOLS we pull out of them still exist. A peer that keeps the module and
+# moves a symbol passes that gate cleanly and breaks scitex-app at runtime —
+# and symbol imports are most of our real surface.
+#
+# Not hypothetical: on 2026-08-18 scitex_dev.skills moved (a MODULE move, which
+# the block above now catches) while RESULT_SCHEMA relocated out of
+# scitex_dev.types (a SYMBOL move, which nothing caught). Reported by
+# scitex-writer, who found the same hole in their own gate.
+#
+# THE LIST IS DERIVED FROM OUR OWN SOURCE, never hand-maintained. A hand-kept
+# list is a second copy of the import surface and drifts from the first; that
+# is the defect this gate exists to catch, reintroduced in the gate itself.
+
+PEER_PACKAGES = (
+    "scitex",
+    "scitex_clew",
+    "scitex_config",
+    "scitex_dev",
+    "scitex_io",
+    "scitex_ui",
+)
+
+
+def _peer_symbol_imports():
+    """Every (module, symbol) this package imports from a peer, read from source.
+
+    Walks src/ with ast rather than importing anything, so a broken peer cannot
+    make the discovery step fail and hand back a short list — which would look
+    exactly like having few dependencies.
+    """
+    src = Path(__file__).resolve().parents[2] / "src" / "scitex_app"
+    found = set()
+    for path in src.rglob("*.py"):
+        if "_sphinx_html" in path.parts:
+            continue
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                if node.module.split(".")[0] in PEER_PACKAGES:
+                    for alias in node.names:
+                        found.add((node.module, alias.name))
+    return sorted(found)
+
+
+PEER_SYMBOL_IMPORTS = _peer_symbol_imports()
+
+
+def test_the_symbol_gate_found_something_to_check():
+    # Arrange — a discovery bug that returns [] would make every parametrised
+    # case below vanish, and an empty parametrise reports GREEN. This is the
+    # control that stops the gate passing by finding nothing.
+    minimum_known_imports = 1
+    # Act
+    discovered = len(PEER_SYMBOL_IMPORTS)
+    # Assert
+    assert discovered >= minimum_known_imports
+
+
+@pytest.mark.parametrize("module_name,symbol", PEER_SYMBOL_IMPORTS)
+def test_peer_symbol_still_exists(module_name, symbol):
+    # Arrange — skip on the ROOT, as above: peers are optional extras and a
+    # lean install must not fail. The symbol's absence is a failure, not a skip.
+    pytest.importorskip(module_name.split(".")[0])
+    module = importlib.import_module(module_name)
+    # Act
+    present = hasattr(module, symbol)
+    # Assert
+    assert present, f"{module_name} no longer exports {symbol!r} — a peer moved it"
