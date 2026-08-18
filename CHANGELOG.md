@@ -7,6 +7,50 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-18
+
+No code change. `scitex_app` behaves identically to 0.8.0.
+
+### Documented — 0.8.0's root prefix is `""`, which is FALSY
+
+**If you are migrating from 0.7.x, delete any `|default`, `||` or `or` around
+the mount prefix before you do anything else.** Under 0.7.x those were correct
+and harmless: `"/"` was the right root, so writing a default was sensible.
+0.8.0 made the root the empty string, and every "use this when empty" idiom
+now silently restores the withdrawn value:
+
+```django
+{{ stx_mount|default:'/' }}    ← renders "/" at root
+```
+
+which makes the documented join produce `//api/x` — protocol-relative, which
+the browser resolves to a **different host**. That is the exact failure 0.8.0
+was cut to prevent, reintroduced by a line that was correct when it was
+written. Django `|default:`, Jinja `|default()`, JS `||` and Python `or` all
+fire on `""`; use `??` or an explicit `is None` if you need a fallback.
+
+Found by **scitex-scholar** while migrating, before it shipped. Their tell is
+worth repeating: a guard test that should have flipped after the migration kept
+passing. A test that survives a breaking change unchanged is evidence about the
+test.
+
+This is the server-template twin of the `?? "/"` removed from the client half
+in 0.8.0 — that instance was fixed and documented for JS, and the same warning
+was not carried to the side where the idiom was *more* likely, because the old
+convention rewarded writing it.
+
+### Changed — the contract page is split
+
+`33_mount-prefix.md` (162 lines) is now the contract; `34_mount-prefix-rationale.md`
+holds the reasoning. The decisive argument — the failure-mode table showing
+`//api/x` resolving off-origin — stays **inline in the contract**, because it is
+what must not be undone; only secondary material moved, with the contract
+pointing at it.
+
+Both ship in the wheel, which is why a documentation-only change gets a
+release: the page a consumer reads is the one in the artifact they installed,
+and the misleading version was the one on PyPI.
+
 ## [0.8.0] - 2026-08-18
 
 ### BREAKING — `stx-mount` carries no trailing slash
