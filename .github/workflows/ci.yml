@@ -75,6 +75,36 @@ jobs:
     uses: scitex-ai/.github/.github/workflows/quality-audit.yml@main
     secrets: inherit
 
-  rtd-sphinx-build:
-    uses: scitex-ai/.github/.github/workflows/rtd-sphinx-build.yml@main
-    secrets: inherit
+  # rtd-sphinx-build IS DELIBERATELY ABSENT. It was in this file for one run and
+  # was removed on the measurement, which is what stage B is for.
+  #
+  #   rtd-sphinx-build / docs-sphinx   FAILURE      <- the org reusable
+  #   sphinx                           success      <- our legacy workflow
+  #
+  #   warning: The package `scitex-app` does not have an extra named `docs`
+  #   .venv/bin/sphinx-build: No such file or directory
+  #   ##[error]Process completed with exit code 127
+  #
+  # The org reusable installs `.[docs]` — an EXTRA. This repo declares docs as a
+  # PEP 735 DEPENDENCY GROUP under [dependency-groups] (ADR-0005), so `.[docs]`
+  # resolves to nothing, sphinx is never installed, and the build dies at 127.
+  # Our legacy workflow installs `pip install -e "." --group docs`, which is why
+  # it passes. The comment in that file predicted this failure in advance and
+  # even predicted it would be MISLEADING — it dies further down, at a missing
+  # binary, rather than at the unsatisfied dependency.
+  #
+  # So this one is not a fork-for-no-reason. It is a real incompatibility with a
+  # documented local decision, and converting it would have taken docs from
+  # green to permanently red. Two further differences point the same way and are
+  # already under analysis fleet-wide (figrecipe + scitex-scholar): the org build
+  # is BUILD-ONLY while leaves also vendor docs/sphinx/_build/html into
+  # src/<pkg>/_sphinx_html, which SHIPS INSIDE THE WHEEL — so a bare `uses:`
+  # would silently freeze the in-wheel documentation with CI green — and leaves
+  # run `sphinx-build -W` on pull_request where the org build does not, so
+  # converting would also quietly WEAKEN the docs gate.
+  #
+  # The fix is org-side (a `dependency_group` input, plus the artifact/-W inputs
+  # those two are specifying), not thirty individually-reasoned leaf exemptions.
+  # Holding this file untouched pending their adversarial pass. PS-231 stays red
+  # on rtd-sphinx-build-on-ubuntu-latest.yml until then, and that is correct: the
+  # duplication is real, it is just not safe to remove yet.
