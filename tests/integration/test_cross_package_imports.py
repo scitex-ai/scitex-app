@@ -16,6 +16,8 @@ in its source tree. Two outcomes:
   (which installs every peer) catches cross-package renames.
 """
 
+import importlib
+
 import pytest
 
 # ===== AUTO-GENERATED: cross-package imports =====
@@ -30,10 +32,23 @@ CROSS_PACKAGE_IMPORTS = [
 
 @pytest.mark.parametrize("module_name", CROSS_PACKAGE_IMPORTS)
 def test_cross_package_import(module_name):
-    """Importing scitex-app's declared cross-package dependency must succeed."""
+    """Importing scitex-app's declared cross-package dependency must succeed.
+
+    The skip is taken on the ROOT package and the FULL path is then hard
+    imported. Skipping on the full path — ``importorskip(module_name)`` —
+    made this gate incapable of failing: a RENAMED or DELETED submodule
+    raises ``ModuleNotFoundError``, which ``importorskip`` converts into a
+    skip, so the run reports green for precisely the breakage the gate
+    exists to catch. Splitting the two makes the peer's absence a skip and
+    the submodule's absence a failure.
+
+    The skip cannot simply be dropped: these peers are optional extras, so
+    a blanket hard import would fail a legitimately lean install.
+    """
     # Arrange
-    module = pytest.importorskip(module_name)
+    root_name = module_name.split(".")[0]
+    pytest.importorskip(root_name)
     # Act
-    loaded_name = module.__name__
+    module = importlib.import_module(module_name)
     # Assert
-    assert loaded_name == module_name
+    assert module.__name__ == module_name
