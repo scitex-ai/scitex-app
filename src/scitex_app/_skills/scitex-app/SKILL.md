@@ -68,6 +68,7 @@ scitex.app.get_files(...)
 - [30_backend-sdk](30_backend-sdk.md) — backend developer SDK (was 02)
 - [31_paths](31_paths.md) — `paths` submodule (was 03)
 - [32_cli](32_cli.md) — original CLI page (was 04)
+- [33_mount-prefix](33_mount-prefix.md) — `stx-mount`: how an app learns where it is mounted, and why relative URLs are not the fix
 
 ## Quick Start
 
