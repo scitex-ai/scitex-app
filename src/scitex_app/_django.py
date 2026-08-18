@@ -102,6 +102,72 @@ class ScitexAppConfig(AppConfig):
 #: Client code reads this to build API URLs that work under any mount.
 MOUNT_META_NAME = "stx-mount"
 
+
+class MountPrefixMismatch(ValueError):
+    """`view_path` is not a trailing segment of `request.path`.
+
+    Raised rather than returning a best guess, because a wrong prefix is
+    indistinguishable from a right one until a request 404s in production.
+    """
+
+
+def mount_prefix(request, *, view_path: str = "") -> str:
+    """Return the prefix `request` is mounted under, WITHOUT a trailing slash.
+
+    Root is ``""``; embedded is e.g. ``"/apps/u/figrecipe"``. Client code
+    joins as ``prefix + "/api/x"`` — the slash belongs to the ENDPOINT.
+
+    WHY THE SLASH SITS ON THE ENDPOINT, measured rather than chosen. The
+    opposite convention (prefix ends in "/", endpoint does not start with
+    one) shipped in 0.7.0-0.7.1 and was withdrawn because its most likely
+    misuse leaves the origin::
+
+        "/" + "/api/x"  ->  //api/x  ->  https://api/x     A DIFFERENT HOST
+
+    ``//api/x`` is protocol-relative, so a leading slash on the endpoint —
+    the natural instinct — sends the request, and whatever it carries, off
+    site. This convention's corresponding misuse (endpoint missing its
+    slash) yields ``/apps/u/fapi/x``: a 404 on the right host. Both were
+    run through a real URL resolver; only the failure cases distinguish
+    them, which is why picking on taste got it wrong.
+
+    WHY `view_path` IS REQUIRED FOR NON-ROOT VIEWS. ``request.path`` is the
+    WHOLE path — the mount prefix AND whatever route the view occupies
+    inside the app. Subtracting the view's own route is the only way to
+    recover the prefix, and only the view knows that route, because the
+    view is what wrote it in ``urls.py``. A derivation that skips this is
+    silently correct at the app root and silently WRONG everywhere else;
+    0.7.1 shipped exactly that and this is the correction.
+
+    ``request.path``, never ``request.path_info``: ``path_info`` has
+    SCRIPT_NAME stripped, which is the prefix we are trying to read. And
+    never add SCRIPT_NAME back on — ``request.path`` already contains it
+    (django/core/handlers/wsgi.py), so doing so DOUBLES the prefix under
+    the very convention it looks like it is guarding against.
+
+    Contract, implementation and both traps above converged with
+    scitex-ui, whose `scitex_ui.mount` reasoned them out first.
+    """
+    path = getattr(request, "path", None)
+    if not isinstance(path, str):
+        raise MountPrefixMismatch(
+            f"request has no string .path (got {path!r}); the mount prefix is "
+            "derived from request.path and cannot be guessed"
+        )
+    route = view_path.strip("/")
+    if not route:
+        return path.rstrip("/")
+    tail = "/" + route
+    base = path.rstrip("/")
+    if not base.endswith(tail):
+        raise MountPrefixMismatch(
+            f"view_path {view_path!r} is not a trailing segment of request.path "
+            f"{path!r}. Pass the route this view is registered at in urls.py — "
+            "the prefix is request.path minus that route, and guessing it wrong "
+            "404s only once embedded."
+        )
+    return base[: -len(tail)]
+
 #: The <head> opening tag, and NOT <header>. The delimiter after the name is
 #: required, so `<header` cannot match: `<head>`, `<head lang="en">` do, and
 #: the search stops at that tag's own closing `>`.
@@ -138,35 +204,39 @@ def scitex_editor_page(
     static_dir: Path,
     index_file: str = "index.html",
     fallback_message: str = "React build not found. Run: npm run build",
+    view_path: str = "",
 ) -> Callable:
     """Factory: create a view that serves the React SPA from static_dir.
 
     The served HTML carries a ``<meta name="stx-mount" content="...">``
-    naming the prefix the app is mounted under — "/" standalone, or
-    "/apps/u/<module>/" as a scitex-hub built-in app.
+    naming the prefix the app is mounted under — ``""`` standalone, or
+    ``"/apps/u/<module>"`` as a scitex-hub built-in app. Client code joins
+    ``prefix + "/api/x"``; see :func:`mount_prefix` for why the slash is on
+    the endpoint and not the prefix.
 
     This is what lets ONE codebase run in both modes. `scitex_urlpatterns`
     is already prefix-agnostic on the server side (its patterns are
-    relative, so `include()` works under any root), but until now nothing
-    told the BROWSER where it was mounted. Client code had no supported
-    way to learn it, so leaves hardcoded "/" — which works perfectly
-    standalone and breaks silently once embedded.
-
-    The value is derived server-side from ``request.path``: this view is
-    registered at the mount root (``path("", ...)``), so its request path
-    IS the prefix. Never guess it client-side.
+    relative, so `include()` works under any root), but nothing told the
+    BROWSER where it was mounted, so leaves hardcoded "/" — which works
+    perfectly standalone and breaks silently once embedded.
 
     Args:
         static_dir: Path to the app's static/built files.
         index_file: Name of the HTML entry point.
         fallback_message: Message when build is missing.
+        view_path: This view's own route within the app, as written in
+            ``urls.py``. The default ``""`` is correct for the mount root,
+            which is where ``scitex_urlpatterns`` registers this view — so
+            callers using that helper never need to pass it. Supply it only
+            when mounting the editor somewhere other than the app root,
+            because the prefix is ``request.path`` MINUS this route.
     """
 
     def view(request):
         html_path = static_dir / index_file
         if html_path.exists():
-            mount_prefix = request.path if request.path.endswith("/") else request.path + "/"
-            return HttpResponse(_inject_mount_meta(html_path.read_text(), mount_prefix))
+            prefix = mount_prefix(request, view_path=view_path)
+            return HttpResponse(_inject_mount_meta(html_path.read_text(), prefix))
         return HttpResponse(
             f"<html><body><h1>{fallback_message}</h1></body></html>",
             status=503,

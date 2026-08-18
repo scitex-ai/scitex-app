@@ -1,7 +1,7 @@
 ---
 description: |
   [TOPIC] Mount Prefix
-  [DETAILS] The `stx-mount` contract — how a SciTeX app learns the URL prefix it is mounted under, so one codebase works standalone at / and embedded at /apps/u/<module>/. Covers the guaranteed trailing slash, why relative URLs are prefix-lucky rather than prefix-safe, and why the marker is a <meta> and not a <base href>..
+  [DETAILS] The `stx-mount` contract — how a SciTeX app learns the URL prefix it is mounted under, so one codebase works standalone and embedded at /apps/u/<module>/. Covers why the prefix carries no trailing slash, why relative URLs are prefix-lucky rather than prefix-safe, why the reader throws instead of defaulting, and why the marker is a <meta> and not a <base href>..
 tags: [scitex-app-mount-prefix]
 ---
 
@@ -11,44 +11,39 @@ tags: [scitex-app-mount-prefix]
 mounted, via `<meta name="stx-mount">`. Read it, join relative endpoint names
 onto it, never guess.
 
-Available from **scitex-app 0.7.0**.
-
----
+Available from **scitex-app 0.7.0**. **Semantics changed in 0.8.0** — see the
+slash section; 0.7.x's convention is withdrawn.
 
 ## The problem this exists to remove
 
-A SciTeX app runs in two places from one codebase:
-
-| mode | mounted at |
-|---|---|
-| standalone (`run_standalone`) | `/` |
-| embedded as a scitex-hub built-in app | `/apps/u/<module>/` |
-
-`scitex_urlpatterns` has always been prefix-agnostic on the *server* side — its
-patterns are relative, so `include()` works under any root. Nothing told the
-*browser*, so every app answered the question for itself. Measured across the
-three real consumers on 2026-08-18, before this shipped:
-
-| app | what it did |
-|---|---|
-| scitex-writer | invented `data-api-base` in its own templates — correct |
-| figrecipe | hardcoded `/static/figrecipe/assets/…` — breaks under a prefix |
-| scitex-scholar | hardcoded `/api/graph/…`, plus one *accidentally* relative call |
+One codebase runs standalone (mounted at `/`) and embedded as a scitex-hub
+built-in app (at `/apps/u/<module>/`). `scitex_urlpatterns` was always
+prefix-agnostic *server*-side — its patterns are relative, so `include()` works
+under any root — but nothing told the *browser*, so every app answered the
+question itself. Measured across the three real consumers on 2026-08-18:
+writer invented `data-api-base` (correct), figrecipe hardcoded
+`/static/figrecipe/…`, scholar hardcoded `/api/graph/…` plus one *accidentally*
+relative call.
 
 Three apps, three answers. Not three bugs — one missing declaration.
-
----
 
 ## Use it
 
 ```js
-const base = document.querySelector('meta[name="stx-mount"]')?.content ?? "/";
+const el = document.querySelector('meta[name="stx-mount"]');
+if (!el) throw new Error("stx-mount marker missing — the server did not declare a mount");
+const base = el.content;                       // "" at root, "/apps/u/x" embedded
 
-fetch(base + "api/search?q=" + encodeURIComponent(q));
-fetch(base + "api/graph/health");
+fetch(base + "/api/search?q=" + encodeURIComponent(q));
+fetch(base + "/api/graph/health");
 ```
 
-That is the whole API.
+That is the whole API. **Throw when the marker is absent; never default to root.**
+A default is indistinguishable from a correct read, so the one app that
+forgot to emit it behaves exactly like the ones that did — until it is
+mounted somewhere. scitex-scholar shipped a client-side fix against a page
+emitting no marker, and a `?? "/"` fallback made the diff look complete
+while changing nothing.
 
 **Read it inline at each call site, or declare it once for the whole page — but
 not once per file.** Classic `<script>` tags share one global scope, so the same
@@ -59,31 +54,39 @@ a footnote. ES modules have their own scope and are unaffected. *(scitex-scholar
 hit this in a first draft, verified both directions, and caught it before
 shipping.)*
 
-### The trailing slash is guaranteed. Do not normalise.
+### The prefix NEVER ends in `/`. The slash belongs to the endpoint.
 
-`stx-mount` **always** ends in `/`. Standalone it is `"/"`; embedded it is
-`"/apps/u/figrecipe/"`. From `scitex_app/_django.py`:
+Root is `""`; embedded is `"/apps/u/figrecipe"`. So you write
+`base + "/api/x"`, and leaf code must not strip or re-add anything.
 
-```python
-mount_prefix = request.path if request.path.endswith("/") else request.path + "/"
-```
+**This reversed in 0.8.0, and the reason is the only part worth memorising.**
+0.7.0–0.7.1 published the opposite (prefix ends in `/`, endpoint does not
+start with one). Both conventions produce *identical* correct output, so
+testing correct usage cannot tell them apart. They differ only in what the
+**likeliest mistake** does — run through a real URL resolver:
 
-So endpoint names must **not** start with a slash, and leaf code must **not**
-strip or re-add one. A `base.replace(/\/$/, '')` in every leaf is the same
-nine-implementations problem one level down, re-deriving a value the server
-already computed. If you ever observe a `stx-mount` without a trailing slash,
-that is an SDK bug — file it, do not work around it.
+| convention | likely mistake | result |
+|---|---|---|
+| 0.7.x: `"/"` + `"/api/x"` | endpoint written with a leading slash | `//api/x` → **`https://api/x` — a different host** |
+| now: `""` + `"api/x"` | endpoint missing its slash | `https://site/api/x` (root, accidentally fine) |
+| now: `"/apps/u/f"` + `"api/x"` | same | `/apps/u/fapi/x` — 404, right host |
 
----
+`//api/x` is protocol-relative: the browser sends the request, and whatever
+it carries, **off-origin**. The withdrawn convention's most natural error
+leaves the site; this one's 404s. That asymmetry is the whole argument, and
+it is invisible unless you deliberately run the wrong usage.
 
-## Why not just make the URLs relative?
+**The general rule, and the most useful thing on this page: when choosing
+between two contracts, compare their FAILURE modes, not their happy paths.**
+Correct usage looks identical either way, which is exactly why an author picks
+up the wrong instinct. It applies twice more below.
 
-Because that is not a fix — it is a quieter bug, and this is the most important
-section on this page. A relative URL **infers** the base from wherever the
-document happens to sit. `stx-mount` **declares** it.
+### Why not just make the URLs relative?
 
-scitex-scholar measured both, by booting Django with the app mounted at
-`/scholar/` and issuing the exact URLs its shipped JavaScript issues:
+Same test, different choice. A relative URL **infers** its base from wherever
+the document sits; `stx-mount` **declares** it. scitex-scholar measured both,
+booting Django mounted at `/scholar/` and issuing the URLs its shipped
+JavaScript actually issues:
 
 | URL as shipped | result |
 |---|---|
@@ -92,41 +95,33 @@ scitex-scholar measured both, by booting Django with the app mounted at
 | `api/search?q=x` (relative), mounted at `/scholar/` | **200** |
 | `api/search?q=x` (relative), mounted at `/scholar` | **404** |
 
-The 503s are the control: the view answering "no CrossRef DB", i.e. routing
-under a prefix already works and only the client URLs are wrong. Without that
-control the 404s are ambiguous between "wrong URL" and "never mounted".
+The 503s are the control — the view answering "no CrossRef DB", so routing under
+a prefix already works and only the client URLs are wrong. Without it the 404s
+are ambiguous between "wrong URL" and "never mounted".
 
-Read the last two rows together. The *relative* call works at `/scholar/` and
-404s at `/scholar`. Converting the root-absolute calls to relative would trade
-three loud, deterministic failures for one silent failure contingent on whether
-a deployer typed a trailing slash — which nobody documents and nobody checks.
-scitex-scholar's phrasing says it better than a paragraph:
+The last two rows are the point: the *relative* call works at `/scholar/` and
+404s at `/scholar`. Converting root-absolute calls to relative trades three
+loud deterministic failures for one silent failure contingent on a trailing
+slash nobody documents.
 
-> **Relative URLs are not prefix-safe. They are prefix-lucky.**
-
-Inference is correct exactly when the deployment happens to be shaped the way
-the inference assumes, and fails silently otherwise — the worst available
-failure mode for something a leaf author cannot test without a real mount.
+> **Relative URLs are not prefix-safe. They are prefix-lucky.** — scitex-scholar
 
 ## Credit: this is scitex-writer's pattern
 
-scitex-writer hit this first and solved it in its own templates, before the SDK
-offered anything — `data-api-base="{{ api_base|default:'/' }}"` on its root
-element, read back as `root.dataset.apiBase`, with relative endpoint names
-joined onto it.
+scitex-writer solved this first, in its own templates, before the SDK offered
+anything: `data-api-base` on its root element, read back as
+`root.dataset.apiBase`, with relative endpoint names joined onto it. **That
+pattern *is* the contract** — `stx-mount` is only the SDK's supported way to
+obtain the base.
 
-A server-supplied base, joined to relative endpoint names. **That pattern *is*
-the contract.** `stx-mount` is only the SDK's supported way to obtain the base,
-so every app gets it without inventing a third mechanism.
-
-Named here deliberately: the way this problem comes back is a future author
-reinventing a fourth spelling because they did not know the question had been
-answered.
+Named deliberately: this problem returns when a future author reinvents a
+spelling because nobody told them the question was answered. The current
+implementation's properties — throw rather than guess, subtract the view's own
+route — came from scitex-ui's `mount.py`, which reasoned them out first.
 
 ## Why a `<meta>` and not `<base href>` or a template render
 
-Decided for reasons that are not obvious, and recorded so they are not undone by
-someone who does not know them.
+Recorded so they are not undone by someone who does not know them.
 
 **Not a Django template render.** A built SPA's `index.html` routinely contains
 `{{` and `{%` inside inlined JS; the template engine would interpret them and
@@ -157,37 +152,43 @@ request path *is* the mount prefix.
 (`/static/<pkg>/…`) are still root-absolute and still break under a prefix. That
 is a build-tool concern — set your bundler's `base` — and the SDK deliberately
 does not paper over it at serve time. A rewriter would work, which is the
-problem: every app would go on shipping root-absolute assets while an invisible
-layer patched them, and the day it missed a case nobody would know where the
-magic stopped.
+problem: apps would go on shipping root-absolute assets while an invisible layer
+patched them, and the day it missed a case nobody would know where magic
+stopped.
 
 **Does not (2): inject into templates you render yourself.** `scitex_editor_page`
 exists for a *built SPA shell* — it reads `index.html` off disk and inserts the
 tag. If your view does `render_to_string(...)`, or anything else returning HTML
 the SDK never touched, **nothing injects the marker.**
 
-This is the trap, and it is silent: you read "the SDK injects it", ship the
-client half, and `?? "/"` falls back to exactly the behaviour you were fixing.
-The page still renders; only the API calls 404, only under a prefix, and the
-diff looks correct.
+Silent trap: you read "the SDK injects it", ship the client half, and the
+page still renders — only the API calls 404, only under a prefix, and the diff
+looks correct. This is why the reader now throws instead of defaulting.
 
-A Django-template app emits the marker itself — copy the derivation rather than
-reinventing it, so the two cannot drift:
+A Django-template app emits the marker itself. **Call the SDK rather than
+copying a derivation** — 0.7.1 shipped a copyable one-liner here and it was
+wrong for any view not at the app root:
 
 ```python
-# view: stx_mount = request.path if request.path.endswith("/") else request.path + "/"
+from scitex_app.embed import mount_prefix
+# in the view:  stx_mount = mount_prefix(request, view_path="editor/")
 ```
 ```html
-<meta name="stx-mount" content="{{ stx_mount|default:'/' }}">
+<meta name="stx-mount" content="{{ stx_mount }}">
 ```
 
+`view_path` is **this view's own route as written in `urls.py`**, required for
+anything not at the app root: `request.path` is the whole path — prefix *plus*
+the route the view occupies — so only the view can subtract it, because only
+the view knows it. Measured against 0.7.1's snippet: correct at the root, wrong
+in 3 of 5 cases, every wrong one a non-root view, silently. A mismatch raises.
+
 **This is not an SDK gap.** A template-rendered app is *writer-shaped*, not
-*SPA-shaped* — it is the case `data-api-base` was invented for, where the server
-already owns the HTML and can put the value in it. `scitex_editor_page` exists
-only because a built SPA's `index.html` is opaque bytes the server did not
-author. Same contract, two shapes; automatic injection covers one of them.
-*(Found by scitex-scholar, who is exactly this shape and nearly shipped the
-client half against a marker nothing was emitting.)*
+*SPA-shaped* — the case `data-api-base` was invented for, where the server
+already owns the HTML. `scitex_editor_page` exists only because a built SPA's
+`index.html` is opaque bytes the server did not author. Same contract, two
+shapes; automatic injection covers one. *(Found by scitex-scholar, who is that
+shape and nearly shipped the client half against a marker nothing emitted.)*
 
 ---
 
@@ -195,4 +196,3 @@ client half against a marker nothing was emitting.)*
 
 - `15_manifest-schema.md` — `frontend_type` is recorded, never branched on.
 - `17_app-develop-frontend.md` — bundler configuration.
-- `05_standalone.md` — `run_standalone`, the `/` case.
