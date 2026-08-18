@@ -29,6 +29,15 @@ was cut to prevent, reintroduced by a line that was correct when it was
 written. Django `|default:`, Jinja `|default()`, JS `||` and Python `or` all
 fire on `""`; use `??` or an explicit `is None` if you need a fallback.
 
+**Migrating is ONE coordinated change; the half-fix is worse than not
+starting.** Two things inverted together — the root value became falsy, and the
+slash moved from the base to the endpoint. Drop the default but keep
+`base + "api/x"` and you get `<prefix>api/x`; flip the join but keep the default
+and you get `//api/x`; fix the template but not the bundle and a `||` restores
+the old value anyway. Grep template default, base read and every fetch site
+before changing one. *(scitex-writer found this — all three faces are present
+in their app at once.)*
+
 Found by **scitex-scholar** while migrating, before it shipped. Their tell is
 worth repeating: a guard test that should have flipped after the migration kept
 passing. A test that survives a breaking change unchanged is evidence about the
