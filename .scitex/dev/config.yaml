@@ -83,3 +83,153 @@ audit:
   # its message first, because it fired here originally from a premise
   # ("the no-hosted-runners directive") that the operator had already dropped.
 
+  # The note above said "NO `exemptions:` BLOCK". That stopped being true on
+  # 2026-08-18. The note is KEPT rather than rewritten, because the standard it
+  # sets — measured, per-site, retired when inert — is the standard the entry
+  # below has to meet.
+  #
+  # SHAPE MATTERS HERE AND IS EASY TO GET WRONG THREE WAYS, all silent-ish:
+  #   1. In pyproject.toml instead of this file      — ignored, no error
+  #   2. A LIST at the block level (`- rule: PS-231`) — rejected wholesale
+  #   3. The argument written as YAML COMMENTS       — `reason` is MANDATORY,
+  #      and comments are not parsed, so the entry is rejected as empty
+  # `parse_exemptions` wants a MAPPING of rule-code -> [entries], each with a
+  # non-empty `reason`. Verified against the installed parser source, not
+  # inferred; figrecipe caught (2) and (3) in a draft of this entry.
+  exemptions:
+    PS-231:
+      - path: .github/workflows/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml
+        line: 0
+        reason: >-
+          TIME-BOXED — delete when the org reusable accepts a `dependency_group`
+          input. Same upstream gap, same card, same burn-down condition as the
+          rtd-sphinx-build entry below:
+          dev-corpus-release-turned-15-repos-red-and-notified-none-of-them-20260818.
+          OWNED BY card app-ps231-exemption-review-20260918, scheduled 2026-09-18 — a
+          burn-down condition with no owner is how a time-boxed exemption becomes
+          permanent, and that card exists so this one is somebody's job rather than
+          everybody's assumption.
+
+          THE DUPLICATION IS REAL AND THE RULE IS RIGHT. This file genuinely
+          re-implements the org reusable. It is exempted because converting it
+          is MEASURED to produce three permanently-red REQUIRED contexts — and
+          these are the only three contexts branch protection requires on
+          develop and main, so the blast radius is every PR in the repo.
+
+          MEASURED HERE on a throwaway probe branch, 2026-08-18, with the legacy
+          workflows deleted and the audit otherwise clean:
+          "pytest-matrix / pytest-matrix-on-ubuntu-py3.11 / .12 / .13" all
+          FAILURE, with "python -m pytest: error: unrecognized arguments:
+          --cov=src/scitex_app --cov-report=xml --cov-report=term" and exit
+          code 4, while "quality-audit / audit" and
+          "import-smoke / import-smoke-on-ubuntu-py3-12" were SUCCESS in the
+          same run.
+
+          MECHANISM — MEASURED HERE. The org reusable installs
+          `uv pip install -e ".[all,dev]" || uv pip install -e ".[dev]" ||
+          uv pip install -e .`. This repo declares `all` as an EXTRA but `dev`
+          as a PEP 735 dependency GROUP, with pytest-cov>=4.0.0 inside that
+          group. Both bracketed forms fail, the chain lands on a bare `-e .`
+          that installs no test dependencies, pytest-cov is absent, and the
+          reusable's own --cov flags are then unrecognised.
+
+          NOTE THE `||` CHAIN, because it is why this is invisible until it is
+          not: the install STEP SUCCEEDS. The failure degrades silently into a
+          bare install and resurfaces two steps later as an argument-parsing
+          error naming nothing about dependencies. "I could not install the dev
+          group" travels downstream as "installed fine". Reported upstream as a
+          defect in its own right — a fallback chain must report which arm it
+          landed on, or fail on the first.
+
+          THIS IS THE SAME UNHANDLED IDIOM AS THE rtd ENTRY, third instance in
+          this repo: PS-210 builds its dev set from
+          project.optional-dependencies.dev only and sees an EMPTY dev set;
+          rtd installs `.[docs]` and loses sphinx; this installs `.[all,dev]`
+          and loses pytest-cov. Not three bugs — one packaging idiom the
+          tooling does not know, which will recur as repos adopt the modern
+          spelling. ONE org-side `dependency_group` input retires both entries
+          here and unblocks every PEP 735 repo in the fleet.
+
+          DO NOT convert this file before that input exists, and do NOT move
+          branch protection onto the caller contexts. The failure is not a red
+          PR you can retry: the context IS published and is deterministically
+          red forever, so every PR blocks with no route out except a repo-admin
+          protection edit.
+
+          WHY THIS IS NOT A GATE SWITCHED OFF: scoped to ONE rule and ONE path.
+          Four of this repo's six PS-231 findings are FIXED by conversion in the
+          same change (import-smoke, quality-audit, cla, auto-merge-to-develop);
+          only the two measured incompatible are exempted, each with its own
+          evidence.
+      - path: .github/workflows/rtd-sphinx-build-on-ubuntu-latest.yml
+        line: 0
+        reason: >-
+          TIME-BOXED — delete when the org reusable accepts the inputs named
+          below. Tracked on
+          dev-corpus-release-turned-15-repos-red-and-notified-none-of-them-20260818.
+          Fleet ruling by scitex-hub 2026-08-18; wording converged with
+          figrecipe and scitex-scholar so three repos point at ONE upstream gap
+          instead of describing three problems.
+          OWNED BY card app-ps231-exemption-review-20260918, scheduled 2026-09-18.
+          The retirement condition is a PR number rather than a wish: the review asks
+          "did scitex-ai/.github#41 merge?", which is decidable.
+
+          THE DUPLICATION IS REAL AND THE RULE IS RIGHT. This file genuinely
+          re-implements the org reusable. It is exempted because the SANCTIONED
+          FIX IS MEASURED TO BREAK THIS REPO — not because converting is work,
+          and not because the finding is wrong. Of the six PS-231 findings here,
+          five are being FIXED by converting to callers in ci.yml; this is the
+          one that cannot be, and it is the only entry in this block.
+
+          MEASURED HERE, PR #78, 2026-08-18 — caller and legacy running side by
+          side in ONE run, which is what makes it a comparison rather than an
+          anecdote: "rtd-sphinx-build / docs-sphinx" FAILURE while "sphinx"
+          SUCCESS. Log: 'warning: The package `scitex-app` does not have an
+          extra named `docs`' then '.venv/bin/sphinx-build: No such file or
+          directory' then 'exit code 127'.
+
+          MECHANISM 1 — MEASURED HERE. The org reusable installs `.[docs]`, an
+          EXTRA. This repo declares docs as a PEP 735 dependency GROUP under
+          [dependency-groups] per ADR-0005, so the extra resolves to nothing,
+          sphinx is never installed, and the job dies at 127 on a missing binary
+          rather than at the unsatisfied dependency. Our legacy file uses `pip
+          install -e "." --group docs`, which is why it is green. CONFIRMED NOT
+          TO APPLY to scitex-scholar or figrecipe, both of which declare docs as
+          a classic extra — this mechanism is scitex-app-specific, and saying so
+          is the point: an exemption is a claim about THIS repo.
+
+          MECHANISM 2 — REPORTED BY figrecipe AND scitex-scholar; NOT
+          independently reproduced here. The org build is BUILD-ONLY, while
+          leaves also vendor docs/sphinx/_build/html into src/<pkg>/_sphinx_html;
+          hatch packages src/<pkg> wholesale, so that bundle SHIPS INSIDE THE
+          WHEEL. Converting would freeze the shipped documentation with CI green
+          and nothing anywhere saying so.
+
+          MECHANISM 3 — REPORTED BY figrecipe AND scitex-scholar; NOT
+          independently reproduced here. Leaves run `sphinx-build -W` on
+          pull_request; the org build does not. Converting would silently WEAKEN
+          the docs gate.
+
+          SMALLEST SUFFICIENT ORG-SIDE FIX, so this is a burn-down item and not
+          a standing exception: dependency_group (mechanism 1), fail_on_warning
+          or a general sphinx_opts (3), python_version, upload_artifact plus an
+          artifact-name output so each caller vendors and commits in its own job
+          with its own contents:write (2), and fork_guard. ONE org change retires
+          this entry across roughly thirty repositories. Thirty individually
+          reasoned exemptions for one missing input is how an exemption list
+          becomes permanent.
+
+          DO NOT convert this file to a caller before those inputs exist, and
+          note the failure is NOT a red PR you can retry. Under branch protection
+          the required context would point at a publisher that CANNOT succeed —
+          deterministically red forever, every PR blocked behind it. That is
+          worse than the "required context nobody publishes" deadlock, because
+          the context IS published and therefore looks alive.
+
+          WHY THIS IS NOT A GATE SWITCHED OFF. The property PS-231 protects is
+          "this repo tracks upstream fixes to shared workflows". This entry is
+          scoped to ONE rule and ONE path, so every other workflow here is still
+          checked — and five of them are being converted in the same change
+          rather than exempted. The finding is recorded as TRUE and pointed
+          upstream, which is the opposite of suppressing it.
+

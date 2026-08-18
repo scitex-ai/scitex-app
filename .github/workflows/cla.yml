@@ -1,22 +1,9 @@
 name: CLA Assistant
 
-# Two trigger paths:
-#   1. PRs from contributors           → CLAssistant action checks signature.
-#                                         allowlist already short-circuits to
-#                                         success for `bot*` and the repo
-#                                         owner, so owner PRs land instantly.
-#   2. Direct pushes / tag pushes      → owner-bypass job posts a synthetic
-#      by the repo owner                  `CLAssistant=success` status on the
-#                                         SHA so the release pipeline's
-#                                         sync-main step (a direct ref PATCH)
-#                                         doesn't get rejected by main's
-#                                         branch-protection rule that requires
-#                                         CLAssistant. Operator-direct: 2026-06-04.
-#
 # ─────────────────────────────────────────────────────────────────────────────
-# DO NOT MOVE THESE JOBS OFF `ubuntu-latest`. This is a SECURITY decision, not a
-# CI-placement preference, and it is recorded here — in the file someone editing
-# the runner would actually open — rather than only in an auditor config.
+# RUNNER PLACEMENT IS A SECURITY CONSTRAINT HERE, NOT A CI-PLACEMENT PREFERENCE,
+# and it is recorded in the file someone editing the runner would actually open
+# rather than only in an auditor config.
 #
 # Both jobs run on `issue_comment` and `pull_request_target`, which are
 # UNAUTHENTICATED on a public repo and are NOT covered by the fork-PR approval
@@ -26,13 +13,63 @@ name: CLA Assistant
 # outsider-triggerable job must not land there. A compromise on an ephemeral
 # hosted VM costs one disposable runner; on that pool it costs the fleet.
 #
-# Relocated here 2026-08-11 from `.scitex/dev/config.yaml`, where it lived as a
-# PS-224 exemption. Those exemptions were retired once measured inert on the
-# version CI resolves (scitex-dev v0.47.0: identical findings with and without
-# them) — but a dead exemption is a bad home for a live security decision, and
-# deleting it would have deleted this reasoning with it. The auditor rule may
-# change again; this constraint does not.
+# Originally relocated here 2026-08-11 from a retired PS-224 exemption, because
+# a dead exemption is a bad home for a live security decision. I deleted this
+# block when I first converted the file to a caller, and PS-224 fired on the
+# result — correctly. Restored, and the constraint is now ENFORCED rather than
+# merely described: `runs_on` is passed explicitly below.
+#
+# WHY PASSED EXPLICITLY WHEN THE CALLEE ALREADY DEFAULTS TO ubuntu-latest.
+# PS-224's own words: "The caller names no `runs-on`, so the destination lives
+# in the callee and NEITHER FILE shows the exposure on its own." That is right,
+# and it is worse than an audit inconvenience — inheriting a security-relevant
+# destination from someone else's default means the property can be revoked
+# upstream, silently, by a change nobody here reviews. A default is not a
+# decision anyone makes; it is one they never see. So this caller states the
+# destination itself, at the site where the exposure is decidable.
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# Thin caller. The body lives ONCE, org-side, in scitex-ai/.github@main.
+#
+# WHAT THE ORG VERSION ALREADY CARRIES, checked before deleting our fork rather
+# than assumed — this repo's copy existed for these two behaviours, both now
+# upstream:
+#
+#   owner-bypass   `if: github.event_name == 'push' && github.actor ==
+#                  inputs.owner_login` — posts a synthetic CLAssistant=success
+#                  status on a direct owner push, so the release pipeline's
+#                  sync-main step is not rejected by a branch-protection rule
+#                  requiring CLAssistant. Added here by operator direction on
+#                  2026-06-04; now an org input.
+#   owner_allowlist / owner_login
+#                  default to "bot*,ywatanabe1989" and "ywatanabe1989", exactly
+#                  the values this repo's fork hard-coded. Not restated below:
+#                  unlike `runs_on`, these carry no security property that an
+#                  upstream default change could silently revoke.
+#
+# SECRETS ARE PASSED BY NAME, NOT INHERITED — and this is the substantive
+# security change in this file, not the `runs_on` line above.
+#
+# `secrets: inherit` forwards EVERY secret this repository holds into the
+# callee. On a job an outsider can start via `issue_comment` or
+# `pull_request_target`, that is the whole secret store behind an
+# unauthenticated trigger. The callee needs exactly one of them, and declares
+# it: `secrets: GH_PERSONAL_ACCESS_TOKEN: required: true`. Its own comment
+# says `inherit` "keeps working for callers that have not migrated" — i.e.
+# naming the secret IS the migration, and inherit is the back-compat path.
+#
+# I reached this the slow way and the record is worth keeping. My first
+# attempt at satisfying PS-224 was to pass `runs_on` explicitly, reasoning
+# from the rule's message ("the caller names no `runs-on`"). It fired again.
+# Reading `_workflow_exposure.py` rather than its message shows why: the check
+# is `"uses" in job` AND `job.get("secrets") == "inherit"` AND an
+# attacker-triggerable event, and the module says outright that it "ignores
+# `runs-on` entirely". A `uses:` job cannot declare `runs-on` at all, so no
+# caller could ever have satisfied the reading I took from the text.
+#
+# The rule's NAME points at the runner; its CHECK points at secret
+# propagation. Trusting the name cost one CI cycle. The fix that works is also
+# the fix that is actually right — forward one secret instead of all of them.
 
 on:
   issue_comment:
@@ -43,50 +80,14 @@ on:
     branches: [main, develop]
     tags: ['v*']
 
-permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  statuses: write
-
 jobs:
-  owner-bypass:
-    # Fires only for direct pushes by the repo owner. PR events keep
-    # going through the full CLAssistant action below.
-    if: github.event_name == 'push' && github.actor == 'ywatanabe1989'
-    runs-on: ubuntu-latest
-    permissions:
-      statuses: write
-    steps:
-      - name: Mark CLAssistant=success on this SHA (owner-allowlisted direct push)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          gh api "repos/${REPO}/statuses/${SHA}" \
-            -f state=success \
-            -f context=CLAssistant \
-            -f description="Owner-triggered direct push (CLA bypass per repo allowlist)"
-
-  CLAssistant:
-    # PR / comment path — unchanged from the pre-2026-06-04 workflow.
-    if: github.event_name != 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: CLA Assistant
-        uses: contributor-assistant/github-action@v2.6.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-        with:
-          path-to-signatures: "signatures/cla.json"
-          path-to-document: "https://github.com/ywatanabe1989/scitex-app/blob/main/CLA.md"
-          branch: "cla-signatures"
-          allowlist: bot*,ywatanabe1989
-          custom-allsigned-prcomment: |
-            Thank you for signing the SciTeX CLA. Your contribution can now be reviewed.
-          custom-notsigned-prcomment: |
-            Please sign the [SciTeX CLA](https://github.com/ywatanabe1989/scitex-app/blob/main/CLA.md) before your contribution can be merged.
-            Comment `I have read and agree to the SciTeX CLA.` to sign.
+  cla:
+    uses: scitex-ai/.github/.github/workflows/cla.yml@main
+    with:
+      # JSON array STRING — the callee feeds it to fromJSON. A YAML list
+      # decodes to something fromJSON rejects, and the resulting label
+      # mismatch makes the job QUEUE FOREVER rather than fail, which is
+      # indistinguishable from "still waiting" in the run list.
+      runs_on: '["ubuntu-latest"]'
+    secrets:
+      GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
