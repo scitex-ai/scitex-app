@@ -47,10 +47,29 @@ name: CLA Assistant
 #                  unlike `runs_on`, these carry no security property that an
 #                  upstream default change could silently revoke.
 #
-# `secrets: inherit` is required, not decorative: the callee declares
-# GH_PERSONAL_ACCESS_TOKEN as a REQUIRED secret. It is also the reason the
-# runner constraint above matters — inherit forwards every secret this repo
-# holds into a job an outsider can start.
+# SECRETS ARE PASSED BY NAME, NOT INHERITED — and this is the substantive
+# security change in this file, not the `runs_on` line above.
+#
+# `secrets: inherit` forwards EVERY secret this repository holds into the
+# callee. On a job an outsider can start via `issue_comment` or
+# `pull_request_target`, that is the whole secret store behind an
+# unauthenticated trigger. The callee needs exactly one of them, and declares
+# it: `secrets: GH_PERSONAL_ACCESS_TOKEN: required: true`. Its own comment
+# says `inherit` "keeps working for callers that have not migrated" — i.e.
+# naming the secret IS the migration, and inherit is the back-compat path.
+#
+# I reached this the slow way and the record is worth keeping. My first
+# attempt at satisfying PS-224 was to pass `runs_on` explicitly, reasoning
+# from the rule's message ("the caller names no `runs-on`"). It fired again.
+# Reading `_workflow_exposure.py` rather than its message shows why: the check
+# is `"uses" in job` AND `job.get("secrets") == "inherit"` AND an
+# attacker-triggerable event, and the module says outright that it "ignores
+# `runs-on` entirely". A `uses:` job cannot declare `runs-on` at all, so no
+# caller could ever have satisfied the reading I took from the text.
+#
+# The rule's NAME points at the runner; its CHECK points at secret
+# propagation. Trusting the name cost one CI cycle. The fix that works is also
+# the fix that is actually right — forward one secret instead of all of them.
 
 on:
   issue_comment:
@@ -70,4 +89,5 @@ jobs:
       # mismatch makes the job QUEUE FOREVER rather than fail, which is
       # indistinguishable from "still waiting" in the run list.
       runs_on: '["ubuntu-latest"]'
-    secrets: inherit
+    secrets:
+      GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
