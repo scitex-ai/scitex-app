@@ -1,7 +1,7 @@
 ---
 description: |
   [TOPIC] Mount Prefix
-  [DETAILS] The `stx-mount` contract — how a SciTeX app learns the URL prefix it is mounted under, so one codebase works standalone and embedded at /apps/u/<module>/. Covers why the prefix carries no trailing slash, why relative URLs are prefix-lucky rather than prefix-safe, why the reader throws instead of defaulting, and why the marker is a <meta> and not a <base href>..
+  [DETAILS] The `stx-mount` contract — how a SciTeX app learns the URL prefix it is mounted under, so one codebase works standalone and embedded at /apps/u/<module>/. Covers why the prefix carries no trailing slash, why relative URLs are prefix-lucky rather than prefix-safe, why the reader throws instead of defaulting, and why the marker is a <meta> and not a <base href>.
 tags: [scitex-app-mount-prefix]
 ---
 
@@ -53,6 +53,19 @@ snippet above invites per-file declaration, which is why this is here and not in
 a footnote. ES modules have their own scope and are unaffected. *(scitex-scholar
 hit this in a first draft, verified both directions, and caught it before
 shipping.)*
+
+### Prefix YOUR endpoints. Not the platform's.
+
+The base belongs to routes **your app owns** — the ones under your
+`urlpatterns`. Hub's platform endpoints (`/platform/api/context/`,
+`/platform/api/data/`, `/apps/store/api/…`) live at the server root and are
+*not* under your mount. Prefixing those breaks them, which is this page's
+advice over-applied:
+
+```js
+fetch(base + "/api/search");        // yours       -> /apps/u/x/api/search
+fetch("/platform/api/context/");    // hub's       -> stays at the root
+```
 
 ### The prefix NEVER ends in `/`. The slash belongs to the endpoint.
 
@@ -121,8 +134,6 @@ route — came from scitex-ui's `mount.py`, which reasoned them out first.
 
 ## Why a `<meta>` and not `<base href>` or a template render
 
-Recorded so they are not undone by someone who does not know them.
-
 **Not a Django template render.** A built SPA's `index.html` routinely contains
 `{{` and `{%` inside inlined JS; the template engine would interpret them and
 corrupt the bundle, for reasons having nothing to do with mounting. The
@@ -133,20 +144,12 @@ resolution of *every* relative reference in the document — anchors, form
 actions, fragment links — a large behavioural change to an app's own markup in
 exchange for a value the app can simply read.
 
-**Matched as `<head>` / `<head ...>` specifically.** A substring search for
-`<head` also matches `<header`, which put the marker inside a `<header>` element
-on documents that had one and no real head. Where there is no head at all the
-tag is prepended — still correct, since the parser hoists a leading `<meta>` —
-so the prefix is never silently dropped.
-
----
-
 ## What the SDK does and does not promise
 
 **Does:** if you serve your shell through `scitex_editor_page`, the marker is
-present and its value is correct. It is derived from `request.path`, which is
-exact rather than a guess — the view is registered at `path("", …)`, so its
-request path *is* the mount prefix.
+present and correct — `request.path` minus the view's own route, which is exact
+rather than guessed. `scitex_urlpatterns` registers it at the mount root, so the
+default `view_path=""` is right unless you mount it elsewhere.
 
 **Does not (1):** rewrite your assets. Root-absolute URLs in your bundle
 (`/static/<pkg>/…`) are still root-absolute and still break under a prefix. That
@@ -189,8 +192,6 @@ already owns the HTML. `scitex_editor_page` exists only because a built SPA's
 `index.html` is opaque bytes the server did not author. Same contract, two
 shapes; automatic injection covers one. *(Found by scitex-scholar, who is that
 shape and nearly shipped the client half against a marker nothing emitted.)*
-
----
 
 ## Related
 
