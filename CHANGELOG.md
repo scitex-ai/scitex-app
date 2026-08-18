@@ -7,6 +7,64 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-18
+
+- **feat(django): the SDK now tells the browser where the app is mounted.**
+  `scitex_urlpatterns` was already prefix-agnostic on the server — its patterns
+  are relative, so `include()` works under any root — but nothing told the
+  *browser*. Client code had no supported way to learn its mount point, so
+  leaves hardcoded `/`: correct standalone, silently broken the moment the app
+  is embedded under a prefix.
+
+  `scitex_editor_page` now injects a marker into the served shell:
+
+      <meta name="stx-mount" content="/apps/u/figrecipe/">
+
+  The value is derived server-side from `request.path`. That is exact rather
+  than a guess: the view is registered at `path("", ...)`, so its request path
+  *is* the mount prefix. Never compute it client-side.
+
+  **Prior art, and it is not ours.** scitex-writer hit this first and solved it
+  in its own templates — `data-api-base="{{ api_base|default:'/' }}"` read back
+  as `root.dataset.apiBase`, with relative endpoint names joined onto it. That
+  pattern *is* the contract; `stx-mount` is simply the SDK's supported way to
+  obtain the base, so every app gets it without inventing a third mechanism.
+  Read the marker, join relative endpoint names onto it, and the same build
+  works at `/` and under any prefix.
+
+  **Why a `<meta>` and not `<base href>` or a template render.** A built SPA's
+  `index.html` routinely contains `{{` and `{%` inside inlined JS. Running it
+  through Django's template engine would try to interpret those and corrupt the
+  bundle for reasons unrelated to mounting. The injection is therefore a plain
+  string insertion that adds exactly one tag and touches nothing else. It is
+  matched against `<head>` / `<head ...>` specifically — a substring search for
+  `<head` also matches `<header`, which placed the marker inside a `<header>`
+  element on documents that had one and no real head. Where there is no head at
+  all the tag is prepended, which is still correct (the parser hoists a leading
+  `<meta>`), so the prefix is never silently dropped.
+
+- **Why this is a minor bump, stated plainly because the omission is the
+  lesson.** The feature above landed on `develop` while `pyproject.toml` still
+  read `0.6.1` — the same string already published to PyPI and already
+  installed across the fleet. Two different builds wore one version number, so
+  "am I on 0.6.1?" answered *yes* for a build that lacked the feature and *yes*
+  for a build that had it. A version string that cannot distinguish them has
+  stopped being an identifier. The practical cost was real: three consumer apps
+  looked as though they had ignored a contract that, from where they sat, did
+  not exist.
+
+- **test(django): one assertion per test**, and the mount marker is pinned
+  against both real mounts it exists to span — `/` standalone and
+  `/apps/u/<module>/` as a scitex-hub built-in app.
+
+- **fix(ci): auto-merge counted QUEUED checks as green.** A check still sitting
+  in the queue is not a passing check; treating it as one made the gate report
+  success before the evidence existed.
+
+- **chore(audit-config): retire 8 PS-224 exemptions measured inert**, and
+  relocate the security reasoning into the workflows themselves, so the reason
+  lives next to the thing it justifies.
+
 ## [0.6.1] - 2026-08-05
 
 - **fix(gui-launcher): `--force` could SIGTERM an unrelated process.**
