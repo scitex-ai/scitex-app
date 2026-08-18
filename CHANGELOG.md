@@ -7,6 +7,79 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-18
+
+### BREAKING — `stx-mount` carries no trailing slash
+
+Root is now `""` (was `"/"`); embedded is `"/apps/u/x"` (was `"/apps/u/x/"`).
+**The slash moved to the endpoint**: write `base + "/api/x"`, not
+`base + "api/x"`. 0.7.0–0.7.1's convention is withdrawn two days after it
+shipped.
+
+**Why, and it is not a preference.** scitex-ui ships its own `mount_prefix`
+with the opposite convention on the *same* meta tag name, in the same venv.
+Two SDKs, one tag, incompatible semantics — that had to collapse to one, and
+both conventions produce **identical correct output**, so testing correct
+usage cannot choose between them. Running each one's *likeliest mistake*
+through a real URL resolver can:
+
+| convention | likely mistake | result |
+|---|---|---|
+| 0.7.x `"/"` + `"/api/x"` | endpoint written with a leading slash | `//api/x` → **`https://api/x` — a different host** |
+| 0.8.0 `""` + `"api/x"` | endpoint missing its slash | `https://site/api/x` (root, accidentally fine) |
+| 0.8.0 `"/apps/u/f"` + `"api/x"` | same | `/apps/u/fapi/x` — 404, right host |
+
+`//api/x` is protocol-relative: the browser sends the request, **and whatever
+it carries, off-origin**. The withdrawn convention's most natural error leaves
+the site; this one's 404s on the right host. scitex-hub confirmed this was
+their surface too, since hub is what embeds apps.
+
+### BREAKING — the reader throws instead of defaulting to root
+
+`?? "/"` is gone from the contract. A default is indistinguishable from a
+correct read, which is exactly how scitex-scholar's prefix fix nearly shipped
+as a silent no-op: nothing emitted a marker, the fallback returned root, and
+the diff looked complete.
+
+### Fixed — the 0.7.1 derivation was wrong for any non-root view
+
+0.7.1 handed template-rendered apps a copyable one-liner that assumed the view
+sits at the app root. Measured: correct at the root, **wrong in 3 of 5 cases,
+every wrong one a non-root view, and wrong silently**.
+
+`request.path` is the whole path — the mount prefix *plus* the route the view
+occupies — so only the view can subtract it, because only the view knows it.
+New `mount_prefix(request, view_path=...)` does, and raises
+`MountPrefixMismatch` rather than returning a best guess. `scitex_editor_page`
+takes `view_path` too; its default `""` remains correct for `scitex_urlpatterns`,
+which registers it at the mount root.
+
+### Migrating
+
+```js
+// before (0.7.x)
+const base = document.querySelector('meta[name="stx-mount"]')?.content ?? "/";
+fetch(base + "api/x");
+
+// after (0.8.0)
+const el = document.querySelector('meta[name="stx-mount"]');
+if (!el) throw new Error("stx-mount marker missing");
+fetch(el.content + "/api/x");
+```
+
+Template apps: replace any hand-copied derivation with
+`from scitex_app.embed import mount_prefix`, passing your view's own route.
+
+### Credit
+
+The implementation properties are **scitex-ui's** — throw rather than guess,
+subtract `view_path` rather than assume root. They argued *against their own
+scope*, separating "which code survives" from "which package owns the
+contract", and that argument is why the contract stayed here while their design
+won. Their `mount.py` also reasoned out the `SCRIPT_NAME` double-prefix trap
+and the `resolver_match.route` dead end first. The compare-failure-modes rule
+is **scitex-scholar's** generalisation.
+
 ## [0.7.1] - 2026-08-18
 
 - **docs(mount-prefix): the SDK does not inject into templates you render
