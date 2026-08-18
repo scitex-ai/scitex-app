@@ -24,7 +24,9 @@ from django.test import RequestFactory  # noqa: E402
 
 from scitex_app._django import (  # noqa: E402
     MOUNT_META_NAME,
+    MountPrefixMismatch,
     _inject_mount_meta,
+    mount_prefix,
     scitex_editor_page,
 )
 
@@ -34,10 +36,17 @@ from scitex_app._django import (  # noqa: E402
 STANDALONE = "/"
 EMBEDDED = "/apps/u/figrecipe/"
 
+# The PREFIX each of those produces. Root is the empty string and no prefix
+# carries a trailing slash: client code joins `prefix + "/api/x"`, so the
+# slash belongs to the endpoint. See mount_prefix's docstring for the
+# measurement that chose this over the 0.7.0-0.7.1 convention.
+STANDALONE_PREFIX = ""
+EMBEDDED_PREFIX = "/apps/u/figrecipe"
 
-def _serve(tmp_path, html: str, path: str) -> str:
+
+def _serve(tmp_path, html: str, path: str, view_path: str = "") -> str:
     (tmp_path / "index.html").write_text(html)
-    view = scitex_editor_page(tmp_path)
+    view = scitex_editor_page(tmp_path, view_path=view_path)
     response = view(RequestFactory().get(path))
     return response.content.decode()
 
@@ -48,7 +57,7 @@ def test_injects_marker_into_head(tmp_path):
     # Act
     served = _serve(tmp_path, html, EMBEDDED)
     # Assert
-    assert f'<meta name="{MOUNT_META_NAME}" content="{EMBEDDED}">' in served
+    assert f'<meta name="{MOUNT_META_NAME}" content="{EMBEDDED_PREFIX}">' in served
 
 
 def test_marker_is_inside_the_head_element(tmp_path):
@@ -64,11 +73,11 @@ def test_marker_is_inside_the_head_element(tmp_path):
 @pytest.mark.parametrize(
     "request_path,expected",
     [
-        (STANDALONE, "/"),
-        (EMBEDDED, "/apps/u/figrecipe/"),
-        # Django can route a mount without the trailing slash; the marker
-        # must still be a usable base for joining, so it is normalised.
-        ("/apps/u/figrecipe", "/apps/u/figrecipe/"),
+        (STANDALONE, STANDALONE_PREFIX),
+        (EMBEDDED, EMBEDDED_PREFIX),
+        # Django can route a mount without the trailing slash; either way
+        # the prefix is the same, because the slash is never part of it.
+        ("/apps/u/figrecipe", EMBEDDED_PREFIX),
     ],
 )
 def test_marker_carries_the_actual_mount_prefix(tmp_path, request_path, expected):
@@ -78,6 +87,53 @@ def test_marker_carries_the_actual_mount_prefix(tmp_path, request_path, expected
     served = _serve(tmp_path, html, request_path)
     # Assert
     assert f'content="{expected}"' in served
+
+
+@pytest.mark.parametrize(
+    "request_path,view_path,expected",
+    [
+        # A view at the app ROOT: prefix is the whole path. This is the only
+        # case 0.7.1 got right, which is why the defect survived a release.
+        ("/apps/u/x/", "", "/apps/u/x"),
+        # A view NOT at the root. 0.7.1 returned "/apps/u/x/editor/" here —
+        # the view's own route counted as part of the mount — so every API
+        # call built from it 404'd, silently, only once embedded.
+        ("/apps/u/x/editor/", "editor/", "/apps/u/x"),
+        ("/apps/u/x/editor/", "/editor", "/apps/u/x"),
+        ("/apps/u/x/api/graph/health", "api/graph/health", "/apps/u/x"),
+        # Same non-root view, standalone: prefix is root, not "/editor".
+        ("/editor/", "editor/", ""),
+    ],
+)
+def test_view_path_is_subtracted_from_the_prefix(request_path, view_path, expected):
+    # Arrange
+    request = RequestFactory().get(request_path)
+    # Act
+    prefix = mount_prefix(request, view_path=view_path)
+    # Assert
+    assert prefix == expected
+
+
+def test_a_view_path_that_does_not_match_raises_rather_than_guessing():
+    # Arrange — a wrong prefix is indistinguishable from a right one until
+    # something 404s in production, so this must not return a best effort.
+    request = RequestFactory().get("/apps/u/x/editor/")
+    # Act
+    raised = pytest.raises(MountPrefixMismatch)
+    # Assert
+    with raised:
+        mount_prefix(request, view_path="viewer/")
+
+
+def test_no_prefix_ever_carries_a_trailing_slash(tmp_path):
+    # Arrange — the whole reason the convention changed: `prefix + "/api/x"`
+    # must not produce "//api/x", which is protocol-relative and resolves to
+    # a DIFFERENT HOST.
+    html = "<html><head></head><body></body></html>"
+    # Act
+    served = _serve(tmp_path, html, EMBEDDED)
+    # Assert
+    assert f'content="{EMBEDDED_PREFIX}"' in served and 'content="/apps/u/figrecipe/"' not in served
 
 
 def test_one_build_serves_differently_under_each_mount(tmp_path):
@@ -90,13 +146,16 @@ def test_one_build_serves_differently_under_each_mount(tmp_path):
     assert standalone != embedded
 
 
-def test_standalone_mount_marks_the_root(tmp_path):
-    # Arrange
+def test_standalone_mount_marks_the_root_as_the_empty_string(tmp_path):
+    # Arrange — root is "" and NOT "/". This test asserted 'content="/"'
+    # until 0.7.1 and is the pin for the convention change: a "/" root makes
+    # the documented join `prefix + "/api/x"` produce "//api/x", which is
+    # protocol-relative and resolves to a DIFFERENT HOST.
     html = "<html><head></head><body></body></html>"
     # Act
     served = _serve(tmp_path, html, STANDALONE)
     # Assert
-    assert 'content="/"' in served
+    assert 'content=""' in served and 'content="/"' not in served
 
 
 def test_body_is_otherwise_untouched(tmp_path):
