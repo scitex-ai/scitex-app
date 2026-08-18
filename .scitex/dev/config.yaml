@@ -105,6 +105,10 @@ audit:
           input. Same upstream gap, same card, same burn-down condition as the
           rtd-sphinx-build entry below:
           dev-corpus-release-turned-15-repos-red-and-notified-none-of-them-20260818.
+          OWNED BY card app-ps231-exemption-review-20260918, scheduled 2026-09-18 — a
+          burn-down condition with no owner is how a time-boxed exemption becomes
+          permanent, and that card exists so this one is somebody's job rather than
+          everybody's assumption.
 
           THE DUPLICATION IS REAL AND THE RULE IS RIGHT. This file genuinely
           re-implements the org reusable. It is exempted because converting it
@@ -166,6 +170,9 @@ audit:
           Fleet ruling by scitex-hub 2026-08-18; wording converged with
           figrecipe and scitex-scholar so three repos point at ONE upstream gap
           instead of describing three problems.
+          OWNED BY card app-ps231-exemption-review-20260918, scheduled 2026-09-18.
+          The retirement condition is a PR number rather than a wish: the review asks
+          "did scitex-ai/.github#41 merge?", which is decidable.
 
           THE DUPLICATION IS REAL AND THE RULE IS RIGHT. This file genuinely
           re-implements the org reusable. It is exempted because the SANCTIONED
