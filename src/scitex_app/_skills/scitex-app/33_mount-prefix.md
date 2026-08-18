@@ -16,16 +16,11 @@ slash section; 0.7.x's convention is withdrawn.
 
 ## The problem this exists to remove
 
-One codebase runs standalone (mounted at `/`) and embedded as a scitex-hub
-built-in app (at `/apps/u/<module>/`). `scitex_urlpatterns` was always
-prefix-agnostic *server*-side — its patterns are relative, so `include()` works
-under any root — but nothing told the *browser*, so every app answered the
-question itself. Measured across the three real consumers on 2026-08-18:
-writer invented `data-api-base` (correct), figrecipe hardcoded
-`/static/figrecipe/…`, scholar hardcoded `/api/graph/…` plus one *accidentally*
-relative call.
-
-Three apps, three answers. Not three bugs — one missing declaration.
+One codebase runs standalone (at `/`) and embedded as a scitex-hub built-in app
+(at `/apps/u/<module>/`). `scitex_urlpatterns` was always prefix-agnostic
+*server*-side — its patterns are relative — but nothing told the *browser*, so
+every app answered the question itself, three different ways. Not three bugs:
+one missing declaration.
 
 ## Use it
 
@@ -72,6 +67,20 @@ fetch("/platform/api/context/");    // hub's       -> stays at the root
 Root is `""`; embedded is `"/apps/u/figrecipe"`. So you write
 `base + "/api/x"`, and leaf code must not strip or re-add anything.
 
+**The root prefix is the EMPTY STRING, which is FALSY. Delete any `|default`,
+`||` or `or` around it.** Under 0.7.x those were correct and harmless — `"/"`
+was the right root, so writing a default was sensible. Under this convention
+they silently restore the withdrawn value:
+
+```django
+{{ stx_mount|default:'/' }}   ← renders "/" at root. Now every call builds //api/x
+```
+
+Django `|default:`, Jinja `|default()`, JS `||`, Python `or` all fire on `""`.
+Use `??` or an explicit `is None` if you need a fallback at all. *(scitex-scholar
+hit exactly this migrating, and found it only because a guard test that should
+have flipped kept passing.)*
+
 **This reversed in 0.8.0, and the reason is the only part worth memorising.**
 0.7.0–0.7.1 published the opposite (prefix ends in `/`, endpoint does not
 start with one). Both conventions produce *identical* correct output, so
@@ -92,57 +101,11 @@ it is invisible unless you deliberately run the wrong usage.
 **The general rule, and the most useful thing on this page: when choosing
 between two contracts, compare their FAILURE modes, not their happy paths.**
 Correct usage looks identical either way, which is exactly why an author picks
-up the wrong instinct. It applies twice more below.
+up the wrong instinct.
 
-### Why not just make the URLs relative?
-
-Same test, different choice. A relative URL **infers** its base from wherever
-the document sits; `stx-mount` **declares** it. scitex-scholar measured both,
-booting Django mounted at `/scholar/` and issuing the URLs its shipped
-JavaScript actually issues:
-
-| URL as shipped | result |
-|---|---|
-| `/api/graph/health` (root-absolute) | **404** |
-| `/scholar/api/graph/health` | 503 — reached the view |
-| `api/search?q=x` (relative), mounted at `/scholar/` | **200** |
-| `api/search?q=x` (relative), mounted at `/scholar` | **404** |
-
-The 503s are the control — the view answering "no CrossRef DB", so routing under
-a prefix already works and only the client URLs are wrong. Without it the 404s
-are ambiguous between "wrong URL" and "never mounted".
-
-The last two rows are the point: the *relative* call works at `/scholar/` and
-404s at `/scholar`. Converting root-absolute calls to relative trades three
-loud deterministic failures for one silent failure contingent on a trailing
-slash nobody documents.
-
-> **Relative URLs are not prefix-safe. They are prefix-lucky.** — scitex-scholar
-
-## Credit: this is scitex-writer's pattern
-
-scitex-writer solved this first, in its own templates, before the SDK offered
-anything: `data-api-base` on its root element, read back as
-`root.dataset.apiBase`, with relative endpoint names joined onto it. **That
-pattern *is* the contract** — `stx-mount` is only the SDK's supported way to
-obtain the base.
-
-Named deliberately: this problem returns when a future author reinvents a
-spelling because nobody told them the question was answered. The current
-implementation's properties — throw rather than guess, subtract the view's own
-route — came from scitex-ui's `mount.py`, which reasoned them out first.
-
-## Why a `<meta>` and not `<base href>` or a template render
-
-**Not a Django template render.** A built SPA's `index.html` routinely contains
-`{{` and `{%` inside inlined JS; the template engine would interpret them and
-corrupt the bundle, for reasons having nothing to do with mounting. The
-injection is a plain string insertion adding exactly one tag.
-
-**Not `<base href>`.** It would fix relative URLs, but silently changes the
-resolution of *every* relative reference in the document — anchors, form
-actions, fragment links — a large behavioural change to an app's own markup in
-exchange for a value the app can simply read.
+The same test applied to two further choices — why not just use relative URLs,
+and why a `<meta>` rather than `<base href>` — plus whose pattern this is, are
+in `34_mount-prefix-rationale.md`. Read that before changing any of it.
 
 ## What the SDK does and does not promise
 
