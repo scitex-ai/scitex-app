@@ -142,18 +142,40 @@ def test_peer_symbol_still_exists(module_name, symbol):
     assert present, f"{module_name} no longer exports {symbol!r} — a peer moved it"
 
 
-def test_a_relative_import_is_not_mistaken_for_a_peer_import(tmp_path):
-    # Arrange — one file, two imports that differ ONLY in relativeness. The
-    # absolute one is a genuine peer import; the relative one is a local module
-    # that happens to share a peer's name.
-    peer = PEER_PACKAGES[0]
+# The two tests below are the two ARMS of one control, deliberately split into
+# separate test functions rather than two asserts in one. If they shared a
+# function, a failure in the first arm would stop the second from ever running
+# — and "the scan is broken" would mask "the level check is missing", which are
+# different defects needing different fixes. Split, both report independently.
+
+COLLIDING_PEER = PEER_PACKAGES[0]
+
+
+def _scan_a_file_importing_a_peer_both_ways(tmp_path):
+    """One file, two imports differing ONLY in relativeness."""
     (tmp_path / "mod.py").write_text(
-        f"from {peer} import AbsoluteSymbol\n"
-        f"from .{peer} import RelativeSymbol\n"
+        f"from {COLLIDING_PEER} import AbsoluteSymbol\n"
+        f"from .{COLLIDING_PEER} import RelativeSymbol\n"
     )
+    return _scan_peer_symbols(tmp_path)
+
+
+def test_an_absolute_peer_import_is_discovered(tmp_path):
+    # Arrange — arm one: fails if the scan is broken outright, which would make
+    # the sibling test below pass for the wrong reason (finding nothing at all).
+    expected = (COLLIDING_PEER, "AbsoluteSymbol")
     # Act
-    found = _scan_peer_symbols(tmp_path)
-    # Assert — two arms. The first fails if the scan is broken outright; the
-    # second fails if `node.level == 0` is dropped, which is the actual defect.
-    assert (peer, "AbsoluteSymbol") in found
-    assert (peer, "RelativeSymbol") not in found
+    found = _scan_a_file_importing_a_peer_both_ways(tmp_path)
+    # Assert
+    assert expected in found
+
+
+def test_a_relative_import_is_not_mistaken_for_a_peer_import(tmp_path):
+    # Arrange — arm two: fails if `node.level == 0` is dropped. A relative
+    # `from .<peer> import X` names a LOCAL module that merely spells a peer's
+    # name, and must not be attributed to the peer.
+    forbidden = (COLLIDING_PEER, "RelativeSymbol")
+    # Act
+    found = _scan_a_file_importing_a_peer_both_ways(tmp_path)
+    # Assert
+    assert forbidden not in found
