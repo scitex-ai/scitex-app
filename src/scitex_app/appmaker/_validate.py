@@ -56,6 +56,15 @@ PLATFORM_ROUTE_PREFIXES = (
 # Schemes and forms that are not app-relative at all, so the mount cannot apply.
 _PREFIX_SAFE_LEADERS = ("http://", "https://", "//", "data:", "blob:", "mailto:", "#", "?")
 
+# The identifier the contract prescribes for the mount prefix. stx-mount.js
+# declares `const STX_MOUNT`, and 33_mount-prefix.md tells apps to join
+# base + "/your/path". A template literal opening `${STX_MOUNT}` is therefore
+# the CORRECT fix, not a finding — see _prefix_finding_class.
+MOUNT_IDENTIFIERS = ("STX_MOUNT",)
+
+# A literal whose first token is an interpolation: `${something}/api/x`.
+_LEADING_INTERPOLATION = re.compile(r"^\$\{\s*([A-Za-z_$][\w$]*)\s*\}")
+
 # Call sites that issue a request and therefore must resolve against the mount.
 _REQUEST_CALL = r"(?:fetch|axios(?:\.\w+)?|\.open|new\s+URL|EventSource|WebSocket)"
 
@@ -418,16 +427,38 @@ def _prefix_finding_class(url: str) -> str | None:
 
     Returns the PREDICATE that matched, not a guess at intent — the finding text
     is built from this, so a reader can always reproduce the verdict.
+
+    THIS SIGNAL IS THREE-VALUED and 0.9.0 shipped it as two. A literal opening
+    with an interpolation — `${SOMETHING}/api/x` — is VARIABLE-PREFIXED: neither
+    root-absolute nor document-relative, because what precedes the path is a
+    value this scanner cannot see. 0.9.0 collapsed that unknown into
+    "inferred-base", so it flagged `${STX_MOUNT}/api/search` — which is exactly
+    the fix its own remediation text prescribes. Reported by scitex-scholar
+    against their CORRECTED tree, and reproduced here against the shipped wheel.
     """
     if not url or url.startswith(_PREFIX_SAFE_LEADERS):
         return None
+
+    leading = _LEADING_INTERPOLATION.match(url)
+    if leading:
+        # Prefixed by the contract's own mount identifier -> this IS the fix.
+        if leading.group(1) in MOUNT_IDENTIFIERS:
+            return None
+        # Prefixed by some OTHER variable. Genuinely UNKNOWN: it may be a
+        # correct base under a different name, or a wrong one. Deciding needs
+        # the value, which a scanner does not have, so it is not reported —
+        # collapsing unknown into "violation" is what produced the 0.9.0 bug,
+        # and flagging correct code is worse than missing an incorrect base.
+        # Recorded as an explicit exclusion on validate_prefix_safety.
+        return None
+
     if url.startswith("/"):
         if url.startswith(PLATFORM_ROUTE_PREFIXES):
             return None  # platform-owned, correctly at the server root
         return "root-absolute"
-    # No leading slash and no scheme: resolves against the DOCUMENT's URL, so it
-    # depends on whether the mount happened to be requested with a trailing
-    # slash. Works at /app/ and 404s at /app.
+    # No leading slash, no scheme, no interpolation: resolves against the
+    # DOCUMENT's URL, so it depends on whether the mount happened to be
+    # requested with a trailing slash. Works at /app/ and 404s at /app.
     return "inferred-base"
 
 
@@ -452,8 +483,14 @@ def validate_prefix_safety(app_dir: str | Path) -> list[str]:
                       rule would have caught 3 of their 4 sites and left this one.
 
     WHAT THIS DOES NOT COVER, stated because an enumeration's exclusions are
-    invisible in its output: static/asset base paths (a bundler `base` setting,
-    e.g. vite's "/static/<app>/") are NOT inspected. They are a build-config
+    invisible in its output:
+
+      - A URL prefixed by a variable OTHER than the contract's own identifier
+        (see MOUNT_IDENTIFIERS). `${someBase}/api/x` is not reported, because
+        whether that variable holds the mount is undecidable without its value.
+        This is an UNKNOWN deliberately not reported as a violation.
+      - Static/asset base paths (a bundler `base` setting,
+        e.g. vite's "/static/<app>/") are NOT inspected. They are a build-config
     concern with a different fix and different correct answers, and folding them
     in here would produce findings this rule cannot advise on.
     """
