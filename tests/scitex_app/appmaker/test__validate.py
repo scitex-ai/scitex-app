@@ -998,3 +998,69 @@ def test_validate_reports_prefix_findings_when_explicitly_armed(tmp_path):
     reported = _validate(tmp_path, check_prefix_safety=True)
     # Assert
     assert [e for e in reported if "does not resolve under an app mount" in e]
+
+
+# ─── template/CSS skip is keyed on frontend_type, not on the directory name ──
+# Four arms, one assertion each — this is a truth table, and a compound assert
+# would report "the table is wrong" instead of "this row is wrong".
+
+def _embedded_app_with_bad_css(tmp_path, frontend_type):
+    """An embedded app whose CSS breaks a workspace frame rule."""
+    import json as _json
+
+    app = tmp_path / "_django"
+    app.mkdir()
+    manifest = {"embedded_package": True}
+    if frontend_type is not None:
+        manifest["frontend_type"] = frontend_type
+    (app / "manifest.json").write_text(_json.dumps(manifest), encoding="utf-8")
+    (app / "app.css").write_text("footer { display: none; }", encoding="utf-8")
+    from scitex_app.appmaker._validate import validate_css
+
+    return app, validate_css(app)
+
+
+def test_the_css_rule_itself_fires_on_this_fixture(tmp_path):
+    # Arrange — calibration. Every arm below asserts about whether validate_css
+    # RUNS; that is meaningless unless the rule would fire on this input.
+    _app, direct = _embedded_app_with_bad_css(tmp_path, "vanilla")
+    # Act
+    fired = len(direct)
+    # Assert
+    assert fired == 1
+
+
+def test_an_embedded_non_react_app_is_css_validated(tmp_path):
+    # Arrange — THE FIX. scitex-scholar's shape: embedded, frontend_type
+    # "vanilla", hand-written CSS, previously skipped on the directory name.
+    from scitex_app.appmaker._validate import validate as _validate
+
+    app, _ = _embedded_app_with_bad_css(tmp_path, "vanilla")
+    # Act
+    reported = _validate(app)
+    # Assert
+    assert [e for e in reported if "footer" in e]
+
+
+def test_an_embedded_react_app_is_still_skipped(tmp_path):
+    # Arrange — compiled output is not hand-written and must not be linted for
+    # frame conventions. This is the behaviour the old comment intended.
+    from scitex_app.appmaker._validate import validate as _validate
+
+    app, _ = _embedded_app_with_bad_css(tmp_path, "react")
+    # Act
+    reported = _validate(app)
+    # Assert
+    assert not [e for e in reported if "footer" in e]
+
+
+def test_an_embedded_app_with_no_declared_frontend_type_is_still_skipped(tmp_path):
+    # Arrange — conservative arm. An undeclared app may be a React build, and
+    # guessing would invent findings on compiled output. Preserves today.
+    from scitex_app.appmaker._validate import validate as _validate
+
+    app, _ = _embedded_app_with_bad_css(tmp_path, None)
+    # Act
+    reported = _validate(app)
+    # Assert
+    assert not [e for e in reported if "footer" in e]
