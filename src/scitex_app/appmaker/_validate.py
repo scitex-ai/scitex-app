@@ -109,12 +109,39 @@ def validate(app_dir: str | Path, *, check_prefix_safety: bool = False) -> list[
     errors = []
     root = Path(app_dir)
     is_embedded = _is_embedded_package(root)
+    frontend_type = _get_frontend_type(root)
 
     errors.extend(validate_structure(app_dir))
     errors.extend(validate_security(app_dir))
     errors.extend(validate_manifest(app_dir))
-    if not is_embedded:
-        # Embedded packages use compiled React builds — skip template/CSS checks
+    if not is_embedded or (frontend_type and frontend_type != "react"):
+        # SKIP ONLY COMPILED-REACT FRONTENDS, which is what the old comment here
+        # actually claimed ("embedded packages use compiled React builds") — but
+        # the condition tested `not is_embedded`, and _is_embedded_package()
+        # returns True from the DIRECTORY NAME alone (any `_`-prefixed dir).
+        #
+        # So every app living in `_django/` had template and CSS validation
+        # unconditionally off, compiled React or not. scitex-scholar found this
+        # in their own package: manifest declares frontend_type "vanilla" with
+        # no React build anywhere, hand-written Django templates and CSS — i.e.
+        # exactly what these two validators check — and neither ever ran. Two
+        # checks listed, invoked, and structurally unreachable.
+        #
+        # The file already knew how to ask: the index_partial check below reads
+        # frontend_type. This pair did not.
+        #
+        # The predicate is deliberately NOT the simpler `frontend_type !=
+        # "react"`. frontend_type is inconsistent in the wild — "html",
+        # "django", "vanilla" all appear, and the default differs by module
+        # ("" here, "django" in _django.py) — so only "react" reliably means
+        # compiled. Written this way the change is STRICTLY ADDITIVE:
+        #   non-embedded, any type   -> runs (unchanged)
+        #   embedded + "react"       -> skipped (unchanged)
+        #   embedded + declared other-> RUNS (the fix)
+        #   embedded + undeclared    -> skipped (unchanged; an undeclared app
+        #                               may well be a React build, and guessing
+        #                               would invent findings on compiled output)
+        # No app loses a check it has today.
         errors.extend(validate_templates(app_dir))
         errors.extend(validate_css(app_dir))
     errors.extend(validate_dependencies(app_dir))
