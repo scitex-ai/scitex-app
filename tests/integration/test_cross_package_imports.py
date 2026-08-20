@@ -82,25 +82,38 @@ PEER_PACKAGES = (
 )
 
 
-def _peer_symbol_imports():
-    """Every (module, symbol) this package imports from a peer, read from source.
+def _scan_peer_symbols(root):
+    """Every (module, symbol) imported from a peer under `root`, read from source.
 
-    Walks src/ with ast rather than importing anything, so a broken peer cannot
-    make the discovery step fail and hand back a short list — which would look
+    Walks with ast rather than importing anything, so a broken peer cannot make
+    the discovery step fail and hand back a short list — which would look
     exactly like having few dependencies.
+
+    `node.level == 0` is load-bearing: it restricts the match to ABSOLUTE
+    imports. A relative `from .scitex_ui import X` also has
+    `node.module == "scitex_ui"`, but it names a LOCAL module that merely
+    spells a peer's name, and resolving it against the peer would make this
+    gate assert on a symbol the peer was never asked to provide.
+
+    Takes `root` as an argument so the level check can be exercised against a
+    controlled tree; the real call below passes this package's src/.
     """
-    src = Path(__file__).resolve().parents[2] / "src" / "scitex_app"
     found = set()
-    for path in src.rglob("*.py"):
+    for path in Path(root).rglob("*.py"):
         if "_sphinx_html" in path.parts:
             continue
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
+            if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
                 if node.module.split(".")[0] in PEER_PACKAGES:
                     for alias in node.names:
                         found.add((node.module, alias.name))
     return sorted(found)
+
+
+def _peer_symbol_imports():
+    """The real discovery: this package's own source tree."""
+    return _scan_peer_symbols(Path(__file__).resolve().parents[2] / "src" / "scitex_app")
 
 
 PEER_SYMBOL_IMPORTS = _peer_symbol_imports()
@@ -127,3 +140,20 @@ def test_peer_symbol_still_exists(module_name, symbol):
     present = hasattr(module, symbol)
     # Assert
     assert present, f"{module_name} no longer exports {symbol!r} — a peer moved it"
+
+
+def test_a_relative_import_is_not_mistaken_for_a_peer_import(tmp_path):
+    # Arrange — one file, two imports that differ ONLY in relativeness. The
+    # absolute one is a genuine peer import; the relative one is a local module
+    # that happens to share a peer's name.
+    peer = PEER_PACKAGES[0]
+    (tmp_path / "mod.py").write_text(
+        f"from {peer} import AbsoluteSymbol\n"
+        f"from .{peer} import RelativeSymbol\n"
+    )
+    # Act
+    found = _scan_peer_symbols(tmp_path)
+    # Assert — two arms. The first fails if the scan is broken outright; the
+    # second fails if `node.level == 0` is dropped, which is the actual defect.
+    assert (peer, "AbsoluteSymbol") in found
+    assert (peer, "RelativeSymbol") not in found
