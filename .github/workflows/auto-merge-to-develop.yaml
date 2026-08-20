@@ -1,49 +1,45 @@
 name: auto-merge-to-develop
-# Merge green PRs that TARGET develop, the moment their checks complete.
-# GitHub reads check_suite-triggered workflows from the DEFAULT branch (main),
-# so this file lives on main but acts ONLY on PRs whose base is develop.
-# codecov + readthedocs checks are ignored (advisory). Fail-safe: if a merge
-# is blocked by branch policy the PR simply stays open.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RUNNER PLACEMENT IS A SECURITY CONSTRAINT HERE TOO, for a different reason
+# than cla.yml's. This job holds `contents: write` and merges on its own, so
+# putting it on a persistent self-hosted runner would place a long-lived
+# machine — one whose $HOME carries the fleet credential — in the merge path.
+# The exposure is weaker than cla.yml's (this trigger is not
+# outsider-triggerable), but the note is recorded for the same reason: it moved
+# here 2026-08-11 from a PS-224 exemption that was retired as inert, because a
+# dead exemption is a bad home for a live security decision.
+#
+# `runs_on` is passed explicitly below rather than inherited, on the same
+# reasoning as cla.yml: a destination with a security property must not be
+# inherited from someone else's default, which can be changed upstream by a
+# review nobody here sees.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Thin caller. The body lives ONCE, org-side, in scitex-ai/.github@main.
+#
+# This file used to be a local fork, and the fork was already stale in the way
+# PS-231 warns about — except in our favour, which is the interesting part. On
+# 2026-08-15 this repo landed #76, "auto-merge counted QUEUED checks as green".
+# The org copy carries that same fix, with the same reasoning in its comments:
+# a CheckRun that has not finished has `conclusion: null` and no `.state`, so a
+# naive `(.conclusion // .state // "")` counts it as passing, and a PR whose
+# checks were ALL still queued reported zero pending.
+#
+# Checked before deleting our copy rather than assuming: the org version is not
+# merely equivalent, it already contains our fix. Nothing is lost by delegating.
+# A local copy does not track upstream fixes; it only looks like it does.
+
 on:
   check_suite:
     types: [completed]
   workflow_dispatch: {}
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
-  automerge:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.check_suite.conclusion == 'success' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: merge green PRs targeting develop
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.check_suite.head_sha }}
-        run: |
-          set -uo pipefail
-          if [ -n "${HEAD_SHA:-}" ]; then
-            prs=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" --jq '.[] | select(.state=="open") | .number' 2>/dev/null || true)
-          else
-            prs=$(gh pr list --repo "$REPO" --base develop --state open --json number --jq '.[].number' 2>/dev/null || true)
-          fi
-          [ -z "${prs:-}" ] && { echo "no open PRs"; exit 0; }
-          for pr in $prs; do
-            base=$(gh pr view "$pr" --repo "$REPO" --json baseRefName --jq .baseRefName 2>/dev/null || echo "")
-            [ "$base" = "develop" ] || { echo "skip #$pr (base=$base, not develop)"; continue; }
-            draft=$(gh pr view "$pr" --repo "$REPO" --json isDraft --jq .isDraft 2>/dev/null || echo true)
-            [ "$draft" = "true" ] && continue
-            pending=$(gh pr view "$pr" --repo "$REPO" --json statusCheckRollup --jq '
-              [ .statusCheckRollup[]
-                | select(((.name // .context // "") | ascii_downcase | test("codecov|readthedocs")) | not)
-                | (.conclusion // .state // "")
-                | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED" and . != "") ] | length' 2>/dev/null || echo 1)
-            if [ "$pending" = "0" ]; then
-              gh pr merge "$pr" --repo "$REPO" --merge --admin --delete-branch && echo "MERGED #$pr -> develop" || echo "blocked #$pr"
-            else
-              echo "PR #$pr not green ($pending) — skip"
-            fi
-          done
+  auto-merge-to-develop:
+    uses: scitex-ai/.github/.github/workflows/auto-merge-to-develop.yml@main
+    with:
+      # JSON array STRING — consumed by fromJSON in the callee. A YAML list
+      # decodes to something fromJSON rejects and the job queues forever.
+      runs_on: '["ubuntu-latest"]'
+    secrets: inherit

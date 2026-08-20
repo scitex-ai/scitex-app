@@ -7,6 +7,227 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-18
+
+No code change. `scitex_app` behaves identically to 0.8.0.
+
+### Documented — 0.8.0's root prefix is `""`, which is FALSY
+
+**If you are migrating from 0.7.x, delete any `|default`, `||` or `or` around
+the mount prefix before you do anything else.** Under 0.7.x those were correct
+and harmless: `"/"` was the right root, so writing a default was sensible.
+0.8.0 made the root the empty string, and every "use this when empty" idiom
+now silently restores the withdrawn value:
+
+```django
+{{ stx_mount|default:'/' }}    ← renders "/" at root
+```
+
+which makes the documented join produce `//api/x` — protocol-relative, which
+the browser resolves to a **different host**. That is the exact failure 0.8.0
+was cut to prevent, reintroduced by a line that was correct when it was
+written. Django `|default:`, Jinja `|default()`, JS `||` and Python `or` all
+fire on `""`; use `??` or an explicit `is None` if you need a fallback.
+
+**Migrating is ONE coordinated change; the half-fix is worse than not
+starting.** Two things inverted together — the root value became falsy, and the
+slash moved from the base to the endpoint. Drop the default but keep
+`base + "api/x"` and you get `<prefix>api/x`; flip the join but keep the default
+and you get `//api/x`; fix the template but not the bundle and a `||` restores
+the old value anyway. Grep template default, base read and every fetch site
+before changing one. *(scitex-writer found this — all three faces are present
+in their app at once.)*
+
+Found by **scitex-scholar** while migrating, before it shipped. Their tell is
+worth repeating: a guard test that should have flipped after the migration kept
+passing. A test that survives a breaking change unchanged is evidence about the
+test.
+
+This is the server-template twin of the `?? "/"` removed from the client half
+in 0.8.0 — that instance was fixed and documented for JS, and the same warning
+was not carried to the side where the idiom was *more* likely, because the old
+convention rewarded writing it.
+
+### Changed — the contract page is split
+
+`33_mount-prefix.md` (162 lines) is now the contract; `34_mount-prefix-rationale.md`
+holds the reasoning. The decisive argument — the failure-mode table showing
+`//api/x` resolving off-origin — stays **inline in the contract**, because it is
+what must not be undone; only secondary material moved, with the contract
+pointing at it.
+
+Both ship in the wheel, which is why a documentation-only change gets a
+release: the page a consumer reads is the one in the artifact they installed,
+and the misleading version was the one on PyPI.
+
+## [0.8.0] - 2026-08-18
+
+### BREAKING — `stx-mount` carries no trailing slash
+
+Root is now `""` (was `"/"`); embedded is `"/apps/u/x"` (was `"/apps/u/x/"`).
+**The slash moved to the endpoint**: write `base + "/api/x"`, not
+`base + "api/x"`. 0.7.0–0.7.1's convention is withdrawn two days after it
+shipped.
+
+**Why, and it is not a preference.** scitex-ui ships its own `mount_prefix`
+with the opposite convention on the *same* meta tag name, in the same venv.
+Two SDKs, one tag, incompatible semantics — that had to collapse to one, and
+both conventions produce **identical correct output**, so testing correct
+usage cannot choose between them. Running each one's *likeliest mistake*
+through a real URL resolver can:
+
+| convention | likely mistake | result |
+|---|---|---|
+| 0.7.x `"/"` + `"/api/x"` | endpoint written with a leading slash | `//api/x` → **`https://api/x` — a different host** |
+| 0.8.0 `""` + `"api/x"` | endpoint missing its slash | `https://site/api/x` (root, accidentally fine) |
+| 0.8.0 `"/apps/u/f"` + `"api/x"` | same | `/apps/u/fapi/x` — 404, right host |
+
+`//api/x` is protocol-relative: the browser sends the request, **and whatever
+it carries, off-origin**. The withdrawn convention's most natural error leaves
+the site; this one's 404s on the right host. scitex-hub confirmed this was
+their surface too, since hub is what embeds apps.
+
+### BREAKING — the reader throws instead of defaulting to root
+
+`?? "/"` is gone from the contract. A default is indistinguishable from a
+correct read, which is exactly how scitex-scholar's prefix fix nearly shipped
+as a silent no-op: nothing emitted a marker, the fallback returned root, and
+the diff looked complete.
+
+### Fixed — the 0.7.1 derivation was wrong for any non-root view
+
+0.7.1 handed template-rendered apps a copyable one-liner that assumed the view
+sits at the app root. Measured: correct at the root, **wrong in 3 of 5 cases,
+every wrong one a non-root view, and wrong silently**.
+
+`request.path` is the whole path — the mount prefix *plus* the route the view
+occupies — so only the view can subtract it, because only the view knows it.
+New `mount_prefix(request, view_path=...)` does, and raises
+`MountPrefixMismatch` rather than returning a best guess. `scitex_editor_page`
+takes `view_path` too; its default `""` remains correct for `scitex_urlpatterns`,
+which registers it at the mount root.
+
+### Migrating
+
+```js
+// before (0.7.x)
+const base = document.querySelector('meta[name="stx-mount"]')?.content ?? "/";
+fetch(base + "api/x");
+
+// after (0.8.0)
+const el = document.querySelector('meta[name="stx-mount"]');
+if (!el) throw new Error("stx-mount marker missing");
+fetch(el.content + "/api/x");
+```
+
+Template apps: replace any hand-copied derivation with
+`from scitex_app.embed import mount_prefix`, passing your view's own route.
+
+### Credit
+
+The implementation properties are **scitex-ui's** — throw rather than guess,
+subtract `view_path` rather than assume root. They argued *against their own
+scope*, separating "which code survives" from "which package owns the
+contract", and that argument is why the contract stayed here while their design
+won. Their `mount.py` also reasoned out the `SCRIPT_NAME` double-prefix trap
+and the `resolver_match.route` dead end first. The compare-failure-modes rule
+is **scitex-scholar's** generalisation.
+
+## [0.7.1] - 2026-08-18
+
+- **docs(mount-prefix): the SDK does not inject into templates you render
+  yourself.** 0.7.0's contract page said "if you serve your shell through
+  `scitex_editor_page`, the marker is present" and never stated the other case.
+
+  scitex-scholar nearly shipped through the gap. Their view does
+  `render_to_string(...)` — a Django template, not a built SPA shell — so
+  nothing injected the marker. Their four client-side changes would have read no
+  marker, hit the `?? "/"` fallback, and reproduced the previous behaviour
+  exactly, while looking correct in the diff. The page still renders; only the
+  API calls 404, and only under a prefix. It was five sites, not four, and the
+  fifth would have made the other four useless.
+
+  The page now carries a second "does not" beside the asset-rewriting one, with
+  the two-line derivation to copy so a leaf's copy cannot drift from the SDK's,
+  and explains why this is **not** an SDK gap: a template-rendered app is
+  *writer-shaped*, not *SPA-shaped* — the case `data-api-base` was invented for,
+  where the server already owns the HTML. `scitex_editor_page` exists only
+  because a built SPA's `index.html` is opaque bytes the server did not author.
+  Same contract, two shapes; automatic injection covers one.
+
+  Also records a foot-gun the page's own example invites: two classic `<script>`
+  tags each declaring `const STX_MOUNT` share one global scope, so the second is
+  a `SyntaxError` that breaks the **whole page**, not just that file.
+
+- **Why a patch release for a documentation change.** The contract page ships
+  *inside the wheel* (`scitex_app/_skills/scitex-app/33_mount-prefix.md`), so a
+  doc fix that is not released does not exist for the people it is written for —
+  and the misleading version is the one currently on PyPI. That is the same
+  failure 0.7.0 was cut to end, one level down: 0.7.0 existed only because a
+  working contract had been sitting unreleased on `develop` while three
+  consumer apps each invented their own answer to a question the SDK had already
+  answered. Shipping the correction immediately is the consistent move.
+
+  No code changed. `scitex_app` behaves identically to 0.7.0.
+
+## [0.7.0] - 2026-08-18
+
+- **feat(django): the SDK now tells the browser where the app is mounted.**
+  `scitex_urlpatterns` was already prefix-agnostic on the server — its patterns
+  are relative, so `include()` works under any root — but nothing told the
+  *browser*. Client code had no supported way to learn its mount point, so
+  leaves hardcoded `/`: correct standalone, silently broken the moment the app
+  is embedded under a prefix.
+
+  `scitex_editor_page` now injects a marker into the served shell:
+
+      <meta name="stx-mount" content="/apps/u/figrecipe/">
+
+  The value is derived server-side from `request.path`. That is exact rather
+  than a guess: the view is registered at `path("", ...)`, so its request path
+  *is* the mount prefix. Never compute it client-side.
+
+  **Prior art, and it is not ours.** scitex-writer hit this first and solved it
+  in its own templates — `data-api-base="{{ api_base|default:'/' }}"` read back
+  as `root.dataset.apiBase`, with relative endpoint names joined onto it. That
+  pattern *is* the contract; `stx-mount` is simply the SDK's supported way to
+  obtain the base, so every app gets it without inventing a third mechanism.
+  Read the marker, join relative endpoint names onto it, and the same build
+  works at `/` and under any prefix.
+
+  **Why a `<meta>` and not `<base href>` or a template render.** A built SPA's
+  `index.html` routinely contains `{{` and `{%` inside inlined JS. Running it
+  through Django's template engine would try to interpret those and corrupt the
+  bundle for reasons unrelated to mounting. The injection is therefore a plain
+  string insertion that adds exactly one tag and touches nothing else. It is
+  matched against `<head>` / `<head ...>` specifically — a substring search for
+  `<head` also matches `<header`, which placed the marker inside a `<header>`
+  element on documents that had one and no real head. Where there is no head at
+  all the tag is prepended, which is still correct (the parser hoists a leading
+  `<meta>`), so the prefix is never silently dropped.
+
+- **Why this is a minor bump, stated plainly because the omission is the
+  lesson.** The feature above landed on `develop` while `pyproject.toml` still
+  read `0.6.1` — the same string already published to PyPI and already
+  installed across the fleet. Two different builds wore one version number, so
+  "am I on 0.6.1?" answered *yes* for a build that lacked the feature and *yes*
+  for a build that had it. A version string that cannot distinguish them has
+  stopped being an identifier. The practical cost was real: three consumer apps
+  looked as though they had ignored a contract that, from where they sat, did
+  not exist.
+
+- **test(django): one assertion per test**, and the mount marker is pinned
+  against both real mounts it exists to span — `/` standalone and
+  `/apps/u/<module>/` as a scitex-hub built-in app.
+
+- **fix(ci): auto-merge counted QUEUED checks as green.** A check still sitting
+  in the queue is not a passing check; treating it as one made the gate report
+  success before the evidence existed.
+
+- **chore(audit-config): retire 8 PS-224 exemptions measured inert**, and
+  relocate the security reasoning into the workflows themselves, so the reason
+  lives next to the thing it justifies.
+
 ## [0.6.1] - 2026-08-05
 
 - **fix(gui-launcher): `--force` could SIGTERM an unrelated process.**

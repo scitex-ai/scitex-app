@@ -32,7 +32,10 @@ from ._standalone import run_standalone
 
 try:
     from ._django import (
+        MOUNT_META_NAME,
+        MountPrefixMismatch,
         ScitexAppConfig,
+        mount_prefix,
         scitex_api_dispatch,
         scitex_editor_page,
         scitex_urlpatterns,
@@ -40,7 +43,10 @@ try:
 except ImportError:
     # _django requires Django; keep embed importable for consumers that
     # only need the standalone launcher (which lazy-imports Django itself).
+    MOUNT_META_NAME = "stx-mount"  # the name is a contract, not Django's
+    MountPrefixMismatch = None  # type: ignore[assignment]
     ScitexAppConfig = None  # type: ignore[assignment]
+    mount_prefix = None  # type: ignore[assignment]
     scitex_api_dispatch = None  # type: ignore[assignment]
     scitex_editor_page = None  # type: ignore[assignment]
     scitex_urlpatterns = None  # type: ignore[assignment]
@@ -215,6 +221,9 @@ def serve_gui(
 
 __all__ = [
     "run_standalone",
+    "MOUNT_META_NAME",
+    "MountPrefixMismatch",
+    "mount_prefix",
     "ScitexAppConfig",
     "scitex_api_dispatch",
     "scitex_editor_page",

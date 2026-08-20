@@ -43,145 +43,193 @@ audit:
   skip:
     - PS-210
 
-  exemptions:
-    # PS-224 (runner-destination-unregistered) — every job below targets
-    # `ubuntu-latest` DELIBERATELY, and each is exempted individually with its
-    # own reason rather than by skipping the rule, so a NEW unregistered
-    # destination still fails the gate. Do not collapse these into a
-    # rule-level skip: PS-224 exists to catch a self-hosted label no runner
-    # advertises, which queues forever and never fails. That failure mode is
-    # real and this repo stays covered against it.
-    #
-    # The shared premise for entries 1-6. CITATION REPAIRED 2026-08-05: these
-    # entries previously quoted a constitution §4 passage beginning "CI
-    # defaults to GitHub-hosted runners ... Prefer the boring, managed option
-    # first." THAT TEXT NO LONGER EXISTS — §4 was rewritten on 2026-08-05 and
-    # the sentence returns zero matches. An exemption whose stated reason
-    # quotes a source that does not say it is not reviewable, which is the one
-    # property that makes a per-site exemption better than a blanket skip. So
-    # the reason is re-grounded below rather than left pointing at a ghost.
-    #
-    # ATTRIBUTE CAREFULLY. The constitution file is UNTRACKED and its §4 was
-    # rewritten by the scitex-hub agent, not typed by the operator; the file
-    # now carries its own warning that "an agent's summary and an operator
-    # ruling look identical here", that two agents have already acted on it
-    # believing otherwise, and that one should "cite the operator's words
-    # rather than this file." Hence the operator's verbatim instruction
-    # (Telegram, 2026-08-05), which is what these entries actually rest on:
-    #
-    #   「スパルタンのCIは全面的にやめましょう。…CIはなるべくコアの大きい
-    #     コアの多い計算機を使って早く回す。…公開レポジトリについては無料
-    #     だが、スピードが遅いことに注意する位のゆるい感じで」
-    #
-    #   — Spartan CI is dropped entirely; run CI on the fastest machine
-    #     available; hosted runners are free for public repos, just slow.
-    #
-    # THE CONCLUSION IS UNCHANGED AND NOW BETTER SUPPORTED. Every registered
-    # destination PS-224 would steer these jobs toward is a Spartan label, and
-    # Spartan CI is exactly what that instruction drops. This repo is public
-    # (hosted minutes free) and none of these jobs is long, GPU-bound or
-    # data-heavy — the full matrix finishes in well under a minute — so the
-    # "slow" caveat costs nothing here and the developer-speed argument for
-    # self-hosting is not met. Entries 1-6 therefore stand on the operator's
-    # own sentence, not on the rewritten paragraph.
-    #
-    # PS-224's message argues from "the no-hosted-runners directive", which is
-    # the STALE premise. Reported as scitex-dev#498 rather than absorbed
-    # silently in N repos -- six near-identical exemptions here would become
-    # six in every public leaf package. If the rule is re-premised, entries
-    # 1-6 should be DELETED, not kept.
-    #
-    # RE-VERIFY BEFORE CITING §4 AGAIN: it drifted once, silently, inside two
-    # weeks, in a file with no commit history to diff. Grep the sentence you
-    # intend to quote before you quote it.
-    PS-224:
-      - path: .github/workflows/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml::test
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above: public repo so hosted minutes are free, and every registered
-          destination is a Spartan label, which that instruction drops for CI
-          outright. The 3.11/3.12/3.13 matrix is the reason:
-          hosted runners supply all three interpreters as a first-class
-          feature, whereas the registered Spartan destinations would need
-          three toolchains installed and kept current on a persistent machine.
-          Runtime is ~20s per leg, so there is no developer-speed argument for
-          self-hosting.
-      - path: .github/workflows/quality-audit-on-ubuntu-latest.yml::audit
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above. Short (~40s), no GPU, no large data. Also the audit must run
-          in a CLEAN environment: a persistent self-hosted runner carries
-          machine-local config that can make the audit pass or fail for
-          reasons unrelated to the commit. That is the failure mode the
-          constitution documents from the 2026-07-31 scitex-cards incident —
-          four runners sharing one tool cache produced seven failures across
-          five pull requests in an afternoon, every one cleared by a plain
-          rerun, with the tell being DURATION (14-30s versus 62-66s passing).
-          A green/red that a rerun flips was never about the commit.
-      - path: .github/workflows/import-smoke-on-ubuntu-py3-12.yml::install-check
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above, and REQUIRED here: this job
-          verifies that a fresh `pip install` of the package works for a real
-          user. A persistent runner with a warm cache or a leaked editable
-          install is the one environment where a broken install can still
-          appear to succeed — the gate would stop measuring what it exists to
-          measure.
-      - path: .github/workflows/rtd-sphinx-build-on-ubuntu-latest.yml::sphinx
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above. Short docs build, no GPU, no
-          large data. Mirrors the Read the Docs build environment, which is
-          itself an ephemeral hosted container — matching it is the point.
-      - path: .github/workflows/newb-docs-quality-on-ubuntu-latest.yml::newb
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above. Short docs-quality check, no GPU, no large data, no
-          self-hosting criterion met.
-      - path: .github/workflows/auto-merge-to-develop.yaml::automerge
-        line: 0
-        reason: >-
-          Hosted by choice per the operator's 2026-08-05 CI instruction quoted
-          above. Pure GitHub API calls — it
-          runs `gh` against the repo and touches no build toolchain, so a
-          self-hosted destination would add a persistent machine to the path
-          of an automated merge while buying nothing.
+  # NO `exemptions:` BLOCK — deliberately, and this note is why.
+  #
+  # Until 2026-08-11 this file carried 8 PS-224 (runner-destination-unregistered)
+  # exemptions, each with a written reason. They are gone because they were
+  # MEASURED INERT, not because the reasoning was abandoned.
+  #
+  # Two-arm, on the version that actually gates the merge:
+  #   scitex-dev v0.47.0, exemptions present   -> 0 unmasked errors, 41 lines
+  #   scitex-dev v0.47.0, exemptions REMOVED   -> 0 unmasked errors, 41 lines
+  # Identical. PS-224 raises nothing here on v0.47.0, so the entries suppressed
+  # nothing and only looked like they did.
+  #
+  # WHY THE LOCAL RUN WAS NOT ENOUGH: this agent's venv has v0.43.1, four minor
+  # versions behind CI. The local two-arm agreed, but agreeing for the wrong
+  # reason is not evidence — arm B was re-run on a throwaway branch through the
+  # `quality` workflow so the measurement came from v0.47.0 itself. On 2026-08-05
+  # the same two-arm on v0.42.0 gave 0 vs 8, which is why these entries existed
+  # and why scitex-dev's advice to delete them was refused then. The rule was
+  # re-premised in between (scitex-dev#498).
+  #
+  # A DEAD EXEMPTION IS WORSE THAN NONE — the same principle already applied to
+  # PS-210 below. It reads as handled, and worse, it would MASK a genuine future
+  # finding: if someone later re-points one of these jobs at a self-hosted label,
+  # PS-224 under its new premise should fire, and a stale entry naming that file
+  # could swallow it.
+  #
+  # THE SECURITY REASONING WAS NOT DELETED, IT WAS RELOCATED. Entries 7-8
+  # (cla.yml, auto-merge-to-develop) never rested on the runner-speed premise —
+  # they recorded that an outsider-triggerable job carrying
+  # GH_PERSONAL_ACCESS_TOKEN must not land on a persistent runner whose $HOME
+  # holds the live fleet credential. That now lives as a comment in each of those
+  # two workflow files, where someone editing `runs-on` will actually see it.
+  # PS-224's own message says "DO NOT RE-POINT THIS JOB ... Resolving this needs
+  # a decision, not a re-point"; the decision is still recorded, just somewhere a
+  # reader of the workflow cannot miss it.
+  #
+  # IF PS-224 STARTS FIRING AGAIN, do not reflexively re-add exemptions: re-read
+  # its message first, because it fired here originally from a premise
+  # ("the no-hosted-runners directive") that the operator had already dropped.
 
-      # Entries 7-8 rest on SECURITY, not on constitution §4, and they must
-      # NOT be deleted if the hosted-runner premise changes. PS-224's own
-      # message says so: "DO NOT RE-POINT THIS JOB ... Resolving this needs a
-      # decision, not a re-point." The decision is recorded here.
-      #
-      # Threat model is identical to scitex-agent-container's (see
-      # sac/.scitex/dev/config.yaml, which reached the same conclusion
-      # independently): the registered Spartan destinations are PERSISTENT and
-      # their $HOME is the operator's real home, holding the live fleet
-      # credential at ~/.claude/.credentials.json.
-      - path: .github/workflows/cla.yml::CLAssistant
+  # The note above said "NO `exemptions:` BLOCK". That stopped being true on
+  # 2026-08-18. The note is KEPT rather than rewritten, because the standard it
+  # sets — measured, per-site, retired when inert — is the standard the entry
+  # below has to meet.
+  #
+  # SHAPE MATTERS HERE AND IS EASY TO GET WRONG THREE WAYS, all silent-ish:
+  #   1. In pyproject.toml instead of this file      — ignored, no error
+  #   2. A LIST at the block level (`- rule: PS-231`) — rejected wholesale
+  #   3. The argument written as YAML COMMENTS       — `reason` is MANDATORY,
+  #      and comments are not parsed, so the entry is rejected as empty
+  # `parse_exemptions` wants a MAPPING of rule-code -> [entries], each with a
+  # non-empty `reason`. Verified against the installed parser source, not
+  # inferred; figrecipe caught (2) and (3) in a draft of this entry.
+  exemptions:
+    PS-231:
+      - path: .github/workflows/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml
         line: 0
         reason: >-
-          Deliberately GitHub-hosted as a named security exception, not a
-          compliance gap. Runs a third-party action under the `issue_comment`
-          and `pull_request_target` triggers, which are UNAUTHENTICATED on a
-          public repo and which the fork-PR approval gate does NOT cover, and
-          it carries GH_PERSONAL_ACCESS_TOKEN and GITHUB_TOKEN. The registered
-          Spartan destinations are persistent and their $HOME is the
-          operator's real home holding the live fleet credential, so
-          re-pointing would let any stranger run third-party code next to that
-          credential by commenting on an issue. An ephemeral hosted VM is the
-          correct isolation: a compromise costs one disposable runner. Revisit
-          only when an ephemeral/isolated self-hosted runner exists for
-          untrusted-trigger workflows.
-      - path: .github/workflows/cla.yml::owner-bypass
+          TIME-BOXED — delete when the org reusable accepts a `dependency_group`
+          input. Same upstream gap, same card, same burn-down condition as the
+          rtd-sphinx-build entry below:
+          dev-corpus-release-turned-15-repos-red-and-notified-none-of-them-20260818.
+          OWNED BY card app-ps231-exemption-review-20260918, scheduled 2026-09-18 — a
+          burn-down condition with no owner is how a time-boxed exemption becomes
+          permanent, and that card exists so this one is somebody's job rather than
+          everybody's assumption.
+
+          THE DUPLICATION IS REAL AND THE RULE IS RIGHT. This file genuinely
+          re-implements the org reusable. It is exempted because converting it
+          is MEASURED to produce three permanently-red REQUIRED contexts — and
+          these are the only three contexts branch protection requires on
+          develop and main, so the blast radius is every PR in the repo.
+
+          MEASURED HERE on a throwaway probe branch, 2026-08-18, with the legacy
+          workflows deleted and the audit otherwise clean:
+          "pytest-matrix / pytest-matrix-on-ubuntu-py3.11 / .12 / .13" all
+          FAILURE, with "python -m pytest: error: unrecognized arguments:
+          --cov=src/scitex_app --cov-report=xml --cov-report=term" and exit
+          code 4, while "quality-audit / audit" and
+          "import-smoke / import-smoke-on-ubuntu-py3-12" were SUCCESS in the
+          same run.
+
+          MECHANISM — MEASURED HERE. The org reusable installs
+          `uv pip install -e ".[all,dev]" || uv pip install -e ".[dev]" ||
+          uv pip install -e .`. This repo declares `all` as an EXTRA but `dev`
+          as a PEP 735 dependency GROUP, with pytest-cov>=4.0.0 inside that
+          group. Both bracketed forms fail, the chain lands on a bare `-e .`
+          that installs no test dependencies, pytest-cov is absent, and the
+          reusable's own --cov flags are then unrecognised.
+
+          NOTE THE `||` CHAIN, because it is why this is invisible until it is
+          not: the install STEP SUCCEEDS. The failure degrades silently into a
+          bare install and resurfaces two steps later as an argument-parsing
+          error naming nothing about dependencies. "I could not install the dev
+          group" travels downstream as "installed fine". Reported upstream as a
+          defect in its own right — a fallback chain must report which arm it
+          landed on, or fail on the first.
+
+          THIS IS THE SAME UNHANDLED IDIOM AS THE rtd ENTRY, third instance in
+          this repo: PS-210 builds its dev set from
+          project.optional-dependencies.dev only and sees an EMPTY dev set;
+          rtd installs `.[docs]` and loses sphinx; this installs `.[all,dev]`
+          and loses pytest-cov. Not three bugs — one packaging idiom the
+          tooling does not know, which will recur as repos adopt the modern
+          spelling. ONE org-side `dependency_group` input retires both entries
+          here and unblocks every PEP 735 repo in the fleet.
+
+          DO NOT convert this file before that input exists, and do NOT move
+          branch protection onto the caller contexts. The failure is not a red
+          PR you can retry: the context IS published and is deterministically
+          red forever, so every PR blocks with no route out except a repo-admin
+          protection edit.
+
+          WHY THIS IS NOT A GATE SWITCHED OFF: scoped to ONE rule and ONE path.
+          Four of this repo's six PS-231 findings are FIXED by conversion in the
+          same change (import-smoke, quality-audit, cla, auto-merge-to-develop);
+          only the two measured incompatible are exempted, each with its own
+          evidence.
+      - path: .github/workflows/rtd-sphinx-build-on-ubuntu-latest.yml
         line: 0
         reason: >-
-          Same workflow, same unauthenticated `issue_comment` /
-          `pull_request_target` triggers, same GITHUB_TOKEN, therefore the
-          same named security exception as CLAssistant above. Exempted as its
-          own entry rather than folded into the file, so that a THIRD job
-          added to cla.yml still fails the gate and gets its own decision.
+          TIME-BOXED — delete when the org reusable accepts the inputs named
+          below. Tracked on
+          dev-corpus-release-turned-15-repos-red-and-notified-none-of-them-20260818.
+          Fleet ruling by scitex-hub 2026-08-18; wording converged with
+          figrecipe and scitex-scholar so three repos point at ONE upstream gap
+          instead of describing three problems.
+          OWNED BY card app-ps231-exemption-review-20260918, scheduled 2026-09-18.
+          The retirement condition is a PR number rather than a wish: the review asks
+          "did scitex-ai/.github#41 merge?", which is decidable.
+
+          THE DUPLICATION IS REAL AND THE RULE IS RIGHT. This file genuinely
+          re-implements the org reusable. It is exempted because the SANCTIONED
+          FIX IS MEASURED TO BREAK THIS REPO — not because converting is work,
+          and not because the finding is wrong. Of the six PS-231 findings here,
+          five are being FIXED by converting to callers in ci.yml; this is the
+          one that cannot be, and it is the only entry in this block.
+
+          MEASURED HERE, PR #78, 2026-08-18 — caller and legacy running side by
+          side in ONE run, which is what makes it a comparison rather than an
+          anecdote: "rtd-sphinx-build / docs-sphinx" FAILURE while "sphinx"
+          SUCCESS. Log: 'warning: The package `scitex-app` does not have an
+          extra named `docs`' then '.venv/bin/sphinx-build: No such file or
+          directory' then 'exit code 127'.
+
+          MECHANISM 1 — MEASURED HERE. The org reusable installs `.[docs]`, an
+          EXTRA. This repo declares docs as a PEP 735 dependency GROUP under
+          [dependency-groups] per ADR-0005, so the extra resolves to nothing,
+          sphinx is never installed, and the job dies at 127 on a missing binary
+          rather than at the unsatisfied dependency. Our legacy file uses `pip
+          install -e "." --group docs`, which is why it is green. CONFIRMED NOT
+          TO APPLY to scitex-scholar or figrecipe, both of which declare docs as
+          a classic extra — this mechanism is scitex-app-specific, and saying so
+          is the point: an exemption is a claim about THIS repo.
+
+          MECHANISM 2 — REPORTED BY figrecipe AND scitex-scholar; NOT
+          independently reproduced here. The org build is BUILD-ONLY, while
+          leaves also vendor docs/sphinx/_build/html into src/<pkg>/_sphinx_html;
+          hatch packages src/<pkg> wholesale, so that bundle SHIPS INSIDE THE
+          WHEEL. Converting would freeze the shipped documentation with CI green
+          and nothing anywhere saying so.
+
+          MECHANISM 3 — REPORTED BY figrecipe AND scitex-scholar; NOT
+          independently reproduced here. Leaves run `sphinx-build -W` on
+          pull_request; the org build does not. Converting would silently WEAKEN
+          the docs gate.
+
+          SMALLEST SUFFICIENT ORG-SIDE FIX, so this is a burn-down item and not
+          a standing exception: dependency_group (mechanism 1), fail_on_warning
+          or a general sphinx_opts (3), python_version, upload_artifact plus an
+          artifact-name output so each caller vendors and commits in its own job
+          with its own contents:write (2), and fork_guard. ONE org change retires
+          this entry across roughly thirty repositories. Thirty individually
+          reasoned exemptions for one missing input is how an exemption list
+          becomes permanent.
+
+          DO NOT convert this file to a caller before those inputs exist, and
+          note the failure is NOT a red PR you can retry. Under branch protection
+          the required context would point at a publisher that CANNOT succeed —
+          deterministically red forever, every PR blocked behind it. That is
+          worse than the "required context nobody publishes" deadlock, because
+          the context IS published and therefore looks alive.
+
+          WHY THIS IS NOT A GATE SWITCHED OFF. The property PS-231 protects is
+          "this repo tracks upstream fixes to shared workflows". This entry is
+          scoped to ONE rule and ONE path, so every other workflow here is still
+          checked — and five of them are being converted in the same change
+          rather than exempted. The finding is recorded as TRUE and pointed
+          upstream, which is the opposite of suppressing it.
+

@@ -16,6 +16,10 @@ in its source tree. Two outcomes:
   (which installs every peer) catches cross-package renames.
 """
 
+import ast
+import importlib
+from pathlib import Path
+
 import pytest
 
 # ===== AUTO-GENERATED: cross-package imports =====
@@ -30,10 +34,148 @@ CROSS_PACKAGE_IMPORTS = [
 
 @pytest.mark.parametrize("module_name", CROSS_PACKAGE_IMPORTS)
 def test_cross_package_import(module_name):
-    """Importing scitex-app's declared cross-package dependency must succeed."""
+    """Importing scitex-app's declared cross-package dependency must succeed.
+
+    The skip is taken on the ROOT package and the FULL path is then hard
+    imported. Skipping on the full path — ``importorskip(module_name)`` —
+    made this gate incapable of failing: a RENAMED or DELETED submodule
+    raises ``ModuleNotFoundError``, which ``importorskip`` converts into a
+    skip, so the run reports green for precisely the breakage the gate
+    exists to catch. Splitting the two makes the peer's absence a skip and
+    the submodule's absence a failure.
+
+    The skip cannot simply be dropped: these peers are optional extras, so
+    a blanket hard import would fail a legitimately lean install.
+    """
     # Arrange
-    module = pytest.importorskip(module_name)
+    root_name = module_name.split(".")[0]
+    pytest.importorskip(root_name)
     # Act
-    loaded_name = module.__name__
+    module = importlib.import_module(module_name)
     # Assert
-    assert loaded_name == module_name
+    assert module.__name__ == module_name
+
+
+# ===== HAND-WRITTEN: cross-package SYMBOL gate =====
+#
+# The block above checks that peer MODULES import. It does not check that the
+# SYMBOLS we pull out of them still exist. A peer that keeps the module and
+# moves a symbol passes that gate cleanly and breaks scitex-app at runtime —
+# and symbol imports are most of our real surface.
+#
+# Not hypothetical: on 2026-08-18 scitex_dev.skills moved (a MODULE move, which
+# the block above now catches) while RESULT_SCHEMA relocated out of
+# scitex_dev.types (a SYMBOL move, which nothing caught). Reported by
+# scitex-writer, who found the same hole in their own gate.
+#
+# THE LIST IS DERIVED FROM OUR OWN SOURCE, never hand-maintained. A hand-kept
+# list is a second copy of the import surface and drifts from the first; that
+# is the defect this gate exists to catch, reintroduced in the gate itself.
+
+PEER_PACKAGES = (
+    "scitex",
+    "scitex_clew",
+    "scitex_config",
+    "scitex_dev",
+    "scitex_io",
+    "scitex_ui",
+)
+
+
+def _scan_peer_symbols(root):
+    """Every (module, symbol) imported from a peer under `root`, read from source.
+
+    Walks with ast rather than importing anything, so a broken peer cannot make
+    the discovery step fail and hand back a short list — which would look
+    exactly like having few dependencies.
+
+    `node.level == 0` is load-bearing: it restricts the match to ABSOLUTE
+    imports. A relative `from .scitex_ui import X` also has
+    `node.module == "scitex_ui"`, but it names a LOCAL module that merely
+    spells a peer's name, and resolving it against the peer would make this
+    gate assert on a symbol the peer was never asked to provide.
+
+    Takes `root` as an argument so the level check can be exercised against a
+    controlled tree; the real call below passes this package's src/.
+    """
+    found = set()
+    for path in Path(root).rglob("*.py"):
+        if "_sphinx_html" in path.parts:
+            continue
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                if node.module.split(".")[0] in PEER_PACKAGES:
+                    for alias in node.names:
+                        found.add((node.module, alias.name))
+    return sorted(found)
+
+
+def _peer_symbol_imports():
+    """The real discovery: this package's own source tree."""
+    return _scan_peer_symbols(Path(__file__).resolve().parents[2] / "src" / "scitex_app")
+
+
+PEER_SYMBOL_IMPORTS = _peer_symbol_imports()
+
+
+def test_the_symbol_gate_found_something_to_check():
+    # Arrange — a discovery bug that returns [] would make every parametrised
+    # case below vanish, and an empty parametrise reports GREEN. This is the
+    # control that stops the gate passing by finding nothing.
+    minimum_known_imports = 1
+    # Act
+    discovered = len(PEER_SYMBOL_IMPORTS)
+    # Assert
+    assert discovered >= minimum_known_imports
+
+
+@pytest.mark.parametrize("module_name,symbol", PEER_SYMBOL_IMPORTS)
+def test_peer_symbol_still_exists(module_name, symbol):
+    # Arrange — skip on the ROOT, as above: peers are optional extras and a
+    # lean install must not fail. The symbol's absence is a failure, not a skip.
+    pytest.importorskip(module_name.split(".")[0])
+    module = importlib.import_module(module_name)
+    # Act
+    present = hasattr(module, symbol)
+    # Assert
+    assert present, f"{module_name} no longer exports {symbol!r} — a peer moved it"
+
+
+# The two tests below are the two ARMS of one control, deliberately split into
+# separate test functions rather than two asserts in one. If they shared a
+# function, a failure in the first arm would stop the second from ever running
+# — and "the scan is broken" would mask "the level check is missing", which are
+# different defects needing different fixes. Split, both report independently.
+
+COLLIDING_PEER = PEER_PACKAGES[0]
+
+
+def _scan_a_file_importing_a_peer_both_ways(tmp_path):
+    """One file, two imports differing ONLY in relativeness."""
+    (tmp_path / "mod.py").write_text(
+        f"from {COLLIDING_PEER} import AbsoluteSymbol\n"
+        f"from .{COLLIDING_PEER} import RelativeSymbol\n"
+    )
+    return _scan_peer_symbols(tmp_path)
+
+
+def test_an_absolute_peer_import_is_discovered(tmp_path):
+    # Arrange — arm one: fails if the scan is broken outright, which would make
+    # the sibling test below pass for the wrong reason (finding nothing at all).
+    expected = (COLLIDING_PEER, "AbsoluteSymbol")
+    # Act
+    found = _scan_a_file_importing_a_peer_both_ways(tmp_path)
+    # Assert
+    assert expected in found
+
+
+def test_a_relative_import_is_not_mistaken_for_a_peer_import(tmp_path):
+    # Arrange — arm two: fails if `node.level == 0` is dropped. A relative
+    # `from .<peer> import X` names a LOCAL module that merely spells a peer's
+    # name, and must not be attributed to the peer.
+    forbidden = (COLLIDING_PEER, "RelativeSymbol")
+    # Act
+    found = _scan_a_file_importing_a_peer_both_ways(tmp_path)
+    # Assert
+    assert forbidden not in found

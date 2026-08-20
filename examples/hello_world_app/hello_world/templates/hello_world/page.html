@@ -1,0 +1,47 @@
+{% extends "scitex_ui/standalone_shell.html" %}
+
+{# Extend scitex-ui's shell rather than reimplementing one. The shell already
+   includes scitex_ui/_mount_marker.html in its <head>, which renders the
+   marker from the two context keys the view supplies. #}
+
+{% block app_content %}
+  <section class="stx-hello">
+    <h1>Hello, world</h1>
+    <p>
+      This page is served by a Django app that knows where it is mounted.
+      Press the button; the answer comes from this app's own API.
+    </p>
+    <button id="greet" type="button">Greet me</button>
+    <pre id="out" aria-live="polite"></pre>
+  </section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // READ THE MARKER, THROW IF IT IS MISSING.
+  //
+  // Never `?? "/"`. A default is indistinguishable from a correct read, so an
+  // app that forgot to emit the marker behaves exactly like one that did —
+  // until it is mounted under a prefix, at which point every call 404s and the
+  // code still looks right. Fail here, loudly, where the contract is unmet.
+  const el = document.querySelector('meta[name="stx-mount"]');
+  if (!el) throw new Error("stx-mount marker missing — the server did not declare a mount");
+  const base = el.content;   // "" standalone, "/apps/u/hello_world" embedded
+
+  // THE SLASH BELONGS TO THE ENDPOINT, NOT THE PREFIX.
+  //
+  // `base + "/api/greet"` is correct in both modes. The reverse convention
+  // (prefix ends in "/", endpoint does not) was withdrawn in scitex-app 0.8.0:
+  // its likeliest mistake, writing the endpoint with a leading slash anyway,
+  // produces "//api/greet" — protocol-relative, which the browser resolves to
+  // a DIFFERENT HOST and sends your request there.
+  document.getElementById("greet").addEventListener("click", async () => {
+    const res = await fetch(base + "/api/greet");
+    document.getElementById("out").textContent = JSON.stringify(await res.json(), null, 2);
+  });
+
+  // NOTE what is NOT prefixed: hub's platform routes live at the server root
+  // and are not under your mount, so they stay absolute:
+  //     fetch("/platform/api/context/")     // correct as-is, do not join
+</script>
+{% endblock %}

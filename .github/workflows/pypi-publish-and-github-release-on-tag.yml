@@ -129,6 +129,57 @@ jobs:
           # fail-loud: an empty dist/ must stop the pipeline here, not surface
           # later as a confusing publish or an empty GitHub Release.
           ls -1 dist/*.whl dist/*.tar.gz >/dev/null
+      - name: Verify the skills docs are actually IN the wheel
+        run: |
+          # WHY THIS EXISTS. scitex-app's skills are a DELIVERABLE, not just
+          # repo documentation: 33_mount-prefix.md is the stx-mount contract
+          # that consumer apps read to learn how to be prefix-safe, and
+          # scitex-scholar read it out of the published wheel before writing
+          # their fix. If _skills ever stops being packaged, that contract
+          # silently ceases to exist for every consumer.
+          #
+          # NOTHING ELSE WOULD CATCH IT. tests/custom/test_skills_quality.py
+          # locates skills via Path(__file__).parents[2] — the SOURCE TREE. It
+          # checks their quality and says nothing about packaging. Every test
+          # would still pass with an empty _skills in the wheel.
+          #
+          # And the obvious cheaper check is the trap, not the fix:
+          # importlib.resources against an installed scitex_app resolves to
+          # the source tree under an editable install, so it would pass in CI
+          # for exactly the wrong reason. This asserts on the BUILT ARTIFACT,
+          # which is the only place the question has a real answer.
+          #
+          # Prompted by scitex-writer, who shipped a broken `containers install
+          # texlive` past ELEVEN passing tests because CI installs editable and
+          # every one of them shared the developer's vantage point.
+          python - <<'PY'
+          import glob, sys, zipfile
+
+          wheel = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          skills = [n for n in names if "/_skills/scitex-app/" in n and n.endswith(".md")]
+
+          required = "scitex_app/_skills/scitex-app/33_mount-prefix.md"
+          problems = []
+          if required not in names:
+              problems.append(f"MISSING the stx-mount contract: {required}")
+          if len(skills) < 10:
+              problems.append(f"only {len(skills)} skill docs packaged; expected the full set")
+
+          if problems:
+              print(f"FAIL: {wheel} is missing packaged skills.", file=sys.stderr)
+              for p in problems:
+                  print(f"  - {p}", file=sys.stderr)
+              print(
+                  "\nFIX: check [tool.hatch.build.targets.wheel] in pyproject.toml —\n"
+                  "     `packages = [\"src/scitex_app\"]` ships the tree wholesale, so an\n"
+                  "     added exclude/force-include is the likely cause.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          print(f"OK: {len(skills)} skill docs in {wheel}, contract present.")
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: dist
