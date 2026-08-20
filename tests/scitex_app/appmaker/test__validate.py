@@ -1064,3 +1064,57 @@ def test_an_embedded_app_with_no_declared_frontend_type_is_still_skipped(tmp_pat
     reported = _validate(app)
     # Assert
     assert not [e for e in reported if "footer" in e]
+
+
+# ─── variable-prefixed URLs are a THIRD value, not a violation ──────────────
+# 0.9.0 flagged `${STX_MOUNT}/api/x` — the exact code its own remediation text
+# prescribes — because it collapsed "variable-prefixed" into "inferred-base".
+# Reported by scitex-scholar against their CORRECTED tree.
+
+def test_the_prescribed_mount_prefix_form_is_not_flagged(tmp_path):
+    # Arrange — this IS the fix. Flagging it tells an app to undo correct work.
+    source = "const url = `${STX_MOUNT}/api/search?${params}`;"
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert found == []
+
+
+def test_the_concatenated_mount_prefix_form_is_not_flagged(tmp_path):
+    # Arrange — the other documented spelling, base + "/path". Both forms are
+    # correct and both must pass; only the template one regressed in 0.9.0.
+    source = 'fetch(STX_MOUNT + "/api/graph/health");'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert found == []
+
+
+def test_a_url_prefixed_by_an_unknown_variable_is_not_reported(tmp_path):
+    # Arrange — UNKNOWN, deliberately not collapsed into "violation". Whether
+    # `someBase` holds the mount needs its value, which a scanner lacks.
+    source = "const url = `${someBase}/api/search`;"
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert found == []
+
+
+def test_a_genuinely_root_absolute_url_is_still_flagged(tmp_path):
+    # Arrange — the arm that stops this fix becoming a blanket amnesty. Without
+    # it, returning None for everything would satisfy all three tests above.
+    source = 'fetch("/api/search");'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert len(found) == 1
+
+
+def test_a_genuinely_relative_url_is_still_flagged(tmp_path):
+    # Arrange — same guard for the inferred-base class, which is the one the
+    # fix narrowed. If narrowing went too far this is what catches it.
+    source = 'fetch("api/search");'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert len(found) == 1
