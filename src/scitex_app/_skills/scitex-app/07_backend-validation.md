@@ -24,13 +24,37 @@ print(result.warnings)   # List[str] — advisory notices
 print(result.manifest)   # dict | None
 ```
 
-Validation pipeline (runs in order):
-1. `validate_manifest()` — required fields, valid JSON, semver version
+**Two entry points, and NEITHER IS A SUPERSET OF THE OTHER.** Read this before
+relying on either. `AppValidator` (above) is the class documented here; the CLI
+`scitex-app app validate` calls `scitex_app.appmaker.validate`, a separate
+implementation. Measured coverage:
+
+| check | `scitex-app app validate` | `AppValidator` |
+| --- | --- | --- |
+| manifest / structure / CSS | yes | yes |
+| Python forbidden patterns | yes | **no** (scans no `.py` at all) |
+| templates, dependencies | yes | **no** |
+| mount-prefix safety | yes (opt-in) | **no** |
+| JS dangerous patterns | **no** | yes |
+| bundle size cap | **no** | yes |
+| privilege types and scopes | **no** | yes |
+
+So switching wholesale to either one loses checks. Reconciling them is tracked
+on card `app-two-validators-docs-describe-the-uncalled-one-20260822`; until
+then, run BOTH if you want full coverage.
+
+`AppValidator` validation pipeline (runs in order):
+1. `validate_manifest()` — required fields, valid JSON, and **no `version` key**
 2. `validate_structure()` — `_django/views.py` and `_django/urls.py` present
 3. `validate_css()` — no CSS targeting shell selectors (see below)
 4. `validate_js()` — no dangerous JS patterns
 5. `validate_bundle_size()` — total size < 50 MB (configurable via `max_bundle_size`)
 6. `validate_privileges()` — privilege types and scopes must be valid
+
+`version` in `manifest.json` is REJECTED by both implementations. The app
+version is derived at runtime from the installed `pip_package` via
+`importlib.metadata`; a hand-written one drifts, and did — every hub app tile
+once showed a wrong version from exactly this. Declare `pip_package` instead.
 
 Shell selectors apps must NOT target:
 `#scitex-ai-panel`, `#main-content`, `.ws-module-pane`, `.workspace-header`,
