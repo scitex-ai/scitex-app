@@ -7,6 +7,119 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-08-20
+
+### Fixed — the prefix check flagged the fix it prescribes
+
+0.9.0's `validate_prefix_safety` reported this as `inferred-base`:
+
+```js
+`${STX_MOUNT}/api/search?${params}`
+```
+
+which is exactly what the finding's own remediation text tells an app to write.
+The rule condemned its own prescribed fix. Found by scitex-scholar within
+minutes of 0.9.0 publishing, by running the check against a tree they knew to
+be **correct** — the only configuration in which a false positive is
+distinguishable from a true one.
+
+The discriminator was syntax, not semantics. Same variable, same correct code:
+
+| form | 0.9.0 |
+| --- | --- |
+| `fetch(STX_MOUNT + "/api/x")` | passed (concatenation) |
+| `` `${STX_MOUNT}/api/x` `` | **flagged** (template literal) |
+
+Interpolation is precisely when a URL stops being a bare literal, so a
+correctly-fixed site that needs a query string is *forced* into the flagged
+form.
+
+**Root cause: a three-valued signal collapsed into two.** A literal opening with
+`${…}` is *variable-prefixed* — neither root-absolute nor document-relative,
+because what precedes the path is a value the scanner cannot see. 0.9.0 folded
+that unknown into "inferred-base".
+
+The fix is deliberately narrow: a leading `${STX_MOUNT}` (see
+`MOUNT_IDENTIFIERS`) is satisfied; a leading `${anythingElse}` is *unknown* and
+is not reported, recorded as an explicit exclusion. Deciding whether an
+arbitrary variable holds the mount requires its value, and inferring it is what
+produced the bug.
+
+**Not blunted.** The known-answer control was re-run: scholar's shipped wheel
+still reports exactly its three root-absolute sites. Two further test arms exist
+solely to prevent this becoming a blanket amnesty — a genuinely root-absolute
+and a genuinely relative URL must still be flagged.
+
+No behaviour change for anyone who did not opt in: the check remains **unarmed**
+(`validate()` skips it unless `check_prefix_safety=True`), so 0.9.0 could not
+have failed a build on this.
+
+## [0.9.0] - 2026-08-20
+
+### Added — mount-prefix safety check, SHIPPED UNARMED
+
+`scitex_app.appmaker.validate_prefix_safety()` reports request URLs that do not
+resolve under an app mount. **It is a record, not a gate.** `validate()` skips it
+unless `check_prefix_safety=True`, so nothing fails on it — flipping that default
+is the arming action, and it has not been taken. Arming today would fail apps
+whose fixes are not yet released.
+
+Two classes are reported, and the second is why the check exists:
+
+| class | example | behaviour |
+| --- | --- | --- |
+| root-absolute | `fetch("/api/x")` | ignores the mount; 404s everywhere, so it gets found |
+| inferred-base | `fetch("api/x")` | resolves against the *document* URL — works at `/app/`, 404s at `/app` |
+
+The second passes a smoke test and breaks on a redirect. A root-absolute-only
+rule would miss it. Platform routes (`/platform/api/`, `/apps/store/api/`) are
+exempt — hub owns them, they live at the server root, and prefixing them breaks
+them.
+
+Known limits, stated because an enumeration's exclusions are invisible in its
+output: no dataflow, so a URL built across statements or bound to a name that
+does not look url-ish is missed; static/asset base paths (a bundler `base`
+setting) are out of scope as a build-config concern with different correct
+answers.
+
+### Fixed — template and CSS validation were unreachable for every `_`-prefixed app
+
+`validate()` skipped `validate_templates` and `validate_css` whenever
+`_is_embedded_package()` was true, and that returns true from the **directory
+name alone** (`root.name.startswith("_")`), before any manifest is read. So every
+app living in `_django/` had both checks unconditionally off — listed, invoked,
+and structurally unreachable.
+
+The comment gave it away: *"embedded packages use compiled React builds"* is a
+claim about the FRONTEND, while the condition tested the PACKAGING. An embedded
+app declaring `frontend_type: "vanilla"`, with hand-written Django templates and
+CSS and no React build anywhere, was skipped regardless.
+
+The skip is now keyed on the property the comment always claimed:
+
+```python
+if not is_embedded or (frontend_type and frontend_type != "react"):
+```
+
+**Strictly additive — no app loses a check it had:**
+
+| case | before | after |
+| --- | --- | --- |
+| non-embedded, any type | runs | runs |
+| embedded + `"react"` | skipped | skipped |
+| embedded + declared other | **skipped** | **runs** |
+| embedded + undeclared | skipped | skipped |
+
+`frontend_type` is deliberately not tested as `!= "react"` alone: the field is
+inconsistent in the wild (`"html"`, `"django"`, `"vanilla"` all appear, and the
+default differs by module), so only `"react"` reliably means compiled. An
+undeclared app is left alone rather than guessed at, since guessing would invent
+findings on compiled output.
+
+**Upgrade note.** If your app is an embedded package that declares a non-React
+`frontend_type`, template and CSS validation will run against it for the first
+time and may report findings you have not seen before. That is the fix working.
+
 ## [0.8.1] - 2026-08-18
 
 No code change. `scitex_app` behaves identically to 0.8.0.
