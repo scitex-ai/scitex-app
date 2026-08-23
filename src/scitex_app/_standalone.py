@@ -66,6 +66,7 @@ def run_standalone(
 
     # Configure and start Django
     _configure_django(app_module, extra_installed_apps, extra_staticfiles_dirs, host=host)
+    _warn_about_uncompiled_languages(app_module, extra_installed_apps)
 
     import django
 
@@ -139,6 +140,119 @@ def _allowed_hosts(host: str, extra_hosts: str = "") -> list[str]:
     return hosts
 
 
+
+# ── Internationalisation ─────────────────────────────────────────────────────
+# Catalog DISCOVERY is free: Django auto-discovers `<app>/locale/<lang>/
+# LC_MESSAGES/django.mo` for anything in INSTALLED_APPS, with no LOCALE_PATHS
+# entry and no cooperation from the host. Measured 2026-08-23.
+#
+# ACTIVATION is what was missing, and it is the whole defect. Without
+# LocaleMiddleware nothing ever calls activate(), so a standalone app shipped a
+# working Japanese catalog, loaded it, and rendered English forever. Note the
+# symmetry with scitex-hub, who found the mirror image in their own stack:
+#
+#     hub          activation wired, catalog EMPTY
+#     standalone   catalog works, activation ABSENT
+#
+# Both fall back SILENTLY to the source string, so both read as "nobody has
+# translated it yet" rather than "the mechanism is broken". That is why
+# _languages_missing_catalogs exists below: declaring a language you cannot
+# render should say so, not degrade quietly.
+
+
+def _declared_languages(spec: str) -> list[tuple[str, str]]:
+    """Parse SCITEX_LANGUAGES ("en,ja") into Django's LANGUAGES shape.
+
+    Returns [] when unset, which leaves Django's own LANGUAGES (every language
+    Django ships) in place. Restricting the list is opt-in because an app that
+    names no languages should not thereby lose the ones Django already supports.
+    """
+    codes = [c.strip() for c in spec.split(",") if c.strip()]
+    return [(c, c) for c in codes]
+
+
+def _languages_missing_catalogs(codes: list[str], app_modules: list[str]) -> list[str]:
+    """Declared languages with no compiled catalog in any of `app_modules`.
+
+    This is the anti-silent-fallback check. gettext falls back to the source
+    string when a catalog is absent, which is indistinguishable from "not
+    translated yet" — so a language named in LANGUAGES with no `.mo` anywhere is
+    reported at startup rather than discovered by a reader who wonders why the
+    page is in English.
+
+    Looks for the COMPILED artifact only. A `.po` without its `.mo` is exactly
+    the shape that ships green: the translation exists in the repo and does not
+    exist in the running process.
+
+    Takes both lists as arguments so it is pure and needs no Django app registry
+    — it runs before django.setup().
+    """
+    import importlib.util
+
+    missing = []
+    for code in codes:
+        found = False
+        for module in app_modules:
+            try:
+                spec = importlib.util.find_spec(module)
+            except (ImportError, ValueError):
+                continue
+            if spec is None or not spec.origin:
+                continue
+            mo = (
+                Path(spec.origin).parent
+                / "locale"
+                / code
+                / "LC_MESSAGES"
+                / "django.mo"
+            )
+            if mo.is_file():
+                found = True
+                break
+        if not found:
+            missing.append(code)
+    return missing
+
+
+def _language_settings(spec: str) -> dict:
+    """`{"LANGUAGES": [...]}` when SCITEX_LANGUAGES is set, `{}` otherwise.
+
+    Returned as a dict to splat rather than a value, because passing
+    `LANGUAGES=[]` would mean "this app supports no languages" — the opposite of
+    "the app did not say". Omitting the key leaves Django's default intact.
+    """
+    declared = _declared_languages(spec)
+    return {"LANGUAGES": declared} if declared else {}
+
+
+def _warn_about_uncompiled_languages(
+    app_module: str, extra_installed_apps: Optional[list[str]] = None
+) -> None:
+    """Say so when a declared language has no compiled catalog.
+
+    Printed rather than raised: a missing translation must not stop a server
+    from starting, and refusing to serve English because Japanese is missing
+    would be worse than the bug. But it must not be SILENT either — that is the
+    whole failure mode, and it is why this exists at all.
+    """
+    codes = [c for c, _ in _declared_languages(os.environ.get("SCITEX_LANGUAGES", ""))]
+    if not codes:
+        return
+    modules = [app_module, "scitex_ui", *(extra_installed_apps or [])]
+    missing = _languages_missing_catalogs(codes, modules)
+    if not missing:
+        return
+    print(
+        f"WARNING: SCITEX_LANGUAGES declares {', '.join(missing)} but no compiled "
+        f"catalog (locale/<lang>/LC_MESSAGES/django.mo) was found for "
+        f"{'it' if len(missing) == 1 else 'them'} in {', '.join(modules)}. "
+        f"Those languages will render the source strings, which looks like "
+        f"'not translated yet' rather than 'the catalog was never compiled'. "
+        f"Note `django-admin compilemessages` needs the gettext `msgfmt` binary, "
+        f"which is absent from several SciTeX images — compile at build time and "
+        f"ship the .mo inside the distribution."
+    )
+
 def _configure_django(
     app_module: str,
     extra_installed_apps: Optional[list[str]] = None,
@@ -192,8 +306,15 @@ def _configure_django(
         INSTALLED_APPS=installed_apps,
         MIDDLEWARE=[
             "django.middleware.security.SecurityMiddleware",
+            # BEFORE CommonMiddleware, per Django's own ordering requirement.
+            # Without this nothing activates a language and every catalog is
+            # inert no matter how complete it is.
+            "django.middleware.locale.LocaleMiddleware",
             "django.middleware.common.CommonMiddleware",
         ],
+        USE_I18N=True,
+        LANGUAGE_CODE=os.environ.get("SCITEX_LANGUAGE_CODE", "en-us"),
+        **_language_settings(os.environ.get("SCITEX_LANGUAGES", "")),
         ROOT_URLCONF=f"{app_module}.urls",
         TEMPLATES=[
             {
