@@ -7,6 +7,80 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-23
+
+Minor: `run_standalone()` gains language activation. Released now rather than
+batched because scitex-hub is building against the i18n contract today and
+cannot, while it exists only on `develop`.
+
+### Added — standalone can actually render a non-English language
+
+Catalog *discovery* was already free: Django auto-discovers
+`<app>/locale/<lang>/LC_MESSAGES/django.mo` for anything in `INSTALLED_APPS`,
+with no `LOCALE_PATHS` and no cooperation from the host. **Activation** was
+missing. Nothing ever called `activate()` and `LANGUAGE_CODE` sat at Django's
+`en-us` default, so a standalone app could ship a complete, working Japanese
+catalog, load it, and render English forever.
+
+`_configure_django()` now sets:
+
+- `LocaleMiddleware`, before `CommonMiddleware` per Django's ordering requirement
+- `USE_I18N` explicitly, rather than inheriting a default that could move
+- `LANGUAGE_CODE` from `SCITEX_LANGUAGE_CODE` (default `en-us`)
+- `LANGUAGES` from `SCITEX_LANGUAGES` (comma-separated), **omitted entirely when
+  unset** — passing `[]` would assert "this app supports no languages", the
+  opposite of "the app did not say"
+
+### Added — a declared language with no compiled catalog now says so
+
+A language in `LANGUAGES` with no `.mo` does not error: gettext falls back to the
+source string, so it reads as *"nobody has translated it yet"* rather than *"the
+mechanism is broken"*. Startup now names the language, states that its strings
+will render as source, and names the likely cause.
+
+It **prints rather than raises** — a missing translation must not stop a server
+starting, and refusing to serve English because Japanese is absent would be worse
+than the bug. It checks for the **compiled** `.mo` only, because a `.po` without
+its `.mo` is exactly the shape that ships green.
+
+**`msgfmt` is absent** from this container, from scitex-hub's container, and from
+`scitex-hub-prod-django:latest` — the image serving production. Three
+environments, three absences. `django-admin compilemessages` shells out to it, so
+compile at build time via a pure-Python path and ship the `.mo` inside the
+distribution.
+
+### Fixed — `serve --host <addr>` bound correctly and then 400'd every caller
+
+`ALLOWED_HOSTS` was a hardcoded loopback-only literal while `--host` accepted any
+address, so the server printed `serving at http://<addr>:<port>` and rejected
+every request. The banner asserted the opposite of the truth.
+
+The bound host is now always allowed — binding to an address is the statement
+that you intend to be reached on it — plus `SCITEX_ALLOWED_HOSTS`
+(comma-separated) for the proxy/tunnel case.
+
+Deliberately **not** widened to `["*"]` under `DEBUG`. These apps ship no
+authentication and `DJANGO_DEBUG` defaults to `"true"`, so a wildcard would make
+every reachable address an unauthenticated reader by default.
+
+**This does not fix embedded leaf apps** that set `DJANGO_SETTINGS_MODULE` and
+call `django.setup()` before `run_standalone()` — `_configure_django()` returns
+early when settings are already configured, so their own `settings.py` supplies
+`ALLOWED_HOSTS` and this change never executes for them. Verified by
+scitex-scholar against their running process.
+
+### Documentation
+
+- `35_i18n.md` — the locale convention for mounted apps, leading with the silent
+  fallback rather than the layout.
+- `05_standalone.md` — states that `run_standalone()`'s settings apply **only if
+  Django is not already configured**, with the one-line check to confirm which
+  settings you actually got. It previously caveated only re-entrancy.
+- `07_backend-validation.md` — the CLI runs `appmaker.validate`, not
+  `AppValidator`; neither is a superset of the other, and the doc now carries the
+  measured coverage table. It also told developers to add a `version` key that
+  both implementations reject.
+
 ## [0.9.1] - 2026-08-20
 
 ### Fixed — the prefix check flagged the fix it prescribes
