@@ -70,6 +70,7 @@ scitex.app.get_files(...)
 - [32_cli](32_cli.md) — original CLI page (was 04)
 - [33_mount-prefix](33_mount-prefix.md) — `stx-mount`: how an app learns where it is mounted, and why relative URLs are not the fix
 - [34_mount-prefix-rationale](34_mount-prefix-rationale.md) — why that contract is shaped the way it is; read before changing it
+- [35_i18n](35_i18n.md) — where a mounted app keeps its translations, and why a missing catalog fails silently rather than loudly
 
 ## Quick Start
 
