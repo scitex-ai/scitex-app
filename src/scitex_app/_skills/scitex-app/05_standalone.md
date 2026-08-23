@@ -90,7 +90,26 @@ look".
 
 ### Django settings configured
 
-`run_standalone()` calls `django.conf.settings.configure()` with:
+**ONLY IF DJANGO IS NOT ALREADY CONFIGURED.** `_configure_django()` opens with
+`if django.conf.settings.configured: return`, so if your app sets
+`DJANGO_SETTINGS_MODULE` and calls `django.setup()` before `run_standalone()`,
+**none of the settings below apply to you** — your own settings module supplies
+all of them, and the SDK contributes nothing.
+
+That is the shape every embedded leaf uses today, so for those apps this list is
+not what you get. Measured 2026-08-23 with scitex-scholar: their `_server.py`
+calls `django.setup()` and then `run_standalone()`, and the running process
+reports their own `ALLOWED_HOSTS`, not the SDK's. I had assumed the opposite and
+told them so; the one-line check below is what settled it.
+
+```python
+import django.conf
+print(django.conf.settings.configured)      # True before run_standalone -> SDK is inert
+print(django.conf.settings.ALLOWED_HOSTS)   # whose list did you actually get?
+```
+
+If Django is unconfigured at call time, `run_standalone()` calls
+`django.conf.settings.configure()` with:
 
 - `INSTALLED_APPS`: `django.contrib.staticfiles`, `<app_module>`, `scitex_ui` (if installed)
 - `ROOT_URLCONF`: `<app_module>.urls`
@@ -100,7 +119,13 @@ look".
 - `SECRET_KEY`: from `DJANGO_SECRET_KEY` env or `"scitex-standalone-dev-key"`
 - `DEBUG`: from `DJANGO_DEBUG` env (default `"true"`)
 
-Settings configure only once — calling `run_standalone()` a second time is a no-op if Django is already configured.
+- `ALLOWED_HOSTS`: loopback, the bound `host`, and `SCITEX_ALLOWED_HOSTS` (comma-separated)
+
+Settings configure only once. Note this cuts two ways, and the second is the one
+that surprises people: calling `run_standalone()` twice is a harmless no-op, but
+configuring Django *yourself* first makes the SDK's settings silently inert —
+no error, no warning, and a `serve --host` that binds fine and then 400s if your
+own `ALLOWED_HOSTS` does not include the address.
 
 ### Requirements
 
