@@ -35,13 +35,31 @@ implementation. Measured coverage:
 | Python forbidden patterns | yes | **no** (scans no `.py` at all) |
 | templates, dependencies | yes | **no** |
 | mount-prefix safety | yes (opt-in) | **no** |
-| JS dangerous patterns | **no** | yes |
-| bundle size cap | **no** | yes |
-| privilege types and scopes | **no** | yes |
+| JS dangerous patterns | yes (opt-in) | yes |
+| bundle size cap | yes (opt-in) | yes |
+| privilege types and scopes | yes (opt-in) | yes |
 
-So switching wholesale to either one loses checks. Reconciling them is tracked
-on card `app-two-validators-docs-describe-the-uncalled-one-20260822`; until
-then, run BOTH if you want full coverage.
+The last three were **ported into the CLI path** and are no longer exclusive to
+`AppValidator`. They are opt-in:
+
+```python
+validate(app_dir, check_js_safety=True, check_bundle_size=True,
+         check_privileges=True)
+```
+
+Off by default, and the default IS the arming switch. Measured against the
+fleet's app packages before shipping: the narrowed JS rule reports **0** on
+`scholar/_django` and `writer/_django`, and still fires on planted hazards.
+Zero findings is consistent both with "the fleet is clean" and with "the scan
+did not run", so it stays unarmed until a peer reports a finding I did not
+construct.
+
+What remains genuinely divided is the CSS and manifest half, where the two
+modules answer the SAME question differently — `#main-content { color: red }`
+passes the CLI and fails `AppValidator`; `footer { display: none }` does the
+reverse. Tracked on card
+`app-two-validators-docs-describe-the-uncalled-one-20260822`, waiting on the
+authoritative shell-selector list from scitex-hub.
 
 ## Errors vs advice (CLI path)
 

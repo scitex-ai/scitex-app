@@ -74,31 +74,33 @@ def test_built_output_is_skipped(tmp_path):
     assert found == []
 
 
-# ─── the known false positive, asserted rather than left to be discovered ───
+# ─── the false positive that the fleet measurement removed ──────────────────
+# writer/_django was the ONLY app package producing a finding, and the finding
+# was `re.exec(line)` in a while loop (editor.js:812). Armed as ported, this
+# rule's first act would have been to fail a peer's build over a regex
+# iteration. These two arms keep that from coming back.
 
 
-def test_regexp_exec_is_reported_and_that_is_a_known_false_positive(tmp_path):
-    """`exec(` is in the list because the PYTHON list was copy-pasted into it.
-
-    `regex.exec(str)` is ordinary, correct JavaScript. This test does not
-    endorse the finding — it PINS it, so that narrowing the pattern list later
-    is a visible change to a recorded behaviour rather than a silent one, and so
-    that nobody arms this rule believing it has no false-positive class.
-    """
+def test_regexp_exec_is_not_reported(tmp_path):
+    """The exact shape measured in writer: correct, ordinary JavaScript."""
     # Arrange
     # Act
-    found = _app_with_js(tmp_path, "const m = /a(b)/.exec(input);")
+    found = _app_with_js(tmp_path, "while ((m = re.exec(line)) !== null) {}")
     # Assert
-    assert len(found) == 1
+    assert found == []
 
 
-def test_the_pattern_list_still_carries_the_python_leftovers(tmp_path):
-    """Pins the ported list verbatim, so a narrowing is deliberate."""
+def test_the_python_only_patterns_are_gone(tmp_path):
+    """`subprocess` in a browser bundle describes no JavaScript hazard."""
     # Arrange
     # Act
-    leftovers = [p for p in DANGEROUS_JS_PATTERNS if "subprocess" in p]
+    leftovers = [
+        p
+        for p in DANGEROUS_JS_PATTERNS
+        if any(k in p for k in ("subprocess", "__import__", "os.system", "exec"))
+    ]
     # Assert
-    assert leftovers == [r"\bsubprocess\b"]
+    assert leftovers == []
 
 
 # EOF
