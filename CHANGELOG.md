@@ -7,6 +7,13 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-02
+
+Patch: a server bound to `0.0.0.0` now answers on the addresses it is
+actually reachable at. Released immediately — scitex-scholar 1.9.0 and
+figrecipe 0.34.6 are both hitting the 400 in the field, and both carry a
+local copy of the fix that they replace with an import from this wheel.
+
 ### Fixed
 - **`_allowed_hosts` now honours a `0.0.0.0` bind.** It appended the bound
   host *string*, and `"0.0.0.0"` was already in the base list, so `--host
