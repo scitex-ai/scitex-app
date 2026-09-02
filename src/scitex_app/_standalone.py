@@ -106,6 +106,95 @@ def run_standalone(
     _run_server(host, port, hot_reload)
 
 
+# ── What a bind implies ───────────────────────────────────────────────────────
+# VERBATIM from scitex-scholar's _django/_server.py (PR #137, ad439af,
+# 2026-09-02), by scitex-hub's ruling as coordinator: scholar and figrecipe
+# carry the same block until this one is released, then replace theirs with an
+# import. Keep it byte-for-byte with theirs; fix bugs here first, then sync.
+
+_LOOPBACK = ("127.0.0.1", "localhost")
+_BIND_ALL = "0.0.0.0"
+
+
+def _interface_ipv4_addresses() -> list[str]:
+    """Every IPv4 address assigned to a network interface on this machine.
+
+    Read from the INTERFACES (SIOCGIFADDR per `socket.if_nameindex()` entry),
+    not from name resolution. `getaddrinfo(gethostname())` was the first
+    attempt and it FAILED THE LIVE CHECK while passing the unit test: inside a
+    container the hostname resolves to an address that is not the LAN
+    interface, so `--host 0.0.0.0` still answered 400 to the real address.
+    The unit test had only asserted the hostname was present -- it could not
+    fail for the case that mattered. Interfaces cannot lie about which
+    addresses they hold. Linux/macOS ioctl; returns [] where unavailable.
+    """
+    import socket
+
+    try:
+        import fcntl
+        import struct
+    except ImportError:  # not a POSIX platform
+        return []
+
+    _SIOCGIFADDR = 0x8915
+    found: list[str] = []
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        for _, name in socket.if_nameindex():
+            try:
+                packed = fcntl.ioctl(
+                    s.fileno(),
+                    _SIOCGIFADDR,
+                    struct.pack("256s", name[:15].encode()),
+                )
+            except OSError:
+                continue  # interface with no IPv4 address
+            addr = socket.inet_ntoa(packed[20:24])
+            if not addr.startswith("127.") and addr not in found:
+                found.append(addr)
+    return found
+
+
+def _local_addresses() -> list[str]:
+    """This machine's hostname plus every IPv4 address its interfaces hold.
+
+    Used only for the 0.0.0.0 bind. Loopback is excluded because settings.py
+    already lists it.
+    """
+    import socket
+
+    found: list[str] = []
+    hostname = socket.gethostname()
+    if hostname:
+        found.append(hostname)
+    found.extend(a for a in _interface_ipv4_addresses() if a not in found)
+    return found
+
+
+def _hosts_to_allow(host: str) -> list[str]:
+    """What a given ``--host`` bind implies for ALLOWED_HOSTS. Pure function.
+
+    Binding to an address IS the statement that you intend to be reached on
+    it, so contribute it rather than making the caller set an env var to
+    permit what they already asked for:
+
+        127.0.0.1 / localhost   -> []            settings.py lists loopback
+        0.0.0.0                 -> hostname + this machine's interface addresses
+        anything else           -> [host]
+
+    The 0.0.0.0 rule is what makes DEBUG=False the safe default WITHOUT
+    reintroducing the bug #126 fixed: a bind-all server receives requests whose
+    Host header is the real interface address, and "0.0.0.0" in ALLOWED_HOSTS
+    never matches that. Measured 2026-09-02 on the published 1.9.0 wheel:
+    `--host 0.0.0.0` with DJANGO_DEBUG=false answered 400 to every real
+    address while loopback answered 200.
+    """
+    if host in _LOOPBACK:
+        return []
+    if host == _BIND_ALL:
+        return _local_addresses()
+    return [host]
+
+
 def _allowed_hosts(host: str, extra_hosts: str = "") -> list[str]:
     """ALLOWED_HOSTS for a server bound to `host`.
 
@@ -134,8 +223,13 @@ def _allowed_hosts(host: str, extra_hosts: str = "") -> list[str]:
     fixes the silent 400 without widening anything.
     """
     hosts = ["127.0.0.1", "localhost", "0.0.0.0"]
-    if host and host not in hosts:
-        hosts.append(host)
+    # What the bind IMPLIES, not the bind string: "0.0.0.0" was already in the
+    # base list, so `--host 0.0.0.0` used to contribute nothing, and a request
+    # carrying the real interface address in its Host header was refused with
+    # 400 (measured 2026-09-02 by scholar on 1.9.0 and by figrecipe on 0.34.6).
+    for contributed in _hosts_to_allow(host):
+        if contributed not in hosts:
+            hosts.append(contributed)
     hosts.extend(h.strip() for h in extra_hosts.split(",") if h.strip())
     return hosts
 

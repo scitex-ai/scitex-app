@@ -7,6 +7,20 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **`_allowed_hosts` now honours a `0.0.0.0` bind.** It appended the bound
+  host *string*, and `"0.0.0.0"` was already in the base list, so `--host
+  0.0.0.0` contributed nothing and a request carrying the real interface
+  address in its Host header was refused with 400 `DisallowedHost` (measured
+  2026-09-02 by scitex-scholar on 1.9.0 and by figrecipe on 0.34.6; this
+  function's own docstring had recorded the figrecipe symptom on 08-23). The
+  bind now contributes what it implies: loopback nothing, a concrete address
+  itself, `0.0.0.0` the hostname plus every interface's IPv4 read from the
+  interfaces (`SIOCGIFADDR`) — not from name resolution, which inside a
+  container returns addresses that are not the LAN interface. Never widened
+  to `"*"`. The derivation is scitex-scholar's `_hosts_to_allow` (PR #137)
+  verbatim, so scholar and figrecipe can replace their copies with an import.
+
 ## [0.10.0] - 2026-08-23
 
 Minor: `run_standalone()` gains language activation. Released now rather than
