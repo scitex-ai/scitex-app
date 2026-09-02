@@ -30,9 +30,14 @@ from ._frame import (
     FORBIDDEN_BLOCK_OVERRIDES,
     PROTECTED_SELECTORS,
     validate_css,
+    validate_css_advisory,
     validate_templates,
 )
-from ._manifest import MANIFEST_REQUIRED_KEYS, validate_manifest
+from ._manifest import (
+    MANIFEST_REQUIRED_KEYS,
+    validate_manifest,
+    validate_manifest_advisory,
+)
 from ._prefix import (
     MOUNT_IDENTIFIERS,
     PLATFORM_ROUTE_PREFIXES,
@@ -63,19 +68,51 @@ __all__ = [
     "REQUIRED_FILES",
     "validate",
     "validate_css",
+    "validate_css_advisory",
     "validate_dependencies",
     "validate_manifest",
+    "validate_manifest_advisory",
     "validate_prefix_safety",
     "validate_security",
     "validate_structure",
     "validate_templates",
+    "validate_with_warnings",
 ]
 
 
 def validate(app_dir: str | Path, *, check_prefix_safety: bool = False) -> list[str]:
     """Run all validations on a local app directory.
 
-    Returns list of error strings (empty = valid).
+    Returns list of error strings (empty = valid). Everything returned here is a
+    FAILURE; advisory findings come back separately from
+    validate_with_warnings(). This signature is unchanged, so every existing
+    caller keeps exactly the meaning it already relied on.
+    """
+    errors, _ = validate_with_warnings(
+        app_dir, check_prefix_safety=check_prefix_safety
+    )
+    return errors
+
+
+def validate_with_warnings(
+    app_dir: str | Path, *, check_prefix_safety: bool = False
+) -> tuple[list[str], list[str]]:
+    """Run all validations, separating FAILURES from ADVICE.
+
+    Returns `(errors, warnings)`. Errors fail a build; warnings are reported and
+    change nothing.
+
+    WHY THE TIER EXISTS. `validate()` returned one flat list and its only
+    consumer does `raise SystemExit(1)` on any entry, so "should" and "must"
+    were indistinguishable to the thing acting on them. Two findings were worded
+    as advice and enforced as failures, and one of them was UNCLEARABLE: an app
+    could not satisfy it without introducing the collision the rule's own
+    remediation would cause. A rule nobody can clear does not raise quality — it
+    teaches people to stop running the validator.
+
+    NOT an argument for softening the other error-tier findings. Their wording
+    matches their enforcement, including the forbidden `version` key, whose
+    message cites the incident where every hub app tile showed a wrong version.
 
     `check_prefix_safety` is OFF by default, and that default IS the arming
     switch — flipping it to True is the whole of "arm the validator". It is a
@@ -83,7 +120,8 @@ def validate(app_dir: str | Path, *, check_prefix_safety: bool = False) -> list[
     individually revisitable; see validate_prefix_safety for why it is not yet
     armed and what has to be true first.
     """
-    errors = []
+    errors: list[str] = []
+    warnings: list[str] = []
     root = Path(app_dir)
     is_embedded = _is_embedded_package(root)
     frontend_type = _get_frontend_type(root)
@@ -91,6 +129,7 @@ def validate(app_dir: str | Path, *, check_prefix_safety: bool = False) -> list[
     errors.extend(validate_structure(app_dir))
     errors.extend(validate_security(app_dir))
     errors.extend(validate_manifest(app_dir))
+    warnings.extend(validate_manifest_advisory(app_dir))
     if not is_embedded or (frontend_type and frontend_type != "react"):
         # SKIP ONLY COMPILED-REACT FRONTENDS, which is what the old comment here
         # actually claimed ("embedded packages use compiled React builds") — but
@@ -121,6 +160,10 @@ def validate(app_dir: str | Path, *, check_prefix_safety: bool = False) -> list[
         # No app loses a check it has today.
         errors.extend(validate_templates(app_dir))
         errors.extend(validate_css(app_dir))
+        # Gated identically to validate_css above, deliberately: an app whose
+        # CSS is not being checked must not start receiving CSS advice about
+        # files nothing else read.
+        warnings.extend(validate_css_advisory(app_dir))
     errors.extend(validate_dependencies(app_dir))
     if check_prefix_safety:
         # DELIBERATELY OUTSIDE the `if not is_embedded` branch above. Every app
@@ -128,7 +171,7 @@ def validate(app_dir: str | Path, *, check_prefix_safety: bool = False) -> list[
         # `_django` package, so gating this on `not is_embedded` would skip
         # precisely the population it exists to measure — and pass, forever.
         errors.extend(validate_prefix_safety(app_dir))
-    return errors
+    return errors, warnings
 
 
 # EOF

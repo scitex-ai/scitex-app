@@ -71,12 +71,8 @@ def validate_css(app_dir: str | Path) -> list[str]:
             continue
         relpath = css_file.relative_to(root)
 
-        # Warn about deprecated --color-* variables
-        if re.search(r"var\(--color-", content):
-            errors.append(
-                f"{relpath}: use --workspace-* or --text-* CSS variables "
-                f"instead of --color-* (see workspace template spec)"
-            )
+        # The deprecated --color-* finding is ADVISORY and lives in
+        # validate_css_advisory(), not here. See that function for why.
 
         # Check for !important on protected selectors
         for selector in PROTECTED_SELECTORS:
@@ -89,6 +85,35 @@ def validate_css(app_dir: str | Path) -> list[str]:
             errors.append(f"{relpath}: must not hide the footer")
 
     return errors
+
+
+def validate_css_advisory(app_dir: str | Path) -> list[str]:
+    """CSS findings that are ADVICE, not failures.
+
+    The deprecated `--color-*` variables still RENDER; using them is drift from
+    the workspace spec, not a broken app. This finding's own source comment read
+    "Warn about deprecated ..." while the finding went into `errors` like every
+    other one — and the only consumer exits 1 on any error, so the comment and
+    the behaviour disagreed and the behaviour won.
+    """
+    warnings = []
+    root = Path(app_dir)
+
+    for css_file in root.rglob("*.css"):
+        if ".git" in str(css_file):
+            continue
+        try:
+            content = css_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if re.search(r"var\(--color-", content):
+            relpath = css_file.relative_to(root)
+            warnings.append(
+                f"{relpath}: use --workspace-* or --text-* CSS variables "
+                f"instead of --color-* (see workspace template spec)"
+            )
+
+    return warnings
 
 
 # EOF

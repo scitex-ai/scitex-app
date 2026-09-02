@@ -42,14 +42,43 @@ def validate_manifest(app_dir: str | Path) -> list[str]:
             "'pip_package' (importlib.metadata). Remove the 'version' key."
         )
 
-    # Validate name matches directory convention
+    # The 'name' suffix convention is ADVISORY and lives in
+    # validate_manifest_advisory(), not here. See that function for why.
+
+    return errors
+
+
+def validate_manifest_advisory(app_dir: str | Path) -> list[str]:
+    """Manifest findings that are ADVICE, not failures.
+
+    A separate function rather than a severity argument on the one above, so the
+    tier is STRUCTURAL: a finding is advisory because of where it is raised, not
+    because of how its message happens to be worded. The name convention was
+    worded "should" and enforced as a failure, which is how it became
+    unclearable — scitex-scholar's manifest is `scholar_editor` because
+    `scholar_app` would COLLIDE with hub's existing registry entry, so the only
+    escape the rule offered was to create the bug the name avoids.
+    """
+    warnings = []
+    root = Path(app_dir)
+    manifest_path = root / "manifest.json"
+
+    if not manifest_path.exists():
+        return []
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []  # validate_manifest() already reports this, as an error
+    if not isinstance(data, dict):
+        return []
+
     name = data.get("name", "")
     if name and not (name.endswith("_app") or name.endswith("-app")):
-        errors.append(
+        warnings.append(
             f"manifest.json 'name' should end with '_app' or '-app' (got: '{name}')"
         )
 
-    return errors
+    return warnings
 
 
 # EOF

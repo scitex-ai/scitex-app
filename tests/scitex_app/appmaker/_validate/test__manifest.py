@@ -6,6 +6,7 @@ import json
 
 from scitex_app.appmaker._validate import (
     validate_manifest,
+    validate_manifest_advisory,
     MANIFEST_REQUIRED_KEYS,
 )
 from ._helpers import (
@@ -65,7 +66,8 @@ class TestValidateManifest:
         # Assert
         assert errors == []
 
-    def test_name_without_app_suffix_adds_error(self, tmp_path):
+    def test_name_without_app_suffix_is_not_an_error(self, tmp_path):
+        """The suffix convention is advice; enforcing it made it unclearable."""
         # Arrange
         data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
         data["name"] = "mybadname"  # no _app suffix
@@ -73,7 +75,49 @@ class TestValidateManifest:
         # Act
         errors = validate_manifest(tmp_path)
         # Assert
-        assert any("_app" in e or "-app" in e for e in errors)
+        assert not [e for e in errors if "_app" in e or "-app" in e]
+
+    def test_name_without_app_suffix_is_an_advisory(self, tmp_path):
+        """The other arm: moved to the warn tier, NOT deleted.
+
+        Without this, the assertion above would also pass if the finding had
+        simply been dropped -- which is the failure a "stop enforcing it" change
+        most resembles.
+        """
+        # Arrange
+        data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
+        data["name"] = "mybadname"
+        write_manifest(tmp_path, data)
+        # Act
+        warnings = validate_manifest_advisory(tmp_path)
+        # Assert
+        assert any("_app" in w or "-app" in w for w in warnings)
+
+    def test_name_with_app_suffix_raises_no_advisory(self, tmp_path):
+        # Arrange
+        data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
+        data["name"] = "my_app"
+        write_manifest(tmp_path, data)
+        # Act
+        warnings = validate_manifest_advisory(tmp_path)
+        # Assert
+        assert warnings == []
+
+    def test_advisory_on_a_missing_manifest_is_silent(self, tmp_path):
+        """validate_manifest() already reports this, as an error; not twice."""
+        # Arrange — tmp_path holds no manifest.json
+        # Act
+        warnings = validate_manifest_advisory(tmp_path)
+        # Assert
+        assert warnings == []
+
+    def test_advisory_on_unparseable_json_is_silent(self, tmp_path):
+        # Arrange
+        (tmp_path / "manifest.json").write_text("{not json", encoding="utf-8")
+        # Act
+        warnings = validate_manifest_advisory(tmp_path)
+        # Assert
+        assert warnings == []
 
     def test_name_with_app_suffix_accepted(self, tmp_path):
         # Arrange

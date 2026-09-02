@@ -127,6 +127,11 @@ def test_validate_reports_prefix_findings_when_explicitly_armed(tmp_path):
 # would report "the table is wrong" instead of "this row is wrong".
 
 
+# ─── variable-prefixed URLs are a THIRD value, not a violation ──────────────
+# 0.9.0 flagged `${STX_MOUNT}/api/x` — the exact code its own remediation text
+# prescribes — because it collapsed "variable-prefixed" into "inferred-base".
+# Reported by scitex-scholar against their CORRECTED tree.
+
 def test_the_prescribed_mount_prefix_form_is_not_flagged(tmp_path):
     # Arrange — this IS the fix. Flagging it tells an app to undo correct work.
     source = "const url = `${STX_MOUNT}/api/search?${params}`;"

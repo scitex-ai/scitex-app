@@ -6,6 +6,7 @@ from __future__ import annotations
 from scitex_app.appmaker._validate import (
     validate_templates,
     validate_css,
+    validate_css_advisory,
     PROTECTED_SELECTORS,
     FORBIDDEN_BLOCK_OVERRIDES,
 )
@@ -103,13 +104,31 @@ class TestValidateCss:
         # Assert
         assert errors == []
 
-    def test_deprecated_color_variable_adds_error(self, tmp_path):
+    def test_deprecated_color_variable_is_not_an_error(self, tmp_path):
+        """Deprecated variables still RENDER — drift, not a broken app."""
         # Arrange
         (tmp_path / "style.css").write_text("color: var(--color-primary);")
         # Act
         errors = validate_css(tmp_path)
         # Assert
-        assert any("--color-" in e or "--workspace-*" in e for e in errors)
+        assert not [e for e in errors if "--color-" in e or "--workspace-*" in e]
+
+    def test_deprecated_color_variable_is_an_advisory(self, tmp_path):
+        """The other arm: moved to the warn tier, NOT deleted."""
+        # Arrange
+        (tmp_path / "style.css").write_text("color: var(--color-primary);")
+        # Act
+        warnings = validate_css_advisory(tmp_path)
+        # Assert
+        assert any("--color-" in w or "--workspace-*" in w for w in warnings)
+
+    def test_compliant_css_raises_no_advisory(self, tmp_path):
+        # Arrange
+        (tmp_path / "style.css").write_text("color: var(--workspace-fg);")
+        # Act
+        warnings = validate_css_advisory(tmp_path)
+        # Assert
+        assert warnings == []
 
     def test_important_on_protected_selector_adds_error(self, tmp_path):
         # Arrange
