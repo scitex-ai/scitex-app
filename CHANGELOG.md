@@ -7,6 +7,27 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Advisory validator findings no longer fail a build.** `appmaker.validate()`
+  returned one flat list and the CLI does `raise SystemExit(1)` on any entry, so
+  "should" and "must" were indistinguishable to the only thing acting on them.
+  Two findings were worded as advice and enforced as failures — the
+  `name` must end in `_app`/`-app` convention, and the deprecated `--color-*`
+  CSS variables — and the first was UNCLEARABLE: an app whose correct name would
+  COLLIDE with an existing registry entry could satisfy the rule only by
+  creating the collision. New `appmaker.validate_with_warnings(app_dir)` returns
+  `(errors, warnings)`; `validate()` keeps its signature and now returns errors
+  only. `scitex-app app validate` prints advisory notices in yellow and exits
+  non-zero only on errors. The remaining error-tier findings are unchanged.
+
+### Internal
+- `appmaker/_validate.py` (537 lines) split into a package of one module per
+  concern — app layout, security, manifest, frame rules, dependencies, prefix
+  safety — with the full re-export surface preserved on `_validate`, so
+  `from scitex_app.appmaker._validate import <anything>` is unaffected. Tests
+  moved to the mirror directory the project-structure audit requires; the test
+  NAME set is identical before and after.
+
 ## [0.10.1] - 2026-09-02
 
 Patch: a server bound to `0.0.0.0` now answers on the addresses it is

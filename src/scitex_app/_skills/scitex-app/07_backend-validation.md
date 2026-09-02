@@ -43,6 +43,34 @@ So switching wholesale to either one loses checks. Reconciling them is tracked
 on card `app-two-validators-docs-describe-the-uncalled-one-20260822`; until
 then, run BOTH if you want full coverage.
 
+## Errors vs advice (CLI path)
+
+`scitex_app.appmaker` exposes two entry points to the same pipeline:
+
+```python
+from scitex_app.appmaker import validate, validate_with_warnings
+
+errors = validate(app_dir)                       # failures only
+errors, warnings = validate_with_warnings(app_dir)
+```
+
+Only `errors` fails a build. `scitex-app app validate` prints advisory notices
+in yellow, whether or not the app passes, and exits non-zero **only** on errors.
+
+Two findings are advisory:
+
+| finding | why it is advice |
+| --- | --- |
+| `manifest.json 'name' should end with '_app' / '-app'` | an app can have a real reason not to — a name that would COLLIDE with an existing registry entry — and there is no exemption mechanism |
+| `use --workspace-* / --text-* instead of --color-*` | the deprecated variables still render; this is drift from the spec, not a broken app |
+
+Both used to be **enforced as failures despite being worded as advice**, because
+`validate()` returned one flat list and the CLI exits 1 on any entry. That made
+the first one unclearable: the only escape it prescribed was to introduce the
+collision the name avoids. Everything else `validate()` reports is a hard error
+whose wording matches its enforcement, and this is not a precedent for softening
+those.
+
 `AppValidator` validation pipeline (runs in order):
 1. `validate_manifest()` — required fields, valid JSON, and **no `version` key**
 2. `validate_structure()` — `_django/views.py` and `_django/urls.py` present
