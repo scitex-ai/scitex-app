@@ -25,7 +25,12 @@ WHY IT IS SAFE TO READ scitex_ui HERE. scitex-app does NOT depend on scitex-ui
 and must not: scitex-ui is the presentation layer, and this SDK's CLI and MCP
 surfaces are required to stay headless. These tests SKIP when scitex-ui is
 absent, so the dependency is one-way and optional. They run in the CI job that
-installs scitex-ui for the reference example.
+installs scitex-ui for the reference example -- which was FALSE when this
+sentence was first written, and is true only as of 2026-09-03. That job ran
+the example's own tests and never this file, so every cross-package arm here
+SKIPPED in CI from the day it landed: measured `.ss......` on PR #121, a week
+later. The workflow now runs them explicitly. The sentence was written from
+the INTENT rather than from the workflow, which is the mistake not to repeat.
 
 WHAT THAT COSTS, said plainly: that job is deliberately NOT a required context,
 so this is a RECORD rather than a gate — visible on a pull request, blocking
@@ -50,6 +55,12 @@ import pytest
 
 from scitex_app._django import MOUNT_META_NAME
 
+from ._ts_agreement import (
+    installed_scitex_app_root,
+    installed_scitex_ui_root,
+    strip_ts_comments,
+)
+
 #: `export const MOUNT_META_NAME = "stx-mount";` — anchored on the DECLARATION,
 #: not on the bare string, so prose mentioning the name cannot satisfy it.
 _TS_CONSTANT = re.compile(
@@ -63,48 +74,20 @@ _PY_FALLBACK_CONSTANT = re.compile(
     r"""^\s+MOUNT_META_NAME\s*=\s*['"]([^'"]+)['"]""", re.MULTILINE
 )
 
-_TS_LINE_COMMENT = re.compile(r"//.*?$", re.MULTILINE)
-_TS_BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 
 _MOUNT_TS_RELPATH = Path("static") / "scitex_ui" / "ts" / "_base" / "mount.ts"
 
 
-def _strip_ts_comments(source: str) -> str:
-    """Remove // and /* */ comments before searching for a declaration.
-
-    WHY: a substring detector INVERTS ON DOCUMENTATION. Without this, a file
-    that had removed the real constant but kept a commented-out one — or merely
-    discussed it in a comment — would still satisfy the search, and the file
-    that best explains itself looks identical to the file with the defect.
-
-    MEASURED, not assumed: before this, `// export const MOUNT_META_NAME =
-    "stx-OLD";` matched and yielded "stx-OLD". scitex-ui hit the same shape in
-    their own guard an hour earlier, on a docstring explaining why a helper
-    does not exist.
-    """
-    return _TS_BLOCK_COMMENT.sub("", _TS_LINE_COMMENT.sub("", source))
 
 
 def _read_ts_constant(source: str) -> str | None:
     """The declared value from TypeScript source, ignoring comments. Pure."""
-    found = _TS_CONSTANT.search(_strip_ts_comments(source))
+    found = _TS_CONSTANT.search(strip_ts_comments(source))
     return found.group(1) if found else None
 
 
-def _scitex_app_root() -> Path:
-    """This package's directory, for reading its own source."""
-    import scitex_app
-
-    return Path(scitex_app.__file__).resolve().parent
 
 
-def _scitex_ui_root() -> Path | None:
-    """The installed scitex_ui package, or None when it is not installed."""
-    try:
-        import scitex_ui
-    except ImportError:
-        return None
-    return Path(scitex_ui.__file__).resolve().parent
 
 
 @pytest.fixture
@@ -115,7 +98,7 @@ def scitex_ui_root() -> Path:
     scitex-ui and must not, so its absence is expected and cannot be a failure.
     Everything past this point is a real signal.
     """
-    root = _scitex_ui_root()
+    root = installed_scitex_ui_root()
     if root is None:
         pytest.skip(
             "scitex-ui is not installed — the cross-package half of the "
@@ -214,7 +197,7 @@ def test_the_embed_fallback_literal_agrees_with_the_renderer():
     is.
     """
     # Arrange
-    source = (Path(_scitex_app_root()) / "embed.py").read_text(encoding="utf-8")
+    source = (Path(installed_scitex_app_root()) / "embed.py").read_text(encoding="utf-8")
     # Act
     fallback = _PY_FALLBACK_CONSTANT.search(source)
     # Assert
