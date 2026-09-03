@@ -27,7 +27,21 @@ MOUNT_IDENTIFIERS = ("STX_MOUNT",)
 _LEADING_INTERPOLATION = re.compile(r"^\$\{\s*([A-Za-z_$][\w$]*)\s*\}")
 
 # Call sites that issue a request and therefore must resolve against the mount.
-_REQUEST_CALL = r"(?:fetch|axios(?:\.\w+)?|\.open|new\s+URL|EventSource|WebSocket)"
+#
+# `.open` is NOT here, deliberately. XMLHttpRequest's signature is
+# `open(method, url)`, so a pattern that captures the FIRST string literal after
+# the call reports the METHOD as the URL. Measured 2026-09-03 against
+# scitex-writer's shipped bundle: two findings reading
+#     inferred-base request URL 'GET'
+# from `xhr.open("GET", url)`. 'GET' is not a URL, cannot be prefixed, and the
+# remediation text told the author to join it to the mount. XHR is handled by
+# _XHR_OPEN_URL below, which skips the method argument.
+_REQUEST_CALL = r"(?:fetch|axios(?:\.\w+)?|new\s+URL|EventSource|WebSocket)"
+
+# `xhr.open(METHOD, URL)` — capture the SECOND argument.
+_XHR_OPEN_URL = re.compile(
+    r"\.open\s*\(\s*['\"`][A-Za-z]+['\"`]\s*,\s*" + r"""['"`]([^'"`\n]*)['"`]"""
+)
 
 # A string literal argument: 'x', "x" or `x`.
 _LITERAL = r"""['"`]([^'"`\n]*)['"`]"""
@@ -63,6 +77,35 @@ PREFIX_SCAN_SUFFIXES = (".js", ".mjs", ".jsx", ".ts", ".tsx", ".html")
 # index.js, and its TS source can disagree with it. Skipping build output would
 # hide the population this rule exists to measure.
 PREFIX_SKIP_DIRS = frozenset({"node_modules", ".git", "__pycache__", ".vite", "_docs"})
+
+# BUILD CONFIGURATION IS NOT APPLICATION CODE, and this rule's own docstring
+# already said so — "Static/asset base paths (a bundler `base` setting) are NOT
+# inspected" — while the scan read the file anyway. Measured 2026-09-03 against
+# scitex-writer:
+#     vite.config.ts:5: inferred-base request URL '.'
+# from `fileURLToPath(new URL(".", import.meta.url))`, which is Node's __dirname
+# idiom evaluated at BUILD time. It issues no request, reaches no browser, and
+# has no mount to resolve against. A documented exclusion that the code does not
+# implement is not an exclusion.
+PREFIX_SKIP_FILE_STEMS = (
+    "vite.config",
+    "rollup.config",
+    "webpack.config",
+    "esbuild.config",
+    "vitest.config",
+    "jest.config",
+    "tailwind.config",
+    "postcss.config",
+    "babel.config",
+    "next.config",
+    "svelte.config",
+    "astro.config",
+)
+
+
+def _is_build_config(path: Path) -> bool:
+    """True for a bundler/tooling config, which runs at build time only."""
+    return any(path.name.startswith(stem) for stem in PREFIX_SKIP_FILE_STEMS)
 
 
 def _prefix_finding_class(url: str) -> str | None:
@@ -134,8 +177,18 @@ def validate_prefix_safety(app_dir: str | Path) -> list[str]:
         This is an UNKNOWN deliberately not reported as a violation.
       - Static/asset base paths (a bundler `base` setting,
         e.g. vite's "/static/<app>/") are NOT inspected. They are a build-config
-    concern with a different fix and different correct answers, and folding them
-    in here would produce findings this rule cannot advise on.
+        concern with a different fix and different correct answers, and folding
+        them in here would produce findings this rule cannot advise on. That
+        exclusion is now ENFORCED by PREFIX_SKIP_FILE_STEMS rather than merely
+        stated — until 2026-09-03 the scan read `vite.config.ts` and reported
+        from it, so the sentence above was true of the intent and false of the
+        code.
+      - THIRD-PARTY VENDORED CODE IS STILL SCANNED, and its findings are real
+        but usually not actionable by the app author. scitex-writer ships
+        PDF.js, whose `document.baseURI` use is genuine inferred-base behaviour
+        in code they did not write. Reported rather than skipped, because it
+        DOES break under a mount — but the fix there is a library option or a
+        vendor upgrade, not an edit to their source.
     """
     errors = []
     root = Path(app_dir)
@@ -145,6 +198,8 @@ def validate_prefix_safety(app_dir: str | Path) -> list[str]:
             continue
         if any(part in PREFIX_SKIP_DIRS for part in path.parts):
             continue
+        if _is_build_config(path):
+            continue
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -152,7 +207,7 @@ def validate_prefix_safety(app_dir: str | Path) -> list[str]:
         relpath = path.relative_to(root)
 
         seen_lines = set()
-        for pattern in (PREFIX_REQUEST_LITERAL, PREFIX_URL_BINDING):
+        for pattern in (PREFIX_REQUEST_LITERAL, PREFIX_URL_BINDING, _XHR_OPEN_URL):
           for match in pattern.finditer(content):
             kind = _prefix_finding_class(match.group(1))
             if kind is None:

@@ -7,6 +7,19 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Two false-positive classes in the mount-prefix scan**, both found by running
+  it against real app packages rather than fixtures. `xhr.open("GET", url)` was
+  reported as `inferred-base request URL 'GET'` — XHR's first argument is the
+  METHOD, so the remediation told the author to join a verb to the mount; XHR
+  URLs are now read from the second argument. And bundler configs were scanned
+  despite the rule's own docstring excluding them, reporting
+  `new URL(".", import.meta.url)` in `vite.config.ts` — Node's `__dirname`
+  idiom, evaluated at build time, reaching no browser. Measured on
+  scitex-writer: 8 findings before, 5 after, with the 3 removed being exactly
+  these; scitex-scholar (known-clean) stays at 0 and figrecipe's published
+  0.34.6 stays at 6, so no true positive was lost.
+
 ### Added
 - **The three checks the docs promised and nothing ran.** JS dangerous-pattern
   scanning, a bundle-size cap and manifest privilege validation existed in
