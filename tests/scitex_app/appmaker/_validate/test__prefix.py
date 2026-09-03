@@ -182,3 +182,62 @@ def test_a_genuinely_relative_url_is_still_flagged(tmp_path):
 
 
 # EOF
+
+
+# ─── false positives measured on real trees, 2026-09-03 ─────────────────────
+# Both were found by running the scan against scitex-writer's shipped package,
+# not by inspection. A CORRECT tree is the only place a false positive is
+# visible, and these two were invisible in every fixture I had written.
+
+
+def test_an_xhr_method_is_not_reported_as_a_url(tmp_path):
+    """`xhr.open("GET", url)` — the FIRST literal is the method, not the URL.
+
+    Measured in writer's bundle as: inferred-base request URL 'GET'. 'GET'
+    cannot be prefixed, so the remediation text told the author to join a verb
+    to the mount.
+    """
+    # Arrange
+    source = 'const x = new XMLHttpRequest; x.open("GET", u, true);'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert not [e for e in found if "'GET'" in e]
+
+
+def test_an_xhr_url_argument_is_still_reported(tmp_path):
+    """The other arm: skipping the method must not skip the URL beside it."""
+    # Arrange
+    source = 'const x = new XMLHttpRequest; x.open("GET", "api/search", true);'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert [e for e in found if "api/search" in e]
+
+
+def test_a_bundler_config_is_not_scanned(tmp_path):
+    """Build config runs at BUILD time and reaches no browser.
+
+    Measured in writer as vite.config.ts:5 — `new URL(".", import.meta.url)`,
+    Node's __dirname idiom. The rule's own docstring already excluded build
+    config; the code did not.
+    """
+    # Arrange
+    source = 'const __dirname = fileURLToPath(new URL(".", import.meta.url));'
+    # Act
+    found = _app_with_js(tmp_path, source, "vite.config.ts")
+    # Assert
+    assert found == []
+
+
+def test_an_ordinary_source_file_is_still_scanned(tmp_path):
+    """Control: the skip must be keyed on the config name, not on the shape."""
+    # Arrange
+    source = 'const __dirname = fileURLToPath(new URL(".", import.meta.url));'
+    # Act
+    found = _app_with_js(tmp_path, source, "app.ts")
+    # Assert
+    assert len(found) == 1
+
+
+# EOF
