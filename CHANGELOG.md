@@ -7,6 +7,65 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-03
+
+Patch: the mount-prefix scan was measuring the wrong population, and then
+reporting things that are not request URLs. No API change.
+
+WHO IS AFFECTED. The prefix rule is UNARMED — `validate()` skips it unless
+`check_prefix_safety=True` — so nothing was failing a build on this. What it
+degraded was the RECORD: a report where most rows are unactionable is one
+nobody reads, which is how a check stops being read at all.
+
+### Fixed
+
+- **The scan read a project's own dependencies as its violations.**
+  `PREFIX_SKIP_DIRS` excluded `node_modules` but had no Python equivalent, so a
+  scan pointed at a project ROOT descended into the virtualenv. Measured across
+  three real trees: 46, 46 and 48 findings, dominated by playwright's driver
+  bundle (a *test* tool), matplotlib's `web_backend` templates, and an installed
+  figrecipe — none of which ship under the scanned app's mount, so none can
+  break under it. One tree read 46 while its own source was clean. The rule
+  already embodied "installed dependencies are not the application"; it applied
+  that to JavaScript only.
+
+- **A linked worktree multiplied every finding.** A worktree is another checkout
+  of the same repository, so each real finding was reported once more per
+  checked-out branch, making the count a function of how many branches happen to
+  exist locally.
+
+- **A url-ish NAME was treated as evidence about its VALUE.**
+  `const ATTR_SIGN_IN_URL = "data-stx-dim-sign-in-url"` was reported as an
+  inferred-base URL. The name ends in `_URL` because it *names the attribute
+  that holds* a url — the opposite of the value being one. The binding pattern
+  now also requires the value to carry a path separator.
+
+- **The bundler's `new URL(<spec>, import.meta.url)` was reported.** That idiom
+  is resolved at build time into a hashed asset and issues no request. It was
+  previously excluded by FILE (`vite.config`), which is the wrong
+  discriminator — the signature is the second argument, and the idiom is just as
+  valid in application source. Root-absolute specifiers are deliberately NOT
+  exempt: `new URL("/x", base)` discards the base's path and resolves from the
+  origin root, so it still breaks under a mount.
+
+After the above, on the same three trees: 5, 0 and 0 — and the two non-zero
+figures are corroborated by a second scan route that never touched `.venv/` or
+`.worktrees/`.
+
+### Added
+
+- A cross-package check that the authorization verdict's four `kind` strings
+  agree with scitex-ui's TypeScript copy, which is a second declaration of one
+  decision in another language and repository. It runs where a rename would
+  happen rather than where the breakage would appear.
+
+- The CI step that actually runs the cross-package checks. They had never run in
+  CI: the matrix job installs no scitex-ui so every cross-package arm skipped,
+  and the job that does install it ran only the example's own tests. The
+  `stx-mount` marker check added in 0.12.0 had therefore been reporting skips
+  for a week while its docstring claimed otherwise.
+
+
 ## [0.12.0] - 2026-09-03
 
 Minor: `scitex_app.authz` is a new public module. The rest is a validator
