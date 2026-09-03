@@ -25,7 +25,12 @@ WHY IT IS SAFE TO READ scitex_ui HERE. scitex-app does NOT depend on scitex-ui
 and must not: scitex-ui is the presentation layer, and this SDK's CLI and MCP
 surfaces are required to stay headless. These tests SKIP when scitex-ui is
 absent, so the dependency is one-way and optional. They run in the CI job that
-installs scitex-ui for the reference example.
+installs scitex-ui for the reference example -- which was FALSE when this
+sentence was first written, and is true only as of 2026-09-03. That job ran
+the example's own tests and never this file, so every cross-package arm here
+SKIPPED in CI from the day it landed: measured `.ss......` on PR #121, a week
+later. The workflow now runs them explicitly. The sentence was written from
+the INTENT rather than from the workflow, which is the mistake not to repeat.
 
 WHAT THAT COSTS, said plainly: that job is deliberately NOT a required context,
 so this is a RECORD rather than a gate — visible on a pull request, blocking

@@ -31,7 +31,9 @@ OUR edit, with nothing in between to say why. That is the loop this closes.
 
 WHAT THIS COSTS, said plainly, in the same terms as its sibling: it runs in the
 CI job that installs scitex-ui for the reference example, and that job is
-deliberately NOT a required context. So this is a RECORD, not a gate — visible
+deliberately NOT a required context. That job had to be TAUGHT to run this
+file -- it previously ran only the example's own tests, so the sibling check
+skipped in CI for a week while its docstring claimed otherwise. So this is a RECORD, not a gate — visible
 on a pull request, blocking nothing. Promoting it is tracked on
 app-arm-the-example-leg-once-it-has-a-track-record. Saying so because a skipped
 test and a passing test look identical in a summary line.
