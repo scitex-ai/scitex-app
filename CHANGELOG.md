@@ -7,6 +7,19 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **The three checks the docs promised and nothing ran.** JS dangerous-pattern
+  scanning, a bundle-size cap and manifest privilege validation existed in
+  `scitex_app.validator.AppValidator`, worked, were covered by tests, were
+  described to app developers by the shipped skill doc — and were called by
+  nothing; the CLI read no `.js` file at all. Ported into the live path as
+  `validate_js` / `validate_bundle_size` / `validate_privileges`, each behind a
+  `check_*` keyword defaulting to `False`, so no caller's results change today.
+  The JS pattern list was narrowed from nine to five on measurement: the four
+  dropped were the Python forbidden list copy-pasted into a JS scanner, and
+  `exec\s*\(` produced the only finding either peer repo had — `re.exec(line)`
+  in a `while` loop, i.e. correct JavaScript.
+
 ### Changed
 - **Advisory validator findings no longer fail a build.** `appmaker.validate()`
   returned one flat list and the CLI does `raise SystemExit(1)` on any entry, so

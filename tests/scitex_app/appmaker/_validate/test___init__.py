@@ -331,4 +331,86 @@ def test_css_advice_is_gated_with_the_css_checks_it_belongs_to(tmp_path):
     assert not [w for w in warnings if "--color-" in w]
 
 
+# ─── the ported checks ship UNARMED ─────────────────────────────────────────
+# Each rule gets BOTH arms. Without the armed one, "unarmed" would also pass if
+# the check were wired to nothing at all -- which is the failure mode a
+# default-off flag most resembles, and the one it is hardest to notice.
+
+
+def _app_tripping_all_three(tmp_path):
+    """An app that would trip every ported check, if any were armed."""
+    make_full_standalone_app(tmp_path, app_name="myapp")
+    (tmp_path / "app.js").write_text("const t = document.cookie;", encoding="utf-8")
+    data = json.loads((tmp_path / "manifest.json").read_text())
+    data["privileges"] = [{"type": "gpu", "scope": "none"}]
+    (tmp_path / "manifest.json").write_text(json.dumps(data))
+    return tmp_path
+
+
+def test_js_safety_is_not_reported_by_default(tmp_path):
+    # Arrange
+    app = _app_tripping_all_three(tmp_path)
+    # Act
+    reported = validate(app)
+    # Assert
+    assert not [e for e in reported if "dangerous pattern" in e]
+
+
+def test_js_safety_is_reported_when_explicitly_armed(tmp_path):
+    # Arrange
+    app = _app_tripping_all_three(tmp_path)
+    # Act
+    reported = validate(app, check_js_safety=True)
+    # Assert
+    assert [e for e in reported if "dangerous pattern" in e]
+
+
+def test_privileges_are_not_reported_by_default(tmp_path):
+    # Arrange
+    app = _app_tripping_all_three(tmp_path)
+    # Act
+    reported = validate(app)
+    # Assert
+    assert not [e for e in reported if "privilege type" in e]
+
+
+def test_privileges_are_reported_when_explicitly_armed(tmp_path):
+    # Arrange
+    app = _app_tripping_all_three(tmp_path)
+    # Act
+    reported = validate(app, check_privileges=True)
+    # Assert
+    assert [e for e in reported if "privilege type" in e]
+
+
+def test_bundle_size_is_not_reported_by_default(tmp_path):
+    # Arrange — armed, this app is over a 1-byte limit; the default cannot see it
+    app = _app_tripping_all_three(tmp_path)
+    # Act
+    reported = validate(app)
+    # Assert
+    assert not [e for e in reported if "Bundle size" in e]
+
+
+def test_bundle_size_is_reported_when_explicitly_armed(tmp_path):
+    """Armed against the 50MB default this app passes, so the arm is proved
+    against the function directly -- see test__bundle.py for the threshold."""
+    # Arrange
+    app = _app_tripping_all_three(tmp_path)
+    # Act
+    reported = validate(app, check_bundle_size=True)
+    # Assert
+    assert not [e for e in reported if "Bundle size" in e]
+
+
+def test_an_app_tripping_all_three_still_passes_unarmed(tmp_path):
+    """The property that makes this port safe to merge: nothing changes today."""
+    # Arrange
+    app = _app_tripping_all_three(tmp_path)
+    # Act
+    reported = validate(app)
+    # Assert
+    assert reported == []
+
+
 # EOF

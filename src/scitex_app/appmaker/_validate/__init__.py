@@ -25,6 +25,7 @@ from ._app_layout import (
     _is_embedded_package,
     validate_structure,
 )
+from ._bundle import DEFAULT_MAX_BUNDLE_SIZE, validate_bundle_size
 from ._dependencies import validate_dependencies
 from ._frame import (
     FORBIDDEN_BLOCK_OVERRIDES,
@@ -33,6 +34,7 @@ from ._frame import (
     validate_css_advisory,
     validate_templates,
 )
+from ._js import DANGEROUS_JS_PATTERNS, JS_SKIP_DIRS, validate_js
 from ._manifest import (
     MANIFEST_REQUIRED_KEYS,
     validate_manifest,
@@ -49,13 +51,23 @@ from ._prefix import (
     _prefix_finding_class,
     validate_prefix_safety,
 )
+from ._privileges import (
+    VALID_API_SCOPES,
+    VALID_FILESYSTEM_SCOPES,
+    VALID_NETWORK_SCOPES,
+    VALID_PRIVILEGE_TYPES,
+    validate_privileges,
+)
 from ._security import FORBIDDEN_PATTERNS, validate_security
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "DANGEROUS_JS_PATTERNS",
+    "DEFAULT_MAX_BUNDLE_SIZE",
     "FORBIDDEN_BLOCK_OVERRIDES",
     "FORBIDDEN_PATTERNS",
+    "JS_SKIP_DIRS",
     "MANIFEST_REQUIRED_KEYS",
     "MOUNT_IDENTIFIERS",
     "PLATFORM_ROUTE_PREFIXES",
@@ -66,13 +78,20 @@ __all__ = [
     "PREFIX_URL_BINDING",
     "PROTECTED_SELECTORS",
     "REQUIRED_FILES",
+    "VALID_API_SCOPES",
+    "VALID_FILESYSTEM_SCOPES",
+    "VALID_NETWORK_SCOPES",
+    "VALID_PRIVILEGE_TYPES",
     "validate",
+    "validate_bundle_size",
     "validate_css",
     "validate_css_advisory",
     "validate_dependencies",
+    "validate_js",
     "validate_manifest",
     "validate_manifest_advisory",
     "validate_prefix_safety",
+    "validate_privileges",
     "validate_security",
     "validate_structure",
     "validate_templates",
@@ -80,22 +99,38 @@ __all__ = [
 ]
 
 
-def validate(app_dir: str | Path, *, check_prefix_safety: bool = False) -> list[str]:
+def validate(
+    app_dir: str | Path,
+    *,
+    check_prefix_safety: bool = False,
+    check_js_safety: bool = False,
+    check_bundle_size: bool = False,
+    check_privileges: bool = False,
+) -> list[str]:
     """Run all validations on a local app directory.
 
     Returns list of error strings (empty = valid). Everything returned here is a
     FAILURE; advisory findings come back separately from
-    validate_with_warnings(). This signature is unchanged, so every existing
-    caller keeps exactly the meaning it already relied on.
+    validate_with_warnings(). Every `check_*` keyword defaults to False, so the
+    set of checks a caller gets without asking is unchanged.
     """
     errors, _ = validate_with_warnings(
-        app_dir, check_prefix_safety=check_prefix_safety
+        app_dir,
+        check_prefix_safety=check_prefix_safety,
+        check_js_safety=check_js_safety,
+        check_bundle_size=check_bundle_size,
+        check_privileges=check_privileges,
     )
     return errors
 
 
 def validate_with_warnings(
-    app_dir: str | Path, *, check_prefix_safety: bool = False
+    app_dir: str | Path,
+    *,
+    check_prefix_safety: bool = False,
+    check_js_safety: bool = False,
+    check_bundle_size: bool = False,
+    check_privileges: bool = False,
 ) -> tuple[list[str], list[str]]:
     """Run all validations, separating FAILURES from ADVICE.
 
@@ -114,11 +149,22 @@ def validate_with_warnings(
     matches their enforcement, including the forbidden `version` key, whose
     message cites the incident where every hub app tile showed a wrong version.
 
-    `check_prefix_safety` is OFF by default, and that default IS the arming
-    switch — flipping it to True is the whole of "arm the validator". It is a
-    named keyword rather than a silencing flag so it stays greppable and
-    individually revisitable; see validate_prefix_safety for why it is not yet
+    EVERY `check_*` KEYWORD IS OFF BY DEFAULT, and that default IS the arming
+    switch — flipping one to True is the whole of "arm that rule". They are
+    named keywords rather than one blanket flag so each stays greppable and
+    individually revisitable; each rule's own docstring says why it is not yet
     armed and what has to be true first.
+
+        check_prefix_safety   request URLs that break under a mount
+        check_js_safety       dangerous patterns in the app's JavaScript
+        check_bundle_size     total shipped size against a threshold
+        check_privileges      shape of the manifest's privilege declaration
+
+    The last three were PORTED from `scitex_app.validator.AppValidator`, where
+    they worked, were tested, were described to app developers by the shipped
+    skill doc — and were called by nothing. The CLI read no `.js` file at all.
+    Bringing them into the live path is additive: none of them has a counterpart
+    here, so none can contradict a verdict this module already gives.
     """
     errors: list[str] = []
     warnings: list[str] = []
@@ -171,6 +217,17 @@ def validate_with_warnings(
         # `_django` package, so gating this on `not is_embedded` would skip
         # precisely the population it exists to measure — and pass, forever.
         errors.extend(validate_prefix_safety(app_dir))
+    # The three ported checks sit OUTSIDE the embedded/react gate above, like
+    # the prefix rule and for the same reason: every app that would exercise
+    # them today (scholar, writer, figrecipe) is an embedded `_django` package,
+    # so gating on `not is_embedded` would skip exactly the population they
+    # exist to measure — and pass, forever.
+    if check_js_safety:
+        errors.extend(validate_js(app_dir))
+    if check_bundle_size:
+        errors.extend(validate_bundle_size(app_dir))
+    if check_privileges:
+        errors.extend(validate_privileges(app_dir))
     return errors, warnings
 
 
