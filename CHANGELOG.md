@@ -7,6 +7,17 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Internal
+- **`import scitex_app` is now asserted not to import Django or `scitex_ui`.**
+  0.11.0 made `_standalone` — the module that runs Django servers — import
+  eagerly at package root, and nothing checked that it stayed cheap. The
+  existing import-smoke leg installs the extras, so Django is present there and
+  it would pass whether or not the property held. The new test runs in a
+  subprocess so the assertion is independent of what the runner has installed,
+  and it is load-bearing for someone else: scitex-scholar made scitex-app a hard
+  dependency and retired their "not installed" fallback, so an import-time
+  regression here is now an outage there rather than a downgrade.
+
 ## [0.11.0] - 2026-09-03
 
 Minor: `hosts_to_allow` becomes public API, and the app validator gains a warn
