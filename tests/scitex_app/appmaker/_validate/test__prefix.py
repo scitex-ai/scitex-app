@@ -361,3 +361,27 @@ def test_site_packages_is_skipped_under_a_differently_named_virtualenv(tmp_path)
     found = validate_prefix_safety(tmp_path)
     # Assert
     assert found == []
+
+
+def test_a_linked_worktree_copy_is_not_reported(tmp_path):
+    # Arrange - a worktree holds another checkout of the SAME repo, so without
+    # this the count scales with how many branches happen to be checked out.
+    other = tmp_path / ".worktrees" / "some-branch" / "src"
+    other.mkdir(parents=True)
+    (other / "app.js").write_text('fetch("/api/search");', encoding="utf-8")
+    # Act
+    found = validate_prefix_safety(tmp_path)
+    # Assert
+    assert found == []
+
+
+def test_the_same_file_in_the_real_tree_is_still_reported(tmp_path):
+    # Arrange - control for the test above; identical bytes, not under
+    # .worktrees/. Measured: scitex-writer 10 rows -> 5 distinct.
+    src = tmp_path / "src"
+    src.mkdir(parents=True)
+    (src / "app.js").write_text('fetch("/api/search");', encoding="utf-8")
+    # Act
+    found = validate_prefix_safety(tmp_path)
+    # Assert
+    assert len(found) == 1

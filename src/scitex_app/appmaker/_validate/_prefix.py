@@ -105,6 +105,15 @@ PREFIX_SKIP_DIRS = frozenset(
         "site-packages",
         ".venv",
         "venv",
+        # A LINKED WORKTREE IS ANOTHER CHECKOUT OF THIS SAME REPO, so every
+        # finding in the real tree is reported again for each worktree holding
+        # that file. Measured the same day, after the dependency fix above:
+        #     scitex-writer  10 rows -> 5 distinct, the rest .worktrees/ copies
+        #     scitex-ui       6 rows -> 3 distinct, likewise
+        # The duplicates name paths that are not the tree the author is fixing,
+        # and the count is a function of how many branches happen to be checked
+        # out — which is not a property of the application at all.
+        ".worktrees",
     }
 )
 
