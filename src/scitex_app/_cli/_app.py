@@ -98,9 +98,17 @@ def app_validate(app_dir):
         scitex-app app validate .
         scitex-app app validate /path/to/my_app
     """
-    from scitex_app.appmaker import validate
+    from scitex_app.appmaker import validate_with_warnings
 
-    errors = validate(app_dir)
+    errors, warnings = validate_with_warnings(app_dir)
+
+    # Advisory notices print whether or not the app passes, and never change the
+    # exit code. Printing them only on failure would deliver advice exactly when
+    # nobody is reading it, and exiting 1 on them is the defect this tier fixed.
+    if warnings:
+        console.print(f"[yellow]{len(warnings)} advisory notice(s):[/yellow]")
+        for warn in warnings:
+            console.print(f"  [yellow]![/yellow] {warn}")
 
     if not errors:
         console.print("[green]All checks passed![/green] App is ready for submission.")

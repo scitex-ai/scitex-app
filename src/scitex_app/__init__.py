@@ -45,6 +45,7 @@ from ._files_api import (
     validate,
     write_file,
 )
+from ._standalone import hosts_to_allow
 from .sdk import FilesBackend, build_tree, get_files, register_backend
 
 
@@ -77,6 +78,9 @@ __all__ = [
     "get_files",
     "register_backend",
     "build_tree",
+    # What a --host bind implies for Django's ALLOWED_HOSTS. Public because
+    # three repos were about to import it from a private module.
+    "hosts_to_allow",
     # Flat file-ops API (mirrors the MCP tool surface so the
     # API/MCP parity stays balanced — see _files_api.py).
     "read_file",

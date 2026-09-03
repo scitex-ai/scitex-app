@@ -35,13 +35,59 @@ implementation. Measured coverage:
 | Python forbidden patterns | yes | **no** (scans no `.py` at all) |
 | templates, dependencies | yes | **no** |
 | mount-prefix safety | yes (opt-in) | **no** |
-| JS dangerous patterns | **no** | yes |
-| bundle size cap | **no** | yes |
-| privilege types and scopes | **no** | yes |
+| JS dangerous patterns | yes (opt-in) | yes |
+| bundle size cap | yes (opt-in) | yes |
+| privilege types and scopes | yes (opt-in) | yes |
 
-So switching wholesale to either one loses checks. Reconciling them is tracked
-on card `app-two-validators-docs-describe-the-uncalled-one-20260822`; until
-then, run BOTH if you want full coverage.
+The last three were **ported into the CLI path** and are no longer exclusive to
+`AppValidator`. They are opt-in:
+
+```python
+validate(app_dir, check_js_safety=True, check_bundle_size=True,
+         check_privileges=True)
+```
+
+Off by default, and the default IS the arming switch. Measured against the
+fleet's app packages before shipping: the narrowed JS rule reports **0** on
+`scholar/_django` and `writer/_django`, and still fires on planted hazards.
+Zero findings is consistent both with "the fleet is clean" and with "the scan
+did not run", so it stays unarmed until a peer reports a finding I did not
+construct.
+
+What remains genuinely divided is the CSS and manifest half, where the two
+modules answer the SAME question differently — `#main-content { color: red }`
+passes the CLI and fails `AppValidator`; `footer { display: none }` does the
+reverse. Tracked on card
+`app-two-validators-docs-describe-the-uncalled-one-20260822`, waiting on the
+authoritative shell-selector list from scitex-hub.
+
+## Errors vs advice (CLI path)
+
+`scitex_app.appmaker` exposes two entry points to the same pipeline:
+
+```python
+from scitex_app.appmaker import validate, validate_with_warnings
+
+errors = validate(app_dir)                       # failures only
+errors, warnings = validate_with_warnings(app_dir)
+```
+
+Only `errors` fails a build. `scitex-app app validate` prints advisory notices
+in yellow, whether or not the app passes, and exits non-zero **only** on errors.
+
+Two findings are advisory:
+
+| finding | why it is advice |
+| --- | --- |
+| `manifest.json 'name' should end with '_app' / '-app'` | an app can have a real reason not to — a name that would COLLIDE with an existing registry entry — and there is no exemption mechanism |
+| `use --workspace-* / --text-* instead of --color-*` | the deprecated variables still render; this is drift from the spec, not a broken app |
+
+Both used to be **enforced as failures despite being worded as advice**, because
+`validate()` returned one flat list and the CLI exits 1 on any entry. That made
+the first one unclearable: the only escape it prescribed was to introduce the
+collision the name avoids. Everything else `validate()` reports is a hard error
+whose wording matches its enforcement, and this is not a precedent for softening
+those.
 
 `AppValidator` validation pipeline (runs in order):
 1. `validate_manifest()` — required fields, valid JSON, and **no `version` key**

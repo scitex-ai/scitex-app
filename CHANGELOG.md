@@ -7,6 +7,103 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Internal
+- **`import scitex_app` is now asserted not to import Django or `scitex_ui`.**
+  0.11.0 made `_standalone` — the module that runs Django servers — import
+  eagerly at package root, and nothing checked that it stayed cheap. The
+  existing import-smoke leg installs the extras, so Django is present there and
+  it would pass whether or not the property held. The new test runs in a
+  subprocess so the assertion is independent of what the runner has installed,
+  and it is load-bearing for someone else: scitex-scholar made scitex-app a hard
+  dependency and retired their "not installed" fallback, so an import-time
+  regression here is now an outage there rather than a downgrade.
+
+## [0.11.0] - 2026-09-03
+
+Minor: `hosts_to_allow` becomes public API, and the app validator gains a warn
+tier plus the three checks its own documentation had been promising. Released
+now because figrecipe and scitex-scholar are each holding a verbatim copy of
+`hosts_to_allow` and cannot replace it with an import until the public name
+ships.
+
+### Added
+- **`scitex_app.hosts_to_allow(host)` is now public** — what a `--host` bind
+  implies for Django's `ALLOWED_HOSTS`. It became public because it was about to
+  be depended on privately: scitex-scholar and figrecipe each carried a verbatim
+  copy, and on 0.10.1 both were replacing it with
+  `from scitex_app._standalone import _hosts_to_allow`. Three repositories
+  committing to an underscore path is a promise nobody made, and deciding the
+  name before the dependency exists is cheaper than deprecating an accidental
+  one after. `_hosts_to_allow` survives as a migration alias so the in-flight
+  PRs that were told to use it keep working; it is removed once both have
+  swapped (card `app-retire-private-hosts-to-allow-alias`).
+- **The three checks the docs promised and nothing ran.** JS dangerous-pattern
+  scanning, a bundle-size cap and manifest privilege validation existed in
+  `scitex_app.validator.AppValidator`, worked, were covered by tests, were
+  described to app developers by the shipped skill doc — and were called by
+  nothing; the CLI read no `.js` file at all. Ported into the live path as
+  `validate_js` / `validate_bundle_size` / `validate_privileges`, each behind a
+  `check_*` keyword defaulting to `False`, so no caller's results change today.
+  The JS pattern list was narrowed from nine to five on measurement: the four
+  dropped were the Python forbidden list copy-pasted into a JS scanner, and
+  `exec\s*\(` produced the only finding either peer repo had — `re.exec(line)`
+  in a `while` loop, i.e. correct JavaScript.
+
+### Changed
+- **Advisory validator findings no longer fail a build.** `appmaker.validate()`
+  returned one flat list and the CLI does `raise SystemExit(1)` on any entry, so
+  "should" and "must" were indistinguishable to the only thing acting on them.
+  Two findings were worded as advice and enforced as failures — the
+  `name` must end in `_app`/`-app` convention, and the deprecated `--color-*`
+  CSS variables — and the first was UNCLEARABLE: an app whose correct name would
+  COLLIDE with an existing registry entry could satisfy the rule only by
+  creating the collision. New `appmaker.validate_with_warnings(app_dir)` returns
+  `(errors, warnings)`; `validate()` keeps its signature and now returns errors
+  only. `scitex-app app validate` prints advisory notices in yellow and exits
+  non-zero only on errors. The remaining error-tier findings are unchanged.
+
+### Fixed
+- **Two false-positive classes in the mount-prefix scan**, both found by running
+  it against real app packages rather than fixtures. `xhr.open("GET", url)` was
+  reported as `inferred-base request URL 'GET'` — XHR's first argument is the
+  METHOD, so the remediation told the author to join a verb to the mount; XHR
+  URLs are now read from the second argument. And bundler configs were scanned
+  despite the rule's own docstring excluding them, reporting
+  `new URL(".", import.meta.url)` in `vite.config.ts` — Node's `__dirname`
+  idiom, evaluated at build time, reaching no browser. Measured on
+  scitex-writer: 8 findings before, 5 after, with the 3 removed being exactly
+  these; scitex-scholar (known-clean) stays at 0 and figrecipe's published
+  0.34.6 stays at 6, so no true positive was lost.
+
+### Internal
+- `appmaker/_validate.py` (537 lines) split into a package of one module per
+  concern — app layout, security, manifest, frame rules, dependencies, prefix
+  safety — with the full re-export surface preserved on `_validate`, so
+  `from scitex_app.appmaker._validate import <anything>` is unaffected. Tests
+  moved to the mirror directory the project-structure audit requires; the test
+  NAME set is identical before and after.
+
+## [0.10.1] - 2026-09-02
+
+Patch: a server bound to `0.0.0.0` now answers on the addresses it is
+actually reachable at. Released immediately — scitex-scholar 1.9.0 and
+figrecipe 0.34.6 are both hitting the 400 in the field, and both carry a
+local copy of the fix that they replace with an import from this wheel.
+
+### Fixed
+- **`_allowed_hosts` now honours a `0.0.0.0` bind.** It appended the bound
+  host *string*, and `"0.0.0.0"` was already in the base list, so `--host
+  0.0.0.0` contributed nothing and a request carrying the real interface
+  address in its Host header was refused with 400 `DisallowedHost` (measured
+  2026-09-02 by scitex-scholar on 1.9.0 and by figrecipe on 0.34.6; this
+  function's own docstring had recorded the figrecipe symptom on 08-23). The
+  bind now contributes what it implies: loopback nothing, a concrete address
+  itself, `0.0.0.0` the hostname plus every interface's IPv4 read from the
+  interfaces (`SIOCGIFADDR`) — not from name resolution, which inside a
+  container returns addresses that are not the LAN interface. Never widened
+  to `"*"`. The derivation is scitex-scholar's `_hosts_to_allow` (PR #137)
+  verbatim, so scholar and figrecipe can replace their copies with an import.
+
 ## [0.10.0] - 2026-08-23
 
 Minor: `run_standalone()` gains language activation. Released now rather than
