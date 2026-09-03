@@ -320,3 +320,68 @@ def test_line_numbers_survive_comment_stripping(tmp_path):
 
 
 # EOF
+
+
+# INSTALLED DEPENDENCIES ARE NOT THE APPLICATION. These three run as a set: the
+# skip test alone would also pass if the detector had simply been blunted, so
+# the control asserts the identical source IS still reported one directory up.
+# A negative with no positive beside it certifies nothing.
+
+
+def test_a_request_url_inside_site_packages_is_not_reported(tmp_path):
+    # Arrange - measured against three peer checkouts, whose .venv/ contributed
+    # 46-48 findings each from playwright, matplotlib and an installed figrecipe.
+    dep = tmp_path / ".venv" / "lib" / "python3.12" / "site-packages" / "playwright"
+    dep.mkdir(parents=True)
+    (dep / "bundle.js").write_text('fetch("/api/search");', encoding="utf-8")
+    # Act
+    found = validate_prefix_safety(tmp_path)
+    # Assert
+    assert found == []
+
+
+def test_the_identical_source_outside_site_packages_is_still_reported(tmp_path):
+    # Arrange - the control for the test above. Same bytes, app's own tree.
+    own = tmp_path / "static" / "app"
+    own.mkdir(parents=True)
+    (own / "bundle.js").write_text('fetch("/api/search");', encoding="utf-8")
+    # Act
+    found = validate_prefix_safety(tmp_path)
+    # Assert
+    assert len(found) == 1
+
+
+def test_site_packages_is_skipped_under_a_differently_named_virtualenv(tmp_path):
+    # Arrange - "site-packages" is the marker, not the venv's name, so a venv
+    # called anything (env, .direnv, /opt/venv-sac) is covered by the same entry.
+    dep = tmp_path / "env" / "lib" / "python3.12" / "site-packages" / "matplotlib"
+    dep.mkdir(parents=True)
+    (dep / "figure.html").write_text('<script>fetch("api/ws");</script>', encoding="utf-8")
+    # Act
+    found = validate_prefix_safety(tmp_path)
+    # Assert
+    assert found == []
+
+
+def test_a_linked_worktree_copy_is_not_reported(tmp_path):
+    # Arrange - a worktree holds another checkout of the SAME repo, so without
+    # this the count scales with how many branches happen to be checked out.
+    other = tmp_path / ".worktrees" / "some-branch" / "src"
+    other.mkdir(parents=True)
+    (other / "app.js").write_text('fetch("/api/search");', encoding="utf-8")
+    # Act
+    found = validate_prefix_safety(tmp_path)
+    # Assert
+    assert found == []
+
+
+def test_the_same_file_in_the_real_tree_is_still_reported(tmp_path):
+    # Arrange - control for the test above; identical bytes, not under
+    # .worktrees/. Measured: scitex-writer 10 rows -> 5 distinct.
+    src = tmp_path / "src"
+    src.mkdir(parents=True)
+    (src / "app.js").write_text('fetch("/api/search");', encoding="utf-8")
+    # Act
+    found = validate_prefix_safety(tmp_path)
+    # Assert
+    assert len(found) == 1
