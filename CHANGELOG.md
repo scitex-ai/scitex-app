@@ -7,6 +7,19 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`scitex_app.authz` — the authorization verdict, as a value rather than a
+  boolean.** `can()` itself is not here yet; the type ships first because
+  scitex-ui is building the display side against a shape agreed in a message
+  thread, and a contract that lives only in a thread drifts. Four kinds
+  (`allowed`, `denied`, `denied-because-not-signed-in`,
+  `denied-because-not-entitled`), `kind` as the discriminant, payload travelling
+  with the verdict so nobody reconstructs the reason, and a validator that
+  enforces payload ABSENCE as well as presence — a plain denial that offered a
+  sign-in URL would tell a user to do something that cannot help. Deliberately
+  no `.allowed` boolean: it reads naturally, passes review, and silently treats
+  "sign in first" as identical to "never".
+
 ### Internal
 - **`import scitex_app` is now asserted not to import Django or `scitex_ui`.**
   0.11.0 made `_standalone` — the module that runs Django servers — import
