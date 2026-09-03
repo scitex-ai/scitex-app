@@ -7,18 +7,13 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Fixed
-- **Two false-positive classes in the mount-prefix scan**, both found by running
-  it against real app packages rather than fixtures. `xhr.open("GET", url)` was
-  reported as `inferred-base request URL 'GET'` — XHR's first argument is the
-  METHOD, so the remediation told the author to join a verb to the mount; XHR
-  URLs are now read from the second argument. And bundler configs were scanned
-  despite the rule's own docstring excluding them, reporting
-  `new URL(".", import.meta.url)` in `vite.config.ts` — Node's `__dirname`
-  idiom, evaluated at build time, reaching no browser. Measured on
-  scitex-writer: 8 findings before, 5 after, with the 3 removed being exactly
-  these; scitex-scholar (known-clean) stays at 0 and figrecipe's published
-  0.34.6 stays at 6, so no true positive was lost.
+## [0.11.0] - 2026-09-03
+
+Minor: `hosts_to_allow` becomes public API, and the app validator gains a warn
+tier plus the three checks its own documentation had been promising. Released
+now because figrecipe and scitex-scholar are each holding a verbatim copy of
+`hosts_to_allow` and cannot replace it with an import until the public name
+ships.
 
 ### Added
 - **`scitex_app.hosts_to_allow(host)` is now public** — what a `--host` bind
@@ -31,8 +26,6 @@ versions follow [Semantic Versioning](https://semver.org/).
   one after. `_hosts_to_allow` survives as a migration alias so the in-flight
   PRs that were told to use it keep working; it is removed once both have
   swapped (card `app-retire-private-hosts-to-allow-alias`).
-
-### Added
 - **The three checks the docs promised and nothing ran.** JS dangerous-pattern
   scanning, a bundle-size cap and manifest privilege validation existed in
   `scitex_app.validator.AppValidator`, worked, were covered by tests, were
@@ -57,6 +50,19 @@ versions follow [Semantic Versioning](https://semver.org/).
   `(errors, warnings)`; `validate()` keeps its signature and now returns errors
   only. `scitex-app app validate` prints advisory notices in yellow and exits
   non-zero only on errors. The remaining error-tier findings are unchanged.
+
+### Fixed
+- **Two false-positive classes in the mount-prefix scan**, both found by running
+  it against real app packages rather than fixtures. `xhr.open("GET", url)` was
+  reported as `inferred-base request URL 'GET'` — XHR's first argument is the
+  METHOD, so the remediation told the author to join a verb to the mount; XHR
+  URLs are now read from the second argument. And bundler configs were scanned
+  despite the rule's own docstring excluding them, reporting
+  `new URL(".", import.meta.url)` in `vite.config.ts` — Node's `__dirname`
+  idiom, evaluated at build time, reaching no browser. Measured on
+  scitex-writer: 8 findings before, 5 after, with the 3 removed being exactly
+  these; scitex-scholar (known-clean) stays at 0 and figrecipe's published
+  0.34.6 stays at 6, so no true positive was lost.
 
 ### Internal
 - `appmaker/_validate.py` (537 lines) split into a package of one module per
