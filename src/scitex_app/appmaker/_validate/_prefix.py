@@ -76,7 +76,37 @@ PREFIX_SCAN_SUFFIXES = (".js", ".mjs", ".jsx", ".ts", ".tsx", ".html")
 # scitex-writer's offending anchor is in a COMMITTED static/writer/assets/
 # index.js, and its TS source can disagree with it. Skipping build output would
 # hide the population this rule exists to measure.
-PREFIX_SKIP_DIRS = frozenset({"node_modules", ".git", "__pycache__", ".vite", "_docs"})
+# INSTALLED DEPENDENCIES ARE NOT THE APPLICATION, and until 2026-09-03 this set
+# said so for JavaScript only. "node_modules" was excluded from the first
+# version; the Python equivalent never was, so a scan pointed at a project ROOT
+# descended into the virtualenv and reported the app's own dependencies as its
+# violations. Measured against three peer checkouts, each of which holds a
+# .venv/:
+#     scitex-writer 46, scitex-scholar 46, scitex-ui 48 findings
+# dominated by playwright's driver bundle (a TEST tool), matplotlib's
+# web_backend templates, and figrecipe's built assets installed as a package.
+# None of those ship under the scanned app's mount, so none can break under it.
+# scitex-scholar in particular reads 46 here while its own source is clean.
+#
+# "site-packages" rather than the venv's NAME is what does the work: it holds
+# whatever the directory is called (.venv, venv, env, /opt/venv-sac). The two
+# venv names are listed as well so files directly under a venv root are covered.
+#
+# NOT added, deliberately: "dist" and "assets" - see the note above. Vendored
+# code the app SHIPS stays in scope for the same reason; scitex-writer's PDF.js
+# reaches the browser under the mount, so its findings are real.
+PREFIX_SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".vite",
+        "_docs",
+        "site-packages",
+        ".venv",
+        "venv",
+    }
+)
 
 # BUILD CONFIGURATION IS NOT APPLICATION CODE, and this rule's own docstring
 # already said so — "Static/asset base paths (a bundler `base` setting) are NOT
