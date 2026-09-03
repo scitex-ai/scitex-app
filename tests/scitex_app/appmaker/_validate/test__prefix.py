@@ -231,13 +231,40 @@ def test_a_bundler_config_is_not_scanned(tmp_path):
 
 
 def test_an_ordinary_source_file_is_still_scanned(tmp_path):
-    """Control: the skip must be keyed on the config name, not on the shape."""
+    """Control: the skip must be keyed on the config name, not on the shape.
+
+    THE FIXTURE CHANGED 2026-09-03, and the reason is a corrected position
+    rather than a convenience. It used to assert that
+    `new URL(".", import.meta.url)` in app.ts IS reported -- written to prove
+    the bundler-config skip was keyed on the FILENAME. The subject was right;
+    the fixture was wrong. That idiom is a build-time module reference wherever
+    it appears, measured in scitex-ui's pdf-viewer/index.ts:110, which is
+    ordinary application source and is correct code. So the control now uses a
+    literal that IS a violation, and the idiom gets its own test below.
+    """
+    # Arrange
+    source = 'fetch("/api/search");'
+    # Act
+    found = _app_with_js(tmp_path, source, "app.ts")
+    # Assert
+    assert len(found) == 1
+
+
+def test_the_build_time_idiom_is_exempt_in_ordinary_source_too(tmp_path):
+    """The position this file used to assert the opposite of.
+
+    `new URL(<spec>, import.meta.url)` says "resolve relative to THIS MODULE",
+    which the bundler does at build time. Nothing about that depends on which
+    file it sits in, so keying the exemption on the filename was the narrower
+    and wrong criterion -- it left the class intact in application source,
+    where it resurfaced hours later against code that was correct.
+    """
     # Arrange
     source = 'const __dirname = fileURLToPath(new URL(".", import.meta.url));'
     # Act
     found = _app_with_js(tmp_path, source, "app.ts")
     # Assert
-    assert len(found) == 1
+    assert found == []
 
 
 # EOF
@@ -383,5 +410,81 @@ def test_the_same_file_in_the_real_tree_is_still_reported(tmp_path):
     (src / "app.js").write_text('fetch("/api/search");', encoding="utf-8")
     # Act
     found = validate_prefix_safety(tmp_path)
+    # Assert
+    assert len(found) == 1
+
+
+# TWO FALSE-POSITIVE CLASSES, found by scanning a tree whose author believes it
+# is correct -- the only place a false positive is visible. Each suppression is
+# paired with a control, because a suppression alone would also pass if the
+# detector had simply been blunted.
+
+
+def test_a_url_named_constant_holding_an_attribute_name_is_not_reported(tmp_path):
+    # Arrange - scitex-ui dim/_Dim.ts:43. The name ends in _URL because it names
+    # the attribute that HOLDS a url; the value is a bare token.
+    source = 'const ATTR_SIGN_IN_URL = "data-stx-dim-sign-in-url";'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert found == []
+
+
+def test_a_url_named_constant_holding_a_real_path_is_still_reported(tmp_path):
+    # Arrange - the control. Same binding shape, a value that IS a path.
+    source = 'const API_URL = "/api/search";'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert len(found) == 1
+
+
+def test_the_bundler_module_reference_is_not_reported(tmp_path):
+    # Arrange - scitex-ui pdf-viewer/index.ts:110. `import.meta.url` as the
+    # second argument makes this a BUILD-time module reference; Vite resolves it
+    # to a hashed asset and no request is issued against the mount.
+    source = 'new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).href;'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert found == []
+
+
+def test_a_new_url_with_a_root_absolute_literal_is_still_reported(tmp_path):
+    # Arrange - the control for the suppression above: `new URL` stays a request
+    # call, and only the import.meta.url form is exempt.
+    source = 'new URL("/api/search");'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert len(found) == 1
+
+
+def test_a_build_time_url_beside_a_real_one_reports_only_the_real_one(tmp_path):
+    # Arrange - the arm people omit. Suppressing by span must not swallow a
+    # genuine finding sharing the file.
+    source = (
+        'new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);\n'
+        'fetch("/api/search");'
+    )
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert len(found) == 1
+
+
+def test_a_root_absolute_spec_with_import_meta_url_is_still_reported(tmp_path):
+    """The build-time exemption must not cover a root-absolute specifier.
+
+    `new URL("/x", base)` DISCARDS the base's path and resolves from the origin
+    root, so import.meta.url does not rescue it and it still 404s under a mount.
+    Measured: suppressing the whole construct killed a real root-absolute
+    finding in scitex-writer's built bundle, and only asking which row vanished
+    caught it -- the count had moved in the direction I was hoping for.
+    """
+    # Arrange
+    source = 'new URL("/static/writer/assets/pdf.worker.min.mjs", import.meta.url);'
+    # Act
+    found = _app_with_js(tmp_path, source)
     # Assert
     assert len(found) == 1
