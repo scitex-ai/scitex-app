@@ -7,6 +7,18 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Internal
+- **The `stx-mount` marker name is now checked across packages AND languages.**
+  It is declared four times — `_django.py` (which renders it), `embed.py`'s
+  no-Django fallback, `scitex_ui/mount.py`, and scitex-ui's `mount.ts` (which
+  reads it in the browser) — and nothing enforced agreement; scitex_ui's own
+  comment said "must match mount.ts" and admitted no mechanism. A rename on one
+  side degrades either to a thrown error or, in the other ordering, to a page
+  that renders perfectly and 404s its API only under a mount. The check reads
+  the TypeScript constant out of scitex-ui's shipped source, so it needs no
+  checkout, and SKIPS when scitex-ui is absent — scitex-app does not depend on
+  it and must not.
+
 ### Added
 - **`scitex_app.authz` — the authorization verdict, as a value rather than a
   boolean.** `can()` itself is not here yet; the type ships first because
