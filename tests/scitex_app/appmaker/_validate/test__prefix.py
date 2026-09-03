@@ -241,3 +241,82 @@ def test_an_ordinary_source_file_is_still_scanned(tmp_path):
 
 
 # EOF
+
+
+# ─── comments are not code, and URLs are not comments ───────────────────────
+#
+# Third instance in one night of a detector inverting on documentation. The
+# controls below run in BOTH directions, because "stripped comments correctly"
+# and "blunted the scanner" produce an identical green suite otherwise.
+
+
+def test_a_commented_out_request_is_not_reported(tmp_path):
+    """MEASURED DEFECT, shipping since 0.9.0.
+
+    A file whose only match sat in a comment produced a finding telling the
+    author to fix a call they had already removed.
+    """
+    # Arrange
+    source = '// legacy, replaced in 0.9: fetch("/api/old");'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert found == []
+
+
+def test_a_block_commented_request_is_not_reported(tmp_path):
+    # Arrange
+    source = '/* fetch("/api/old"); */'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert found == []
+
+
+def test_a_real_request_beside_a_stale_comment_is_still_reported(tmp_path):
+    """The arm that separates "stripped correctly" from "stripped everything"."""
+    # Arrange
+    source = '// old: fetch("/api/v1");\nfetch("/api/v2");'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert len(found) == 1
+
+
+def test_a_trailing_comment_does_not_hide_the_code_before_it(tmp_path):
+    # Arrange
+    source = 'fetch("/api/x");  // TODO: use the mount prefix'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert len(found) == 1
+
+
+def test_a_double_slash_inside_a_url_is_not_treated_as_a_comment(tmp_path):
+    """THE FALSE-NEGATIVE RISK, and the reason this is not a regex.
+
+    `//` opens every absolute URL. A naive `//.*$` would truncate the string,
+    the scanner would misread what remains, and a finding would vanish with
+    nothing saying why — trading a false positive for a false negative, which
+    is the worse direction.
+    """
+    # Arrange — root-absolute, and containing `//` in a nested literal
+    source = 'const u = "https://cdn.example.com/x"; fetch("/api/y");'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert len(found) == 1
+
+
+def test_line_numbers_survive_comment_stripping(tmp_path):
+    """Comments become blanks, not deletions, so findings still point at the
+    real line in the file on disk."""
+    # Arrange
+    source = '// a\n// b\nfetch("/api/z");'
+    # Act
+    found = _app_with_js(tmp_path, source)
+    # Assert
+    assert ":3:" in found[0]
+
+
+# EOF

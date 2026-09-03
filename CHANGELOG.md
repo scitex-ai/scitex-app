@@ -7,6 +7,17 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **The mount-prefix scan no longer reads commented-out code as code.** Shipping
+  since 0.9.0: a file whose only match sat in a comment produced a finding
+  telling the author to fix a call they had already removed. Comments are now
+  blanked with string literals PRESERVED — not by a regex, because `//` opens
+  every absolute URL and a naive strip would truncate `"https://…"` and lose a
+  real finding, trading a false positive for the worse direction. Same-length
+  blanks keep reported line numbers pointing at the real source. Measured on the
+  three consumer trees before and after: scholar 0/0, writer 5/5, figrecipe 6/6
+  — so no previously reported finding was a comment artefact, and none was lost.
+
 ### Internal
 - **The `stx-mount` marker name is now checked across packages AND languages.**
   It is declared four times — `_django.py` (which renders it), `embed.py`'s
