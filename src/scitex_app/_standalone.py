@@ -170,8 +170,17 @@ def _local_addresses() -> list[str]:
     return found
 
 
-def _hosts_to_allow(host: str) -> list[str]:
+def hosts_to_allow(host: str) -> list[str]:
     """What a given ``--host`` bind implies for ALLOWED_HOSTS. Pure function.
+
+    PUBLIC API, exported as ``scitex_app.hosts_to_allow``. It became public
+    because it was about to be depended on privately: scitex-scholar and
+    figrecipe each carried a verbatim copy of this function, and on the 0.10.1
+    release both were replacing their copy with
+    ``from scitex_app._standalone import _hosts_to_allow`` — three repositories
+    committing to an underscore path, which is a promise nobody made. Deciding
+    the public name before the dependency exists is cheaper than deprecating an
+    accidental one afterwards.
 
     Binding to an address IS the statement that you intend to be reached on
     it, so contribute it rather than making the caller set an env var to
@@ -193,6 +202,19 @@ def _hosts_to_allow(host: str) -> list[str]:
     if host == _BIND_ALL:
         return _local_addresses()
     return [host]
+
+
+# MIGRATION ALIAS, not a second name. scitex-scholar and figrecipe are landing
+# `from scitex_app._standalone import _hosts_to_allow` right now, against 0.10.1
+# — removing the private name in the same release that adds the public one would
+# break the very PRs that were told to depend on it. They each replace it with
+# `from scitex_app import hosts_to_allow` in a one-line follow-up, and this alias
+# goes when both have.
+#
+# A compatibility window with no closing date is a gate that cannot fail, so:
+# REMOVE THIS once scholar and figrecipe have both swapped. Card
+# app-retire-private-hosts-to-allow-alias.
+_hosts_to_allow = hosts_to_allow
 
 
 def _allowed_hosts(host: str, extra_hosts: str = "") -> list[str]:
@@ -227,7 +249,7 @@ def _allowed_hosts(host: str, extra_hosts: str = "") -> list[str]:
     # base list, so `--host 0.0.0.0` used to contribute nothing, and a request
     # carrying the real interface address in its Host header was refused with
     # 400 (measured 2026-09-02 by scholar on 1.9.0 and by figrecipe on 0.34.6).
-    for contributed in _hosts_to_allow(host):
+    for contributed in hosts_to_allow(host):
         if contributed not in hosts:
             hosts.append(contributed)
     hosts.extend(h.strip() for h in extra_hosts.split(",") if h.strip())

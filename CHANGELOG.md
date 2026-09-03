@@ -8,6 +8,18 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **`scitex_app.hosts_to_allow(host)` is now public** — what a `--host` bind
+  implies for Django's `ALLOWED_HOSTS`. It became public because it was about to
+  be depended on privately: scitex-scholar and figrecipe each carried a verbatim
+  copy, and on 0.10.1 both were replacing it with
+  `from scitex_app._standalone import _hosts_to_allow`. Three repositories
+  committing to an underscore path is a promise nobody made, and deciding the
+  name before the dependency exists is cheaper than deprecating an accidental
+  one after. `_hosts_to_allow` survives as a migration alias so the in-flight
+  PRs that were told to use it keep working; it is removed once both have
+  swapped (card `app-retire-private-hosts-to-allow-alias`).
+
+### Added
 - **The three checks the docs promised and nothing ran.** JS dangerous-pattern
   scanning, a bundle-size cap and manifest privilege validation existed in
   `scitex_app.validator.AppValidator`, worked, were covered by tests, were

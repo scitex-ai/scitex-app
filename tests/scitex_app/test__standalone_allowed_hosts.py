@@ -91,20 +91,20 @@ def test_no_wildcard_is_introduced():
 
 def test_hosts_to_allow_loopback_contributes_nothing():
     # Arrange
-    from scitex_app._standalone import _hosts_to_allow
+    from scitex_app import hosts_to_allow
 
     # Act
-    contributed = _hosts_to_allow("127.0.0.1")
+    contributed = hosts_to_allow("127.0.0.1")
     # Assert
     assert contributed == []
 
 
 def test_hosts_to_allow_specific_address_contributes_itself():
     # Arrange
-    from scitex_app._standalone import _hosts_to_allow
+    from scitex_app import hosts_to_allow
 
     # Act
-    contributed = _hosts_to_allow("100.64.0.4")
+    contributed = hosts_to_allow("100.64.0.4")
     # Assert
     assert contributed == ["100.64.0.4"]
 
@@ -113,10 +113,10 @@ def test_hosts_to_allow_bind_all_contributes_this_machines_hostname():
     # Arrange
     import socket
 
-    from scitex_app._standalone import _hosts_to_allow
+    from scitex_app import hosts_to_allow
 
     # Act
-    contributed = _hosts_to_allow("0.0.0.0")
+    contributed = hosts_to_allow("0.0.0.0")
     # Assert
     assert socket.gethostname() in contributed
 
@@ -124,10 +124,10 @@ def test_hosts_to_allow_bind_all_contributes_this_machines_hostname():
 def test_hosts_to_allow_bind_all_never_contributes_the_literal_wildcard():
     """Control: bind-all must widen to THIS machine, never to everything."""
     # Arrange
-    from scitex_app._standalone import _hosts_to_allow
+    from scitex_app import hosts_to_allow
 
     # Act
-    contributed = _hosts_to_allow("0.0.0.0")
+    contributed = hosts_to_allow("0.0.0.0")
     # Assert
     assert "*" not in contributed and "0.0.0.0" not in contributed
 
@@ -144,13 +144,13 @@ def test_hosts_to_allow_bind_all_contributes_a_real_interface_address():
     # Arrange
     import socket
 
-    from scitex_app._standalone import _hosts_to_allow
+    from scitex_app import hosts_to_allow
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.connect(("10.255.255.255", 1))  # no packet is sent for UDP connect
         expected = s.getsockname()[0]
     # Act
-    contributed = _hosts_to_allow("0.0.0.0")
+    contributed = hosts_to_allow("0.0.0.0")
     # Assert
     assert expected in contributed, f"{expected!r} not in {contributed!r}"
 
@@ -167,3 +167,43 @@ def test_bind_all_reaches_allowed_hosts_with_a_real_interface_address():
     hosts = _allowed_hosts("0.0.0.0")
     # Assert
     assert expected in hosts, f"{expected!r} not in {hosts!r}"
+
+
+# ─── the public name, and the alias that must outlive it exactly once ───────
+
+
+def test_the_public_name_is_importable_from_the_package_root():
+    """What scholar and figrecipe swap to. If this breaks, their build breaks."""
+    # Arrange
+    import scitex_app
+
+    # Act
+    exported = getattr(scitex_app, "hosts_to_allow", None)
+    # Assert
+    assert exported is not None
+
+
+def test_the_public_name_is_declared_in_all():
+    """Importable-but-undeclared is a promise nobody made."""
+    # Arrange
+    import scitex_app
+
+    # Act
+    declared = "hosts_to_allow" in scitex_app.__all__
+    # Assert
+    assert declared is True
+
+
+def test_the_private_alias_still_resolves_to_the_same_function():
+    """The migration window: figrecipe's merged import must keep working."""
+    # Arrange
+    import scitex_app
+    from scitex_app._standalone import _hosts_to_allow
+
+    # Act
+    same = _hosts_to_allow is scitex_app.hosts_to_allow
+    # Assert
+    assert same is True
+
+
+# EOF
