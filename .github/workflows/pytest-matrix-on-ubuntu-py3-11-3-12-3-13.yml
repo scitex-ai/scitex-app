@@ -47,3 +47,62 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           fail_ci_if_error: false
+
+  # ── the reference example ───────────────────────────────────────────────────
+  #
+  # A SEPARATE JOB, NOT A STEP IN THE MATRIX ABOVE, and the separation is the
+  # design rather than tidiness.
+  #
+  # This example is the only executable statement of the stx-mount contract --
+  # "one build serves correctly at two different mounts" -- and it is what app
+  # authors are pointed at. Its tests existed, passed, and had NEVER RUN IN CI:
+  # `testpaths = ["tests"]` and the example lives under `examples/`, so nothing
+  # collected them. A suite nobody runs is indistinguishable from one that does
+  # not exist, except that it looks like coverage.
+  #
+  # WHY NOT ADD IT TO THE MATRIX ABOVE. The example needs `scitex-ui` for its
+  # shell template, and those three matrix contexts are the ONLY ones branch
+  # protection requires. Installing scitex-ui there would put a package no
+  # other test needs into the three legs that gate every pull request -- so a
+  # scitex-ui problem would block all merging in this repo for a reason having
+  # nothing to do with the change under review. Here, the same problem reddens
+  # one clearly-named job and nothing else.
+  #
+  # THIS IS A RECORD, NOT A GATE, AND SAYING SO IS THE POINT. `example` is not
+  # in branch protection's required contexts, so a failure here does not block
+  # a merge -- it is visible on the pull request and nowhere else. Promoting it
+  # to a gate is a deliberate second step (card
+  # app-arm-the-example-leg-once-it-has-a-track-record), taken after it has run
+  # green for a while, because a brand-new required context that flakes blocks
+  # every PR in the repo and only a repo-admin edit gets you out.
+  #
+  # MEASURED BEFORE WIRING, because a leg that cannot fail is worse than none:
+  #   mount_prefix() forced to return "" (_django.py)
+  #     -> 1 failed, 5 passed, failing on the EMBEDDED-mount arm specifically
+  #   restored -> 6 passed
+  # So this job detects a regression in the SDK function the example depends
+  # on, rather than merely re-testing the example's own template.
+  example:
+    name: reference-example-mounts-anywhere
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # scitex-ui is NOT a dependency of scitex-app and must not become
+          # one: it is the UI package, and scitex-app's CLI and MCP surfaces
+          # are required to stay headless. It is installed HERE, for this job
+          # only, because the example extends scitex_ui's shell template.
+          pip install -e ".[all]" --group dev
+          pip install scitex-ui
+      - name: Run the example's own tests
+        run: |
+          # No PYTHONPATH or working-directory needed: the example ships a
+          # conftest.py that puts its own root on sys.path, so it runs the
+          # same way here, from the repo root, and from inside its folder.
+          pytest examples/hello_world_app/tests -q

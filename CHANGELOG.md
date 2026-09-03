@@ -7,7 +7,51 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-03
+
+Minor: `scitex_app.authz` is a new public module. The rest is a validator
+correctness fix and three checks that had no mechanical enforcement before.
+
+The one entry with a consumer-visible effect is the prefix-scan fix: the scan
+had been reporting commented-out code as a live finding since 0.9.0, so anyone
+who ran `app validate` by hand could have been told to fix a call they had
+already deleted.
+
+### Added
+- **`scitex_app.authz` — the authorization verdict, as a value rather than a
+  boolean.** `can()` itself is not here yet; the type ships first because
+  scitex-ui is building the display side against a shape agreed in a message
+  thread, and a contract that lives only in a thread drifts. Four kinds
+  (`allowed`, `denied`, `denied-because-not-signed-in`,
+  `denied-because-not-entitled`), `kind` as the discriminant, payload travelling
+  with the verdict so nobody reconstructs the reason, and a validator that
+  enforces payload ABSENCE as well as presence — a plain denial that offered a
+  sign-in URL would tell a user to do something that cannot help. Deliberately
+  no `.allowed` boolean: it reads naturally, passes review, and silently treats
+  "sign in first" as identical to "never".
+
+### Fixed
+- **The mount-prefix scan no longer reads commented-out code as code.** Shipping
+  since 0.9.0: a file whose only match sat in a comment produced a finding
+  telling the author to fix a call they had already removed. Comments are now
+  blanked with string literals PRESERVED — not by a regex, because `//` opens
+  every absolute URL and a naive strip would truncate `"https://…"` and lose a
+  real finding, trading a false positive for the worse direction. Same-length
+  blanks keep reported line numbers pointing at the real source. Measured on the
+  three consumer trees before and after: scholar 0/0, writer 5/5, figrecipe 6/6
+  — so no previously reported finding was a comment artefact, and none was lost.
+
 ### Internal
+- **The `stx-mount` marker name is now checked across packages AND languages.**
+  It is declared four times — `_django.py` (which renders it), `embed.py`'s
+  no-Django fallback, `scitex_ui/mount.py`, and scitex-ui's `mount.ts` (which
+  reads it in the browser) — and nothing enforced agreement; scitex_ui's own
+  comment said "must match mount.ts" and admitted no mechanism. A rename on one
+  side degrades either to a thrown error or, in the other ordering, to a page
+  that renders perfectly and 404s its API only under a mount. The check reads
+  the TypeScript constant out of scitex-ui's shipped source, so it needs no
+  checkout, and SKIPS when scitex-ui is absent — scitex-app does not depend on
+  it and must not.
 - **`import scitex_app` is now asserted not to import Django or `scitex_ui`.**
   0.11.0 made `_standalone` — the module that runs Django servers — import
   eagerly at package root, and nothing checked that it stayed cheap. The

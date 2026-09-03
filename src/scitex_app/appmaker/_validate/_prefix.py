@@ -108,6 +108,69 @@ def _is_build_config(path: Path) -> bool:
     return any(path.name.startswith(stem) for stem in PREFIX_SKIP_FILE_STEMS)
 
 
+def strip_js_comments(source: str) -> str:
+    """Blank out // and /* */ comments, PRESERVING STRING LITERALS.
+
+    WHY THIS EXISTS. Without it the scan reads commented-out code as code.
+    Measured 2026-09-03 on a file whose only match was inside a comment:
+
+        // legacy, replaced in 0.9: fetch("/api/old");
+        -> 1 finding, reported as a root-absolute request URL
+
+    A detector keyed on a substring INVERTS ON DOCUMENTATION: the file that
+    best explains why it removed a bad call looks identical to the file that
+    still has it. This is the third instance of that shape found in one night
+    -- scitex-ui hit it in a guard of theirs, I hit it in the mount-marker
+    reader, and this one had been shipping since 0.9.0.
+
+    WHY IT IS NOT A REGEX. `//` appears inside every absolute URL, so a naive
+    `//.*$` turns `fetch("https://api.example.com/x")` into `fetch("https:` --
+    mangling a string the scanner then misreads. That would trade a false
+    POSITIVE for a false NEGATIVE, which is worse: the finding disappears and
+    nothing says why. So this walks the source tracking whether it is inside a
+    quote, and only treats `//` and `/*` as comment starts outside one.
+
+    Comments are replaced by spaces of the SAME LENGTH, not deleted, so line
+    numbers and column offsets in findings still point at the real source.
+    """
+    out = []
+    i = 0
+    n = len(source)
+    quote = None  # the quote character currently open, or None
+    while i < n:
+        ch = source[i]
+        if quote is not None:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:  # escaped char inside a string
+                out.append(source[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch in "\"'`":
+            quote = ch
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and source[i + 1] == "/":
+            while i < n and source[i] != "\n":
+                out.append(" ")
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and source[i + 1] == "*":
+            while i < n and not (source[i] == "*" and i + 1 < n and source[i + 1] == "/"):
+                out.append("\n" if source[i] == "\n" else " ")
+                i += 1
+            out.append("  ")
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def _prefix_finding_class(url: str) -> str | None:
     """Classify one request-call URL literal. None = nothing to report.
 
@@ -201,9 +264,13 @@ def validate_prefix_safety(app_dir: str | Path) -> list[str]:
         if _is_build_config(path):
             continue
         try:
-            content = path.read_text(encoding="utf-8", errors="replace")
+            raw = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
+        # Comments are not code. Stripped with string literals preserved, and
+        # replaced by same-length blanks so reported line numbers still match
+        # the file on disk.
+        content = strip_js_comments(raw)
         relpath = path.relative_to(root)
 
         seen_lines = set()
