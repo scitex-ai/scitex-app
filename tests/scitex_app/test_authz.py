@@ -231,4 +231,55 @@ def test_the_serialised_form_needs_no_scitex_app_types_to_read():
     assert all(isinstance(v, str) for v in plain.values())
 
 
+# ─── the resolve-state tripwire ─────────────────────────────────────────────
+#
+# A TRIPWIRE, NOT A CHECK. It guards a decision made 2026-09-04 with scitex-ui
+# about code that does not exist yet, and it is written to FAIL the moment that
+# code appears — which is the only moment the decision can be violated.
+#
+# THE DECISION. `can()` must distinguish two causes of "unresolved":
+#
+#     A. the caller never resolved        -> RAISE (a contract violation;
+#                                            returning a verdict renders a BUG
+#                                            as a legitimate "not yet known" UI)
+#     B. resolution attempted and FAILED  -> return an `unresolved` verdict
+#        (hub unreachable, timeout, 5xx)     (a real operating state; the screen
+#                                            must still draw something)
+#
+# THAT IS ONLY IMPLEMENTABLE IF THE RESOLVE RESULT IS THREE-VALUED:
+#
+#     NOT_ATTEMPTED | FAILED | RESOLVED
+#
+# Held as "a value, or None" it is TWO-valued, A and B become the same state,
+# and the decomposition silently becomes unimplementable. That is the same
+# three-value collapse this repo hit three times in one week (pass/fail/skip;
+# DIVERGED/AGREE/CANNOT-TELL) — recorded here BEFORE the code rather than found
+# in it afterwards.
+#
+# WHY A TRIPWIRE AND NOT A COMMENT. scitex-ui's objection to the card note, and
+# it is correct: a constraint written in prose fails NOTHING when someone writes
+# the resolver two-valued. It passes review, the suite is green, and nobody is
+# told the decomposition just died. That is §2's declaration-that-evaporates,
+# one step before it becomes a gate that cannot fail.
+#
+# WHAT TO DO WHEN THIS TEST GOES RED: you have added the resolver. Good. Replace
+# this test with the real assertion —
+#
+#     assert {m.name for m in ResolveState} == {"NOT_ATTEMPTED", "FAILED", "RESOLVED"}
+#
+# and give can() an exhaustiveness check over it, the way the four verdict kinds
+# already have one here and scitex-ui's `assertNever` does on their side.
+# Do NOT simply delete this test to get green.
+
+
+def test_no_resolve_state_exists_yet_and_adding_one_must_be_three_valued():
+    # Arrange — see the block above. This asserts ABSENCE on purpose.
+    import scitex_app.authz as authz_module
+
+    # Act
+    resolver_names = [n for n in dir(authz_module) if "Resolve" in n or "resolve" in n]
+    # Assert
+    assert resolver_names == []
+
+
 # EOF
