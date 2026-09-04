@@ -6,6 +6,8 @@ wrote their display component, so each arm names the promise it holds.
 
 from __future__ import annotations
 
+import pytest
+
 from scitex_app.authz import (
     ALLOWED,
     DENIED,
@@ -229,6 +231,76 @@ def test_the_serialised_form_needs_no_scitex_app_types_to_read():
     plain = verdict.to_dict()
     # Assert
     assert all(isinstance(v, str) for v in plain.values())
+
+
+# ─── upgrade_url: OPTIONAL, and its absence has ONE meaning ─────────────────
+#
+# scitex-ui's requirement when they approved this payload: pin what absence
+# MEANS, because absence is a normal case here and an unpinned normal case is
+# where a consumer guesses. Absent = no upgrade surface configured (render
+# inert). Absent != "not yet resolved" — that is the `unresolved` kind.
+
+
+def test_upgrade_url_is_carried_when_supplied():
+    # Arrange
+    verdict = denied_not_entitled("pro", upgrade_url="/pricing/")
+    # Act
+    plain = verdict.to_dict()
+    # Assert
+    assert plain["upgrade_url"] == "/pricing/"
+
+
+def test_upgrade_url_is_optional_and_omitted_when_absent():
+    # Arrange — a hub that sells nothing has no upgrade surface, so this is a
+    # normal verdict rather than a malformed one.
+    verdict = denied_not_entitled("pro")
+    # Act
+    keys = set(verdict.to_dict())
+    # Assert
+    assert keys == {"kind", "entitlement"}
+
+
+def test_an_absent_upgrade_url_is_not_an_error():
+    """The asymmetry with sign_in_url, asserted rather than described.
+
+    sign_in_url is REQUIRED on its kind; upgrade_url is not. If this ever
+    becomes required, a self-hosted hub with nothing to sell can no longer
+    build a legal not-entitled verdict.
+    """
+    # Arrange
+    # Act
+    verdict = denied_not_entitled("pro")
+    # Assert
+    assert verdict.upgrade_url is None
+
+
+def test_upgrade_url_is_refused_on_a_plain_denial():
+    # Arrange — a route to upgrade on a verdict that is not about entitlement
+    # tells the user to do something that cannot help.
+    # Act
+    with pytest.raises(VerdictError):
+        Verdict(kind=DENIED, upgrade_url="/pricing/")
+    # Assert — the raise IS the assertion
+
+
+def test_upgrade_url_is_refused_on_not_signed_in():
+    # Arrange — the kind that already carries a route carries only its own.
+    # Act
+    with pytest.raises(VerdictError):
+        Verdict(
+            kind=DENIED_NOT_SIGNED_IN,
+            sign_in_url="/accounts/signin",
+            upgrade_url="/pricing/",
+        )
+    # Assert — the raise IS the assertion
+
+
+def test_upgrade_url_is_refused_on_allowed():
+    # Arrange
+    # Act
+    with pytest.raises(VerdictError):
+        Verdict(kind=ALLOWED, upgrade_url="/pricing/")
+    # Assert — the raise IS the assertion
 
 
 # ─── the resolve-state tripwire ─────────────────────────────────────────────
