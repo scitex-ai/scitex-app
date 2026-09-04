@@ -262,24 +262,67 @@ def test_the_serialised_form_needs_no_scitex_app_types_to_read():
 # told the decomposition just died. That is §2's declaration-that-evaporates,
 # one step before it becomes a gate that cannot fail.
 #
-# WHAT TO DO WHEN THIS TEST GOES RED: you have added the resolver. Good. Replace
-# this test with the real assertion —
+# IT ASSERTS THE SHAPE, NOT THE ABSENCE — rewritten 2026-09-04 on scitex-ui's
+# argument, which is better than the version I shipped hours earlier.
 #
-#     assert {m.name for m in ResolveState} == {"NOT_ATTEMPTED", "FAILED", "RESOLVED"}
+# The first draft asserted that NO resolver exists, so it went red the moment
+# someone added one. That punishes CORRECT work: the person who implements the
+# resolver properly is the first casualty, and the red means "progress" rather
+# than "defect". Repeated, that teaches a reader that red is something to push
+# past — the same harm as a permanently-red retired workflow.
 #
-# and give can() an exhaustiveness check over it, the way the four verdict kinds
-# already have one here and scitex-ui's `assertNever` does on their side.
-# Do NOT simply delete this test to get green.
+# This version is silent while the resolver is absent and substantive the moment
+# it appears. Red here always means the same thing: the three-valued constraint
+# was violated. So it never fires on correct work, and its meaning is constant.
+#
+# A conditional guard that is vacuous today is exactly the gate-that-cannot-fail
+# this file is about — which is why it is CALIBRATED in the commit that
+# introduced it: a two-valued resolver makes it red, a three-valued one keeps it
+# green, both observed rather than reasoned.
 
 
-def test_no_resolve_state_exists_yet_and_adding_one_must_be_three_valued():
-    # Arrange — see the block above. This asserts ABSENCE on purpose.
+_RESOLVE_STATES = frozenset({"NOT_ATTEMPTED", "FAILED", "RESOLVED"})
+
+
+def _resolve_state_members():
+    """Members of any resolve-state type in authz, or None when there is none.
+
+    THREE-VALUED ITSELF, deliberately, since that is the property it guards:
+      None  -> no resolver yet (guard is vacuous, and says so)
+      set() -> a resolver exists but exposes no members (guard must FAIL: its
+               subject changed shape and it can no longer check what it claims)
+      names -> compare
+    """
     import scitex_app.authz as authz_module
 
+    found = [
+        getattr(authz_module, n)
+        for n in dir(authz_module)
+        if "Resolve" in n or "resolve" in n
+    ]
+    if not found:
+        return None
+    names = set()
+    for obj in found:
+        names |= {
+            m for m in dir(obj) if m.isupper() and not m.startswith("_")
+        }
+    return names
+
+
+def test_a_resolve_state_if_present_is_three_valued():
+    """Vacuous until a resolver exists; substantive from the moment it does.
+
+    NOT_ATTEMPTED and FAILED must stay distinct: collapsing them makes
+    can()'s A/B split unimplementable (caller-never-resolved must RAISE,
+    resolution-attempted-and-failed must return an `unresolved` verdict).
+    """
+    # Arrange
+    members = _resolve_state_members()
     # Act
-    resolver_names = [n for n in dir(authz_module) if "Resolve" in n or "resolve" in n]
+    verdict = _RESOLVE_STATES if members is None else members
     # Assert
-    assert resolver_names == []
+    assert verdict == _RESOLVE_STATES
 
 
 # EOF
