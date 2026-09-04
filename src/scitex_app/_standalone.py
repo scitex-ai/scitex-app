@@ -182,6 +182,10 @@ def hosts_to_allow(host: str) -> list[str]:
     the public name before the dependency exists is cheaper than deprecating an
     accidental one afterwards.
 
+    That private alias is GONE as of 2026-09-04. It existed only for the
+    migration window and was removed once both consumers had swapped, measured
+    against their refs rather than their working trees. Import the public name.
+
     Binding to an address IS the statement that you intend to be reached on
     it, so contribute it rather than making the caller set an env var to
     permit what they already asked for:
@@ -203,18 +207,6 @@ def hosts_to_allow(host: str) -> list[str]:
         return _local_addresses()
     return [host]
 
-
-# MIGRATION ALIAS, not a second name. scitex-scholar and figrecipe are landing
-# `from scitex_app._standalone import _hosts_to_allow` right now, against 0.10.1
-# — removing the private name in the same release that adds the public one would
-# break the very PRs that were told to depend on it. They each replace it with
-# `from scitex_app import hosts_to_allow` in a one-line follow-up, and this alias
-# goes when both have.
-#
-# A compatibility window with no closing date is a gate that cannot fail, so:
-# REMOVE THIS once scholar and figrecipe have both swapped. Card
-# app-retire-private-hosts-to-allow-alias.
-_hosts_to_allow = hosts_to_allow
 
 
 def _allowed_hosts(host: str, extra_hosts: str = "") -> list[str]:
