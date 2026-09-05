@@ -56,6 +56,25 @@ VERDICT_KINDS = (ALLOWED, DENIED, DENIED_NOT_SIGNED_IN, DENIED_NOT_ENTITLED)
 _REQUIRES_SIGN_IN_URL = (DENIED_NOT_SIGNED_IN,)
 _REQUIRES_ENTITLEMENT = (DENIED_NOT_ENTITLED,)
 
+# PERMITS, not REQUIRES — and the difference is the contract.
+#
+# `sign_in_url` is REQUIRED on its kind: sign-in always exists, so its absence
+# would be a bug and scitex-ui writes no defensive branch for it.
+#
+# `upgrade_url` is OPTIONAL, because a self-hosted hub may sell nothing and have
+# no upgrade surface at all. That makes ABSENCE a normal case, so the contract
+# has to say what absence MEANS — otherwise a consumer seeing no url cannot tell
+# "there is nowhere to send you" from "we have not found out yet", and will pick
+# one. scitex-ui asked for this to be pinned before they wire their route.
+#
+#     ABSENT  ==  this hub has no upgrade surface configured. Render inert:
+#                 state the entitlement, offer no action.
+#     ABSENT  !=  "not yet resolved". An unresolved verdict is not this kind at
+#                 all — that is the `unresolved` kind agreed with scitex-ui on
+#                 2026-09-04, and conflating them here would put the same
+#                 three-value collapse back one layer down.
+_PERMITS_UPGRADE_URL = (DENIED_NOT_ENTITLED,)
+
 
 class VerdictError(ValueError):
     """A verdict was constructed that cannot mean anything.
@@ -84,6 +103,7 @@ class Verdict:
     kind: str
     sign_in_url: Optional[str] = None
     entitlement: Optional[str] = None
+    upgrade_url: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.kind not in VERDICT_KINDS:
@@ -115,6 +135,15 @@ class Verdict:
         if not needs_entitlement and self.entitlement is not None:
             raise VerdictError(f"{self.kind} must not carry entitlement")
 
+        # One-directional on purpose: refused where it does not belong, never
+        # required where it does. See _PERMITS_UPGRADE_URL.
+        if self.kind not in _PERMITS_UPGRADE_URL and self.upgrade_url is not None:
+            raise VerdictError(
+                f"{self.kind} must not carry upgrade_url — an upgrade route "
+                "only means anything on a verdict that says an entitlement is "
+                "what is missing"
+            )
+
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON-safe data for the far side of a package boundary.
 
@@ -128,6 +157,8 @@ class Verdict:
             out["sign_in_url"] = self.sign_in_url
         if self.entitlement is not None:
             out["entitlement"] = self.entitlement
+        if self.upgrade_url is not None:
+            out["upgrade_url"] = self.upgrade_url
         return out
 
 
@@ -150,15 +181,46 @@ def denied_not_signed_in(sign_in_url: str) -> Verdict:
     return Verdict(kind=DENIED_NOT_SIGNED_IN, sign_in_url=sign_in_url)
 
 
-def denied_not_entitled(entitlement: str) -> Verdict:
+def denied_not_entitled(
+    entitlement: str, upgrade_url: Optional[str] = None
+) -> Verdict:
     """Signed in, but lacking the entitlement THIS hub requires.
 
-    `entitlement` is an IDENTIFIER naming what is missing — never a plan name,
-    a price, or anything else about the account. The verdict is rendered into
-    a page a user can read, and scitex-ui renders a sentence from the kind; it
-    does not render commercial policy.
+    `entitlement` is an IDENTIFIER naming what is missing. Confirmed with
+    scitex-hub 2026-09-04: it names a PLAN-shaped requirement — the plan id or
+    tier string their entitlement API returns — and never a token SCOPE. Their
+    scopes (`*`, `api`, `mcp`, `publish`) say what a token may do on a user's
+    behalf; entitlement is a property of the user's subscription, independent
+    of which token they presented.
+
+    An earlier version of this docstring said "never a plan name", which read
+    as a prohibition on the very thing hub says belongs here. The intent was
+    narrower and is restated: an IDENTIFIER, not a DISPLAY NAME and not a
+    price. `pro` yes; "Pro Plus — $20/mo" no. scitex-ui renders a sentence from
+    the kind; it does not render commercial policy.
+
+    `upgrade_url` is OPTIONAL and its ABSENCE IS MEANINGFUL — see
+    _PERMITS_UPGRADE_URL. Absent means this hub has no upgrade surface
+    configured, so render inert; it never means "not yet resolved".
+
+    On scitex.ai it is the pricing page. Note what that page deliberately is
+    NOT: hub's `billing_checkout` is a POST target, not somewhere a user can be
+    sent, and filling this with it would hand scitex-ui a route that cannot be
+    followed. The value is supplied BY THE HUB rather than built here, because
+    the hub URL is configurable and a self-hosted deployment's answer differs.
+
+    WORTH KNOWING WHEN READING FINDINGS: as of 2026-09-04 hub sells no plan
+    (`BILLING_PLANS=[]` on prod, pending Stripe review), so every user is
+    currently unentitled for paid features. This kind is therefore the MAJORITY
+    path today, not a rare edge — which is precisely why it must render as
+    not-entitled rather than as a plain denial. "You need a plan that does not
+    exist yet" is recoverable information; "no" is not.
     """
-    return Verdict(kind=DENIED_NOT_ENTITLED, entitlement=entitlement)
+    return Verdict(
+        kind=DENIED_NOT_ENTITLED,
+        entitlement=entitlement,
+        upgrade_url=upgrade_url,
+    )
 
 
 # ─── resolving the inputs a verdict is computed FROM ────────────────────────
