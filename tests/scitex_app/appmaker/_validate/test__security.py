@@ -101,3 +101,77 @@ class TestValidateSecurity:
 
 
 # EOF
+
+
+def test_a_commented_out_forbidden_call_is_a_remediation_note(tmp_path):
+    """A SECURITY rule reporting the file that documents the call it removed.
+
+    Measured on the shipped 0.14.2: live `os.system("ls")` 1 finding,
+    `# removed in 0.9: os.system("ls")` ALSO 1 finding.
+
+    Found by asking the same question of every remaining rule rather than
+    stopping at the three already known. Of the six unprobed, this was the only
+    one that could have it: three parse JSON (no comments exist in JSON) and
+    two read no text at all — excluded by MECHANISM, not by an unread zero.
+    """
+    # Arrange
+    from scitex_app.appmaker._validate import validate_security
+
+    (tmp_path / "m.py").write_text(
+        'import os\n# removed in 0.9: os.system("ls")\n', encoding="utf-8"
+    )
+    # Act
+    reported = validate_security(tmp_path)
+    # Assert
+    assert not reported
+
+
+def test_a_live_forbidden_call_after_a_comment_is_still_reported(tmp_path):
+    """The control. In a security rule, a stripper that hides too much is the
+    worst version of this trade: the finding disappears and nothing says why."""
+    # Arrange
+    from scitex_app.appmaker._validate import validate_security
+
+    (tmp_path / "m.py").write_text(
+        'import os\n# note: os.system("x")\nos.system("ls")\n', encoding="utf-8"
+    )
+    # Act
+    reported = validate_security(tmp_path)
+    # Assert
+    assert reported
+
+
+def test_a_hash_inside_a_string_does_not_start_a_comment(tmp_path):
+    """`S = "#"` is a value. Treating it as a comment start would blank the
+    rest of the line and, on the next line, whatever the scanner needed."""
+    # Arrange
+    from scitex_app.appmaker._validate import validate_security
+
+    (tmp_path / "m.py").write_text(
+        'import os\nS = "#"\nos.system("ls")\n', encoding="utf-8"
+    )
+    # Act
+    reported = validate_security(tmp_path)
+    # Assert
+    assert reported
+
+
+def test_a_docstring_mentioning_a_forbidden_call_still_reports(tmp_path):
+    """DELIBERATE, and stated so it is not mistaken for an oversight.
+
+    A docstring is a string the module genuinely contains, not a comment the
+    parser discards. Deciding which strings are prose is a different judgement
+    needing its own calibration — and guessing is how the first of these
+    defects got here. Same treatment as a `<pre>` block in HTML.
+    """
+    # Arrange
+    from scitex_app.appmaker._validate import validate_security
+
+    (tmp_path / "m.py").write_text(
+        'def f():\n    """never call os.system here"""\n    return 1\n',
+        encoding="utf-8",
+    )
+    # Act
+    reported = validate_security(tmp_path)
+    # Assert
+    assert reported

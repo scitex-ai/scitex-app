@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ._comments import strip_python_comments
 import re
 from pathlib import Path
 
@@ -24,7 +25,11 @@ def validate_security(app_dir: str | Path) -> list[str]:
         if excluded_dirs & set(py_file.relative_to(root).parts):
             continue
         try:
-            content = py_file.read_text(encoding="utf-8", errors="replace")
+            raw = py_file.read_text(encoding="utf-8", errors="replace")
+            # A commented-out `os.system` is the file EXPLAINING that it no
+            # longer calls it. Measured on 0.14.2: live 1, commented-out also
+            # 1 — a security rule reporting its own remediation note.
+            content = strip_python_comments(raw)
         except OSError:
             continue
         relpath = py_file.relative_to(root)

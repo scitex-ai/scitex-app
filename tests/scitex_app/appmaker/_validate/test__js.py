@@ -104,3 +104,37 @@ def test_the_python_only_patterns_are_gone(tmp_path):
 
 
 # EOF
+
+
+def test_a_commented_out_dangerous_call_is_documentation(tmp_path):
+    """The file that best explains why an `eval()` was removed looked
+    identical to the file that still calls it. Measured on the shipped
+    0.14.2: live 1 finding, commented-out ALSO 1 finding.
+
+    `strip_js_comments` had existed since 2026-09-03 with this exact argument
+    in its docstring, written for a different rule. The rule was not missing —
+    its SCOPE was implicit, and it had never been carried here.
+    """
+    # Arrange
+    from scitex_app.appmaker._validate import validate_js
+
+    (tmp_path / "app.js").write_text('// removed in 0.9: eval("2+2");\n', encoding="utf-8")
+    # Act
+    reported = validate_js(tmp_path)
+    # Assert
+    assert not reported
+
+
+def test_a_live_call_after_a_comment_is_still_reported(tmp_path):
+    """The control, and the direction that matters more: a stripper that hides
+    too much converts the false positive above into a false negative."""
+    # Arrange
+    from scitex_app.appmaker._validate import validate_js
+
+    (tmp_path / "app.js").write_text(
+        '// removed: eval("1");\neval("2+2");\n', encoding="utf-8"
+    )
+    # Act
+    reported = validate_js(tmp_path)
+    # Assert
+    assert reported

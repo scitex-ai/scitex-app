@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ._comments import strip_css_comments, strip_html_comments
 import re
 from pathlib import Path
 
@@ -37,9 +38,23 @@ def validate_templates(app_dir: str | Path) -> list[str]:
         return errors
 
     try:
-        content = index_html.read_text(encoding="utf-8", errors="replace")
+        raw = index_html.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return errors
+
+    # COMMENTS ARE STRIPPED, AND HERE IT MATTERS IN BOTH DIRECTIONS.
+    #
+    # The checks below are PRESENCE tests, so a comment does not merely add a
+    # spurious finding — it can SATISFY A REQUIREMENT. Measured on 0.14.2 with
+    # controls: a page carrying `global_base.html` and `block content` only
+    # inside an HTML comment, and extending nothing, reported ZERO errors.
+    #
+    # That is a false NEGATIVE in a check that runs by DEFAULT, which makes it
+    # the opposite of, and worse than, every other instance of this blindness:
+    # those were noisy, this one was silent. The forbidden-override loop below
+    # has the ordinary false POSITIVE — a commented-out override reported.
+    # One strip fixes both.
+    content = strip_html_comments(raw)
 
     # Must extend global_base.html
     if "global_base.html" not in content:
@@ -66,7 +81,13 @@ def validate_css(app_dir: str | Path) -> list[str]:
         if ".git" in str(css_file):
             continue
         try:
-            content = css_file.read_text(encoding="utf-8", errors="replace")
+            raw = css_file.read_text(encoding="utf-8", errors="replace")
+            # A rule quoted inside `/* ... */` is documentation, not a
+            # declaration the browser applies. Measured on 0.14.2: live 1,
+            # commented-out also 1. This is the shape that took down every PR
+            # in a peer repository when a path quoted in a CSS comment was
+            # read as a live reference.
+            content = strip_css_comments(raw)
         except OSError:
             continue
         relpath = css_file.relative_to(root)
@@ -103,7 +124,13 @@ def validate_css_advisory(app_dir: str | Path) -> list[str]:
         if ".git" in str(css_file):
             continue
         try:
-            content = css_file.read_text(encoding="utf-8", errors="replace")
+            raw = css_file.read_text(encoding="utf-8", errors="replace")
+            # A rule quoted inside `/* ... */` is documentation, not a
+            # declaration the browser applies. Measured on 0.14.2: live 1,
+            # commented-out also 1. This is the shape that took down every PR
+            # in a peer repository when a path quoted in a CSS comment was
+            # read as a live reference.
+            content = strip_css_comments(raw)
         except OSError:
             continue
         if re.search(r"var\(--color-", content):
