@@ -11,6 +11,7 @@ from scitex_app.authz import (
     DENIED,
     DENIED_NOT_ENTITLED,
     DENIED_NOT_SIGNED_IN,
+    UNRESOLVED,
     VERDICT_KINDS,
     ResolveState,
     Verdict,
@@ -19,24 +20,83 @@ from scitex_app.authz import (
     denied,
     denied_not_entitled,
     denied_not_signed_in,
+    unresolved,
 )
 
 
-# ─── the four kinds, and that there are exactly four ────────────────────────
+# ─── the five kinds, and that there are exactly five ────────────────────────
 
 
-def test_there_are_exactly_four_kinds():
-    """A fifth is REQUIRED the moment a verdict is fetched client-side.
+def test_there_are_exactly_five_kinds():
+    """WAS FOUR UNTIL 2026-09-05. Changed deliberately, in the same commit that
+    added the fifth, and the reason the count is asserted at all is that this
+    test is what forced the change to be a conversation.
 
-    Adding one is a deliberate, coordinated change — scitex-ui's switch is
-    exhaustive over these — so this asserts the count rather than leaving a
-    fifth to appear quietly.
+    It fired twice: once when I found a second unresolved axis and wanted to
+    add `unresolved` unilaterally, and once when the implementation finally
+    required it. Both times the red said "tell scitex-ui first", and both times
+    that was the correct instruction — their switch is exhaustive over these
+    values and a new one is a COMPILE error on their side.
+
+    So this is not a count for its own sake. Adding a sixth must be the same
+    kind of event: coordinated, and ordered TS-first, because the cross-package
+    check reads their INSTALLED wheel and Python-first goes red in a way this
+    side cannot clear.
     """
     # Arrange
     # Act
     count = len(VERDICT_KINDS)
     # Assert
-    assert count == 4
+    assert count == 5
+
+
+def test_unresolved_carries_no_payload():
+    """The reason resolution failed must not reach a page.
+
+    It does not change what the UI renders, and naming it discloses that the
+    service behind this gate is down to a reader who is not authenticated to
+    it — the same argument that kept the unresolved axis name out of the DOM.
+    """
+    # Arrange
+    verdict = unresolved()
+    # Act
+    plain = verdict.to_dict()
+    # Assert
+    assert plain == {"kind": UNRESOLVED}
+
+
+def test_unresolved_is_not_a_denial():
+    """It must never be foldable into the kind that asserts the user is out.
+
+    denied-because-not-signed-in CLAIMS the user is signed out. When resolution
+    failed we do not have that claim, and rendering it tells the user to sign
+    in to a service we could not reach.
+    """
+    # Arrange
+    verdict = unresolved()
+    # Act
+    kind = verdict.kind
+    # Assert
+    assert kind not in (DENIED, DENIED_NOT_SIGNED_IN, DENIED_NOT_ENTITLED)
+
+
+def test_a_sign_in_url_is_refused_on_unresolved():
+    # Arrange — offering a route on a verdict that does not know the answer
+    # invites the user to act on a state we have not established.
+    kind = UNRESOLVED
+    # Act
+    refusal = _refusal(kind=kind, sign_in_url="/accounts/signin")
+    # Assert
+    assert refusal is not None
+
+
+def test_an_upgrade_url_is_refused_on_unresolved():
+    # Arrange
+    kind = UNRESOLVED
+    # Act
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert refusal is not None
 
 
 def test_allowed_carries_no_payload():
