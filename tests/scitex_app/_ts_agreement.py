@@ -75,3 +75,36 @@ def installed_scitex_ui_root() -> Path | None:
     except ImportError:
         return None
     return Path(scitex_ui.__file__).resolve().parent
+
+
+def installed_scitex_ui_version() -> str:
+    """The installed scitex-ui version, or a reason it could not be read.
+
+    ALWAYS RETURNS A STRING, never raises and never returns None, because its
+    only caller is a FAILURE MESSAGE. A version lookup that explodes while
+    building the text explaining a failure replaces a legible red with a
+    confusing one.
+
+    WHY A FAILURE MESSAGE NEEDS THIS AT ALL. This check reads the INSTALLED
+    scitex-ui, and CI installs it UNPINNED. During a PyPI propagation window a
+    leg can therefore resolve a wheel OLDER than the kind under test, and the
+    comparison then fails truthfully about the wheel and falsely about the
+    contract. Without the version in the text, that red is indistinguishable
+    from a genuine divergence — measured by scitex-ui 2026-09-05, whose own
+    release had /pypi/<pkg>/json reporting the previous version while
+    /pypi/<pkg>/<new>/json already returned 200, and whose matrix legs resolved
+    different indexes 0.68 seconds apart.
+
+    THIS IS THE LEGIBLE-RED HALF ONLY. It does not let the MACHINE tell the two
+    apart; that needs a three-valued result and is a prerequisite of ARMING
+    this leg, tracked separately. Naming the limit because a message that makes
+    a human's job easy is otherwise mistaken for a fix.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("scitex-ui")
+    except PackageNotFoundError:  # pragma: no cover - the skip arm covers it
+        return "not installed"
+    except Exception as exc:  # pragma: no cover - defensive, see docstring
+        return f"unreadable ({type(exc).__name__})"
