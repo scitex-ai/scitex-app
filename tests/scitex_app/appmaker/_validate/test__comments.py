@@ -7,6 +7,7 @@ from scitex_app.appmaker._validate._comments import (
     strip_css_comments,
     strip_html_comments,
     strip_js_comments,
+    strip_python_comments,
 )
 
 
@@ -57,3 +58,37 @@ def test_html_and_js_strippers_are_still_reachable_from_here():
     both = (strip_html_comments(source), strip_js_comments("// x"))
     # Assert
     assert both == ("          ", "    ")
+
+
+def test_a_python_hash_inside_a_string_is_not_a_comment():
+    """The reason this is a scanner and not a regex: `#` is the most common
+    character in a Python file that is sometimes a comment and sometimes a
+    value."""
+    # Arrange
+    source = 'S = "#"\nT = 1\n'
+    # Act
+    stripped = strip_python_comments(source)
+    # Assert
+    assert stripped == source
+
+
+def test_a_python_comment_is_blanked_to_the_same_length():
+    """Same contract as the other three: line and column numbers survive.
+
+    Asserted as the PROPERTY rather than against a hand-written expected
+    string. The first version of this test hardcoded the blanked line and was
+    off by one space — the implementation was right and the literal was wrong,
+    which is a test that fails for a reason unrelated to the behaviour it
+    names.
+    """
+    # Arrange
+    source = "x = 1  # note\ny = 2\n"
+    # Act
+    stripped = strip_python_comments(source)
+    # Assert — same length, same line breaks, code kept, comment gone.
+    assert (
+        len(stripped),
+        stripped.splitlines()[1],
+        stripped.startswith("x = 1"),
+        "note" in stripped,
+    ) == (len(source), "y = 2", True, False)

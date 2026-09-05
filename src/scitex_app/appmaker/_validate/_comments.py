@@ -44,7 +44,7 @@ import re
 __all__ = [
     "strip_css_comments",
     "strip_html_comments",
-    "strip_js_comments",
+    "strip_js_comments",    "strip_python_comments",
 ]
 
 
@@ -56,6 +56,64 @@ def _blank(source: str, spans) -> str:
             if out[i] != "\n":
                 out[i] = " "
     return "".join(out)
+
+
+def strip_python_comments(source: str) -> str:
+    """Blank out `# ...` comments, leaving string literals intact.
+
+    Found by asking the same question of every remaining rule rather than
+    stopping at three. `validate_security` regex-scans `.py` files for
+    forbidden patterns and never stripped comments; measured on the shipped
+    0.14.2:
+
+        live      os.system("ls")                    1 finding
+        COMMENTED # removed in 0.9: os.system("ls")  1 finding
+
+    That is a SECURITY rule reporting the file that documents the call it
+    removed — the same shape as the other three, in the rule where a spurious
+    finding is most likely to be argued with rather than acted on.
+
+    A `#` inside a string is not a comment (`S = "#"`), so this tracks quotes
+    rather than matching a pattern — the same reason `strip_js_comments` is not
+    a regex.
+
+    DOCSTRINGS ARE DELIBERATELY LEFT ALONE, so a docstring mentioning
+    `os.system` still reports. A docstring is a string the module genuinely
+    contains, not a comment the parser discards, and deciding which strings are
+    prose is a different judgement needing its own calibration. Left reporting
+    rather than guessed at — guessing is how the first of these got here. Same
+    treatment as a `<pre>` block in HTML.
+    """
+    quotes = ('"""', "'''", '"', "'")
+    spans = []
+    i = 0
+    n = len(source)
+    quote = None
+    while i < n:
+        if quote:
+            if source[i] == "\\":
+                i += 2
+                continue
+            if source.startswith(quote, i):
+                i += len(quote)
+                quote = None
+                continue
+            i += 1
+            continue
+        for q in quotes:
+            if source.startswith(q, i):
+                quote = q
+                i += len(q)
+                break
+        else:
+            if source[i] == "#":
+                end = source.find("\n", i)
+                end = n if end == -1 else end
+                spans.append((i, end))
+                i = end
+                continue
+            i += 1
+    return _blank(source, spans)
 
 
 #: `/* ... */`, non-greedy. CSS has no line comment: `//` appears inside every

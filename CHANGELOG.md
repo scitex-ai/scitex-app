@@ -25,10 +25,11 @@ POSITIVE — documentation read as code, noisy but visible. This one is silent,
 and `validate_templates` runs by DEFAULT rather than behind a `check_*` flag,
 so it is live in a publication gate.
 
-### Fixed — commented-out violations reported by `validate_js` and `validate_css`
+### Fixed — commented-out violations reported by three more rules
 
-    validate_js    live eval() 1, commented-out ALSO 1
-    validate_css   live rule   1, commented-out ALSO 1
+    validate_js        live eval()      1, commented-out ALSO 1
+    validate_css       live rule        1, commented-out ALSO 1
+    validate_security  live os.system   1, commented-out ALSO 1
 
 The CSS case is the shape scitex-ui reported from their own incident: a path
 quoted inside a comment read as a live reference, failing every PR in a peer
@@ -58,16 +59,32 @@ paired with the case that must STILL report:
     css   live 1 / commented 0 / live after comment 1 / "/*" in a string 1
     tpl   conformant 0 / missing both 2 / ONLY IN A COMMENT 2 (was 0)
           forbidden live 1 / forbidden commented 0
+    py    live os.system 1 / commented 0 / live after comment 1
+          "#" in a string 1 / clean 0 / docstring 1 (deliberate)
 
-Suite 720 passed, 2 skipped.
+Suite 726 passed, 2 skipped.
 
-### Not done, deliberately
+### The remaining rules are accounted for BY MECHANISM, not by an unread zero
 
-`validate_manifest`, `_security`, `_structure`, `_privileges`, `_bundle_size`
-and `_dependencies` have NOT been probed for this. The first probe of css and
-templates returned 0/0 and was nearly read as clean — the LIVE case had also
-returned 0, so the zero said nothing. Each remaining rule needs a case that
-provably reports before its silence can be interpreted.
+Rather than leaving six unprobed, each was resolved by asking what it reads:
+
+    validate_manifest / _privileges / _dependencies   json.loads — JSON has
+                                                      no comments to misread
+    validate_structure / _bundle_size                 read no text at all
+    validate_security                                 regex-scans .py  <- had it
+
+That last one is why this matters: a SECURITY rule was reporting the file that
+documents the call it removed. `strip_python_comments` tracks quotes rather
+than matching a pattern, because `S = "#"` is a value.
+
+DOCSTRINGS ARE LEFT REPORTING, deliberately. A docstring is a string the module
+genuinely contains, not a comment the parser discards; deciding which strings
+are prose is a separate judgement needing its own calibration, and guessing is
+how the first of these defects got here. Same treatment as a `<pre>` block.
+
+The first probe of css and templates returned 0/0 and was nearly read as clean
+— the LIVE case had also returned 0, so the zero said nothing. Every result
+above rests on a case that provably reports.
 
 
 ## [0.14.2] - 2026-09-05
