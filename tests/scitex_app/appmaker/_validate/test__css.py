@@ -429,3 +429,84 @@ def test_the_flagged_path_and_the_direct_call_agree(tmp_path):
     gated = [e for e in validate(app, check_css_canonical=True) if "workspace-layout" in e]
     # Assert
     assert list(direct) == gated
+
+
+# --------------------------------------------------------------------------
+# FUNCTIONAL PSEUDO-CLASSES — a comma inside `:is()` is not a selector list
+#
+# scitex-hub reported these against 0.14.4. Their concrete example already
+# passed the canonical; the HYPOTHETICAL they offered beside it did not. Both
+# are here, because which of the two fired was not predictable from reading
+# the regex — it turned on whether `(` happens to be a boundary character.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "css",
+    [
+        "body > :first-child:not(header):not(main):not(footer) { display: none !important }\n",
+        ":is(header, footer) .x { color: red !important }\n",
+        ":where(footer) .x { color: red !important }\n",
+        ".x:has(footer) { color: red !important }\n",
+        ":has(:not(footer)) .x { color: red !important }\n",
+    ],
+    ids=["not", "is-list", "where", "has", "nested"],
+)
+def test_footer_inside_a_functional_pseudo_class_is_not_a_footer_rule(tmp_path, css):
+    """`:is()` / `:not()` / `:where()` / `:has()` take selector LISTS, so their
+    commas are internal and the leftmost test reads an argument as a second
+    selector. `:not(footer)` is the sharpest of these: the rule EXCLUDES a
+    footer and the detector called that targeting one.
+
+    hub's real file — `body > :first-child:not(header):not(main):not(footer)`
+    in `public_app/css/pricing.css` — already passed, because `(` is not one of
+    the boundary characters. Their generalisation was right anyway and their
+    example was not the case that proved it.
+    """
+    # Arrange
+    app = _app(tmp_path, css)
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert not report.findings
+
+
+def test_hiding_a_footer_named_only_inside_a_pseudo_class_is_not_reported(tmp_path):
+    """The `display:none` half had the SAME hole and could not be fixed in the
+    same place: it ran once per file over the whole content, so it had no
+    selector to strip. It now reads the rule block's own selector, which is why
+    the two footer checks share one definition of "the subject is a bare
+    footer" instead of two that drift apart."""
+    # Arrange
+    app = _app(tmp_path, ":is(header, footer) .x { display: none }\n")
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert not report.findings
+
+
+def test_a_body_class_scoped_footer_rule_is_declared_not_silently_allowed(tmp_path):
+    """THE ONE HUB FOUND THAT I CANNOT FIX, asserted as a KNOWN zero.
+
+        body.scholar-page footer { display: none }
+
+    Not leftmost, so this rule passes it — and unlike `.myapp footer` it DOES
+    reach the shell's footer, because the shell's <footer> is inside <body>.
+    The two selectors differ only in whether the scoping element contains the
+    shell's node, which is a DOM fact and not a string fact: tier 3 wearing
+    another hat.
+
+    And it must not simply be banned. hub does this deliberately and documents
+    it shell-side (`workspace_app/context_processors.py:179` — "body
+    .workspace-page hides .site-footer, so the page's own legal…"), so a ban
+    would fail their design rather than catch a defect. What the shell permits
+    is the shell's to state; the validator's job here is to say it did not
+    look, which `not_checked` now does.
+    """
+    # Arrange
+    app = _app(tmp_path, "body.scholar-page footer { display: none !important }\n")
+    # Act
+    report = validate_css_canonical(app)
+    # Assert — silent, and the silence is declared.
+    hidden = "BODY-CLASS-scoped" in " ".join(report.not_checked)
+    assert (bool(report.findings), hidden) == (False, True)
