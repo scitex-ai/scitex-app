@@ -7,6 +7,60 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-05
+
+Minor, and BEHAVIOUR-CHANGING for every existing caller of `validate()`:
+the mount-prefix safety rule, shipped unarmed in 0.9.0, is now ARMED.
+
+### Changed — `check_prefix_safety` now defaults to True
+
+`validate()` and `validate_with_warnings()` run the prefix rule unless a
+caller passes `check_prefix_safety=False`. Its findings are ERRORS, not
+warnings, so any caller that raises on a non-empty result now refuses an app
+it previously accepted.
+
+WHAT THAT MEANS IN PRACTICE. The rule reports request URLs that do not
+resolve under an app mount — `fetch("/api/x")`, which ignores the mount and
+404s everywhere, and `fetch("api/x")`, which resolves against the DOCUMENT
+url so it works at `/app/` and 404s at `/app`. Those apps were already
+broken under a mount; what changes today is that they are caught instead of
+shipped.
+
+CONSEQUENCE WORTH STATING PLAINLY, because the first symptom is otherwise a
+user hitting an error nobody warned them about: scitex-hub's PUBLICATION
+path calls `validate()` with no keywords. From this release, submitting an
+app containing a root-absolute request URL fails to publish. hub identified
+this themselves and asked that it be announced rather than merely shipped.
+
+In this package the new default reaches `appmaker._publish`,
+`appmaker._dev_install`, the `scitex-app app validate` CLI, the
+`app_validate` MCP tool, and the public `scitex_app.validate()`.
+
+ARMED ON MEASUREMENT, NOT ON ELAPSED TIME. Every consumer repo was scanned
+on its current ref, each against a positive control, so a zero was
+distinguishable from a scan that never ran:
+
+    scitex-writer / figrecipe / scholar   clean
+    scitex-hub    29 app dirs, 1471 files, 0 findings; control returned 1
+
+hub had asked to be consulted BEFORE arming and gave the go-ahead
+2026-09-05T20:16Z, ahead of the 09-07 they had committed to.
+
+### Added — `validate_prefix_safety` is importable from `scitex_app.appmaker`
+
+It was only reachable at `scitex_app.appmaker._validate`, a private path.
+scitex-hub scanned their fleet for us, imported it from the obvious public
+home, hit an ImportError, and was one step from reporting the symbol as
+missing. We ask other packages to run this rule against their own code, so
+it cannot live only on a path they are not supposed to touch.
+
+### Note for anyone who needs the old behaviour
+
+Pass `check_prefix_safety=False` explicitly. That is a deliberate opt-out
+with a name, which is what it should have been all along — but if you find
+yourself adding it to a publication gate, the app is the thing to fix.
+
+
 ## [0.13.0] - 2026-09-05
 
 Minor: `scitex_app.authz` gains a fifth verdict kind, an optional upgrade

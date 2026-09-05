@@ -96,17 +96,91 @@ def test_build_output_directories_are_scanned_not_skipped(tmp_path):
     assert len(found) == 1
 
 
-def test_validate_does_not_report_prefix_findings_by_default(tmp_path):
-    # Arrange — UNARMED is the shipped state. If this test ever fails, the rule
-    # has silently started failing three peer repos' builds for work two of them
-    # have not begun. This is the arm that protects them, not the code.
+def test_validate_reports_prefix_findings_by_default(tmp_path):
+    """ARMED as of 2026-09-05. This test asserted the OPPOSITE until today.
+
+    Its previous form pinned the unarmed default and said so: "if this test ever
+    fails, the rule has silently started failing three peer repos' builds for
+    work two of them have not begun." That sentence did its job — it made
+    arming a deliberate edit rather than something that happened.
+
+    The condition it was protecting is now MET, by measurement rather than by
+    elapsed time:
+
+        writer / figrecipe / scholar   0 findings on their current refs,
+                                       against a positive control
+        scitex-hub                     29 app dirs, 1471 files, 0 findings,
+                                       positive control returned exactly 1
+
+    hub gave the go-ahead 2026-09-05T20:16Z, ahead of the 09-07 they committed
+    to, and their standing instruction had been to come back BEFORE arming.
+
+    WHAT ARMING MEANS FOR A CONSUMER, measured by hub in their own tree: four
+    call sites take the new default, and the one that matters is their
+    PUBLICATION GATE. From today, a submitted app carrying a root-absolute
+    request URL cannot be published. That is the intent of the rule — such an
+    app 404s under any mount — and it is a user-visible behaviour change, so it
+    is announced rather than merely shipped.
+    """
+    # Arrange
     from scitex_app.appmaker._validate import validate as _validate
 
     (tmp_path / "bundle.js").write_text('fetch("/api/search");', encoding="utf-8")
     # Act
     reported = _validate(tmp_path)
     # Assert
-    assert not [e for e in reported if "does not resolve under an app mount" in e]
+    assert [e for e in reported if "does not resolve under an app mount" in e]
+
+
+def test_a_clean_app_still_passes_once_armed(tmp_path):
+    """The control for the arm above. Without it, "armed" is indistinguishable
+    from "reports on everything", and a rule that fails clean code would be
+    withdrawn within a day.
+
+    IT CARRIES ITS OWN POSITIVE CONTROL, in the same tmp tree, because a bare
+    "no findings" assertion passes just as happily when the check DID NOT RUN —
+    which is precisely the state this file used to pin. Measured: un-arm the
+    default and this test still went green. A silent pass is not evidence of
+    silence; it has to be shown against a case that speaks.
+    """
+    # Arrange — the prescribed form: a declared mount prefix, not an inferred one.
+    from scitex_app.appmaker._validate import validate as _validate
+
+    clean = tmp_path / "clean"
+    clean.mkdir()
+    (clean / "bundle.js").write_text(
+        'const STX_MOUNT = "/apps/x";\nfetch(`${STX_MOUNT}/api/search`);',
+        encoding="utf-8",
+    )
+    speaks = tmp_path / "speaks"
+    speaks.mkdir()
+    (speaks / "bundle.js").write_text('fetch("/api/search");', encoding="utf-8")
+
+    def _prefix_findings(d):
+        return [e for e in _validate(d) if "does not resolve under an app mount" in e]
+
+    # Act
+    control = _prefix_findings(speaks)
+    quiet = _prefix_findings(clean)
+    # Assert — ONE assertion, deliberately, and not only because STX-TQ007 asks
+    # for one. Splitting it into `assert control` then `assert not quiet` lets
+    # the second survive alone if someone ever deletes the "redundant" first,
+    # and what is left is the vacuous green this test exists to rule out. The
+    # control and the claim are true or false together.
+    assert (bool(control), bool(quiet)) == (True, False)
+
+
+def test_the_check_is_reachable_from_the_public_appmaker_path():
+    """scitex-hub imported it from `scitex_app.appmaker`, hit an ImportError,
+    and was one step from reporting the symbol missing. We ask other packages
+    to run this against their own code, so it cannot live only on a private
+    path."""
+    # Arrange
+    import scitex_app.appmaker as appmaker
+    # Act
+    exported = "validate_prefix_safety" in getattr(appmaker, "__all__", ())
+    # Assert
+    assert exported
 
 
 def test_validate_reports_prefix_findings_when_explicitly_armed(tmp_path):
