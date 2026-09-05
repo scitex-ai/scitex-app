@@ -6,8 +6,6 @@ wrote their display component, so each arm names the promise it holds.
 
 from __future__ import annotations
 
-import pytest
-
 from scitex_app.authz import (
     ALLOWED,
     DENIED,
@@ -277,30 +275,41 @@ def test_an_absent_upgrade_url_is_not_an_error():
 def test_upgrade_url_is_refused_on_a_plain_denial():
     # Arrange — a route to upgrade on a verdict that is not about entitlement
     # tells the user to do something that cannot help.
+    kind = DENIED
     # Act
-    with pytest.raises(VerdictError):
-        Verdict(kind=DENIED, upgrade_url="/pricing/")
-    # Assert — the raise IS the assertion
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert refusal is not None
+
+
+def test_the_upgrade_url_refusal_names_the_field():
+    # Arrange — the caller is a developer building the wrong shape; the message
+    # is the only thing that tells them WHICH field is at fault.
+    kind = DENIED
+    # Act
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert "upgrade_url" in str(refusal)
 
 
 def test_upgrade_url_is_refused_on_not_signed_in():
     # Arrange — the kind that already carries a route carries only its own.
+    kind = DENIED_NOT_SIGNED_IN
     # Act
-    with pytest.raises(VerdictError):
-        Verdict(
-            kind=DENIED_NOT_SIGNED_IN,
-            sign_in_url="/accounts/signin",
-            upgrade_url="/pricing/",
-        )
-    # Assert — the raise IS the assertion
+    refusal = _refusal(
+        kind=kind, sign_in_url="/accounts/signin", upgrade_url="/pricing/"
+    )
+    # Assert
+    assert refusal is not None
 
 
 def test_upgrade_url_is_refused_on_allowed():
     # Arrange
+    kind = ALLOWED
     # Act
-    with pytest.raises(VerdictError):
-        Verdict(kind=ALLOWED, upgrade_url="/pricing/")
-    # Assert — the raise IS the assertion
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert refusal is not None
 
 
 # ─── the resolve-state tripwire ─────────────────────────────────────────────
