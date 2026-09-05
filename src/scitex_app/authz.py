@@ -5,7 +5,7 @@ scitex-ui is building the display side against a shape agreed in conversation,
 and a contract that lives only in a message thread drifts. Shipping the type
 makes their fixtures real rather than a transcription of prose.
 
-WHY A TAGGED VALUE RATHER THAN A BOOLEAN. Four things a caller must be able to
+WHY A TAGGED VALUE RATHER THAN A BOOLEAN. Five things a caller must be able to
 tell apart, and only one of them means "no, and nothing you do changes that":
 
     allowed                        yes
@@ -13,6 +13,9 @@ tell apart, and only one of them means "no, and nothing you do changes that":
     denied-because-not-signed-in   sign in, then ask again
     denied-because-not-entitled    signed in, lacks the entitlement THIS hub
                                    requires
+    unresolved                     WE DO NOT KNOW. Resolution was attempted and
+                                   failed. Not a denial, and must never be
+                                   rendered as one.
 
 A boolean collapses the last three into one, and the UI then has to reconstruct
 which it was — from a message string, or from state it fetches separately. Two
@@ -42,13 +45,33 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional
 
-#: The four answers. `kind` is always exactly one of these.
+#: The five answers. `kind` is always exactly one of these.
 ALLOWED = "allowed"
 DENIED = "denied"
 DENIED_NOT_SIGNED_IN = "denied-because-not-signed-in"
 DENIED_NOT_ENTITLED = "denied-because-not-entitled"
 
-VERDICT_KINDS = (ALLOWED, DENIED, DENIED_NOT_SIGNED_IN, DENIED_NOT_ENTITLED)
+#: WE DO NOT KNOW. Added 2026-09-05, jointly with scitex-ui, because the
+#: implementation required it and not before -- `can()` is committed
+#: SYNCHRONOUS AND TOTAL, so when an input was resolved and resolution FAILED
+#: there has to be a value to return. Without this kind that case has none.
+#:
+#: ONE `unresolved`, never one per axis. Which input was unresolved does not
+#: change what the UI does -- don't assert, don't offer a route, say "not yet
+#: known" -- and a kind per axis would grow this enum without bound, breaking
+#: scitex-ui's exhaustive switch on every addition. Capped at five.
+#:
+#: NOT the same as any denial. denied-because-not-signed-in asserts the user is
+#: signed OUT, which is a claim we do not have when resolution failed.
+UNRESOLVED = "unresolved"
+
+VERDICT_KINDS = (
+    ALLOWED,
+    DENIED,
+    DENIED_NOT_SIGNED_IN,
+    DENIED_NOT_ENTITLED,
+    UNRESOLVED,
+)
 
 # Which kinds carry which payload. The validator enforces BOTH directions --
 # present when required, and absent when not -- because "denied carries nothing"
@@ -223,6 +246,30 @@ def denied_not_entitled(
     )
 
 
+def unresolved() -> Verdict:
+    """We do not know: resolution was attempted and did not succeed.
+
+    Carries NO payload, and the validator refuses one FOR FREE -- every payload
+    arm is written as an exclusion, so a kind absent from the _REQUIRES_ /
+    _PERMITS_ tuples lands in the refusing branch by default. Measured before
+    this kind existed rather than assumed, with a control: the same upgrade_url
+    is still ACCEPTED on DENIED_NOT_ENTITLED, so the refusals mean something.
+
+    WHAT MUST NOT TRAVEL HERE IS THE REASON -- timeout, misconfiguration,
+    network. It does not change what the UI renders, and naming it discloses
+    that the service behind this gate is currently down, to a reader who is not
+    authenticated to it. Same argument that kept the unresolved AXIS NAME out
+    of the DOM. A server-side log is where that belongs.
+
+    NOT FOR A CALLER WHO NEVER RESOLVED AT ALL. That is a contract violation --
+    "resolve before render" is the documented step -- and `can()` must RAISE,
+    so a BUG is not rendered as a legitimate "not yet known" UI forever.
+    `ResolveState` is what tells the two apart: NOT_ATTEMPTED raises, FAILED
+    returns this.
+    """
+    return Verdict(kind=UNRESOLVED)
+
+
 # ─── resolving the inputs a verdict is computed FROM ────────────────────────
 #
 # NOT PART OF THE VERDICT CONTRACT. `Verdict` crosses a package boundary as
@@ -288,6 +335,7 @@ __all__ = [
     "DENIED_NOT_ENTITLED",
     "DENIED_NOT_SIGNED_IN",
     "ResolveState",
+    "UNRESOLVED",
     "VERDICT_KINDS",
     "Verdict",
     "VerdictError",
@@ -295,6 +343,7 @@ __all__ = [
     "denied",
     "denied_not_entitled",
     "denied_not_signed_in",
+    "unresolved",
 ]
 
 # EOF

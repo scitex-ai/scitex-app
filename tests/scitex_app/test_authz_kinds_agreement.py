@@ -8,15 +8,22 @@ WHAT THIS GUARDS. `scitex_app.authz` PRODUCES the verdict; scitex-ui RENDERS it.
 The value crosses the boundary as plain serialisable data, so scitex-ui does not
 and must not import scitex-app — an app depends on both, and importing the SDK
 from the presentation layer would point that arrow backwards. The cost of that
-correct boundary is that the four strings are declared twice, in two languages,
+correct boundary is that the five strings are declared twice, in two languages,
 in two repositories:
 
     scitex_app/authz.py                   ALLOWED = "allowed"           BUILDS
     scitex_ui .../ts/app/dim/types.ts     export const ALLOWED = ...    RENDERS
 
-scitex-ui's own file says it plainly: "THE FOUR KIND STRINGS BELOW ARE A SECOND
+scitex-ui's own file said it plainly: "THE FOUR KIND STRINGS BELOW ARE A SECOND
 COPY of scitex_app.authz's, in another repo, and nothing in this file can detect
 a rename on their side."
+
+THAT SENTENCE IS GONE FROM THEIR FILE AS OF 0.20.2, and how it went is the
+point. Adding the fifth kind would have shipped a comment saying FOUR on the
+very file this check reads — a stale comment DENYING the count beside the code
+that sets it. They caught it only because a control they ran for an unrelated
+reason made them open the real file. Quoted here as history, and kept rather
+than deleted because the near-miss is the useful part.
 
 WHY THE CHECK LIVES HERE AND NOT THERE. The breakage would appear in scitex-ui,
 but the cause is a rename in scitex-app. A check nearest the rename PREVENTS;
@@ -38,18 +45,32 @@ on a pull request, blocking nothing. Promoting it is tracked on
 app-arm-the-example-leg-once-it-has-a-track-record. Saying so because a skipped
 test and a passing test look identical in a summary line.
 
-CALIBRATION, AND WHY THIS FILE IS EXPECTED TO BE RED WHEN IT LANDS.
-`dim/types.ts` was merged in scitex-ui but has shipped in NO RELEASE — installed
-scitex-ui is 0.19.1 and does not contain it. So on arrival this check hits its
-own FILE-MISSING arm and FAILS. That is not a defect to work around; it is the
-one observation that proves the check can fail for the reason it claims to.
-scitex-ui is holding their release deliberately so that red is observable first,
-in this order:
+CALIBRATION — DONE, AND RECORDED AS HISTORY RATHER THAN DELETED.
+When this file landed, `dim/types.ts` was merged in scitex-ui but shipped in NO
+RELEASE (installed scitex-ui was 0.19.1), so the check hit its own FILE-MISSING
+arm and FAILED. That red was not a defect to work around; it was the one
+observation proving the check can fail for the reason it claims to. It ran in
+this order, all four steps observed:
 
     1. this check lands on a branch
     2. RED is observed here            <- calibration
     3. scitex-ui releases
     4. re-run -> green -> merge
+
+THE FIFTH KIND WENT THE SAME WAY, and the ORDER IS THE LESSON. This check reads
+the INSTALLED scitex-ui, so:
+
+    TS first (their wheel ships UNRESOLVED, then Python)   this side is SILENT
+    Python first                                           RED, and this side
+                                                           CANNOT clear it —
+                                                           it waits on someone
+                                                           else's release
+
+Silence is not safety. `_read_ts_kinds` filters the far side to names Python
+declares, so an ADDITION over there is invisible here (measured; tracked on
+app-kinds-agreement-check-is-one-directional-20260905). TS-first was chosen
+because a red nobody can clear is worse than a gap somebody is watching by
+hand — not because the gap is fine.
 
 Their words, and the reason the order is theirs to keep rather than mine to
 waive: "あなたの較正はあなたのものなので、私からは提案しません."
@@ -67,6 +88,7 @@ from scitex_app.authz import (
     DENIED,
     DENIED_NOT_ENTITLED,
     DENIED_NOT_SIGNED_IN,
+    UNRESOLVED,
     VERDICT_KINDS,
 )
 
@@ -88,6 +110,7 @@ _PY_KINDS = {
     "DENIED": DENIED,
     "DENIED_NOT_SIGNED_IN": DENIED_NOT_SIGNED_IN,
     "DENIED_NOT_ENTITLED": DENIED_NOT_ENTITLED,
+    "UNRESOLVED": UNRESOLVED,
 }
 
 
@@ -131,7 +154,7 @@ def types_ts_source(ui_root: Path) -> str:
         f"scitex-ui is installed but does not ship {_TYPES_TS_RELPATH} — "
         "either it has not been released yet (expected until scitex-ui ships "
         "the dim component) or the path moved. Update the path rather than "
-        "deleting the check: four strings duplicated across two languages with "
+        "deleting the check: five strings duplicated across two languages with "
         "no reader-side verification is how the contract silently diverges."
     )
     return path.read_text(encoding="utf-8")
@@ -154,21 +177,38 @@ def test_the_python_kind_values_are_the_contract_literals():
         "DENIED": "denied",
         "DENIED_NOT_SIGNED_IN": "denied-because-not-signed-in",
         "DENIED_NOT_ENTITLED": "denied-because-not-entitled",
+        "UNRESOLVED": "unresolved",
     }
 
 
-def test_there_are_exactly_four_kinds():
-    """A fifth kind must be a deliberate edit, not something that appears.
+def test_the_count_here_matches_the_count_asserted_in_test_authz():
+    """A SECOND copy of the count assertion, and it nearly went stale.
 
-    The fifth ("auth not yet resolved") is REQUIRED the moment any verdict is
-    fetched client-side, and must never be folded into not-signed-in — that
-    asserts the user is signed out, which we would not know.
+    This file used to declare `test_there_are_exactly_four_kinds` too, with the
+    same body as the one in test_authz.py. Adding the fifth kind, I swept for
+    every "four" that had to become "five" with `rg '\bfour\b'` — and that
+    sweep CANNOT SEE `exactly_four_kinds`, because `_` is a word character, so
+    there is no word boundary before `four` inside an identifier.
+
+    So the sweep reported the file clean and the test failed on the first real
+    run: `assert 5 == 4`. Two lessons worth keeping over deleting this:
+
+      - a word-boundary search for prose is blind to the same word inside
+        identifiers, which is exactly where a count assertion lives;
+      - the same stale-count hazard scitex-ui hit in their own types.ts
+        (a comment saying FOUR beside the code that sets five) was live in
+        THIS repo at the same moment, in a test name.
+
+    Kept as an agreement between the two files rather than a third independent
+    count, so a future change has one number to update here and the reason is
+    attached to it.
     """
     # Arrange
+    expected = len(_PY_KINDS)
     # Act
     count = len(VERDICT_KINDS)
     # Assert
-    assert count == 4
+    assert count == expected
 
 
 def test_the_typescript_kinds_agree_with_the_python_kinds(types_ts_source):
@@ -220,7 +260,7 @@ def test_a_stale_comment_beside_real_code_reports_the_code():
 
 
 def test_a_swapped_value_is_detected_rather_than_agreeing_as_a_set():
-    # Arrange — why the comparison is a MAPPING: these four values as a SET are
+    # Arrange — why the comparison is a MAPPING: these values as a SET are
     # identical to the contract's while meaning the opposite thing.
     source = (
         'export const ALLOWED = "denied";\nexport const DENIED = "allowed";'
