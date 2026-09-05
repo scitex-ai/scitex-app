@@ -160,3 +160,108 @@ class TestValidateCss:
 
 
 # EOF
+
+
+def _index(tmp_path, body):
+    import json
+
+    app = tmp_path / "myapp"
+    (app / "templates" / "myapp").mkdir(parents=True)
+    (app / "manifest.json").write_text(json.dumps({"name": "myapp"}), encoding="utf-8")
+    (app / "templates" / "myapp" / "index.html").write_text(body, encoding="utf-8")
+    return app
+
+
+def test_a_requirement_present_only_in_a_comment_no_longer_satisfies_it(
+    tmp_path,
+):
+    """THE FALSE NEGATIVE, and the reason this fix is not a tidy-up.
+
+    These checks are PRESENCE tests (`"global_base.html" not in content`), so a
+    comment does not merely add a spurious finding — it SATISFIES A
+    REQUIREMENT. Measured on the shipped 0.14.2 with controls: this page, which
+    extends nothing and defines no content block, reported ZERO errors.
+
+    Every other instance of this blindness found the same day was a false
+    POSITIVE: documentation read as code, noisy but visible. This one is
+    silent, and it sits in a check that runs by DEFAULT rather than behind a
+    `check_*` flag.
+    """
+    # Arrange
+    app = _index(
+        tmp_path,
+        '<!-- TODO: {% extends "global_base.html" %} {% block content %} -->\n<p>hi</p>\n',
+    )
+    from scitex_app.appmaker._validate import validate_templates
+
+    # Act
+    reported = validate_templates(app)
+    # Assert — both requirements are genuinely unmet and both are reported.
+    assert len(reported) == 2
+
+
+def test_a_conformant_page_still_passes(tmp_path):
+    """The control for the arm above: if the stripper broke the presence tests
+    outright, the test above would pass for the wrong reason."""
+    # Arrange
+    app = _index(
+        tmp_path,
+        '{% extends "global_base.html" %}\n{% block content %}hi{% endblock %}\n',
+    )
+    from scitex_app.appmaker._validate import validate_templates
+
+    # Act
+    reported = validate_templates(app)
+    # Assert
+    assert not reported
+
+
+def test_a_commented_out_forbidden_block_is_not_an_override(tmp_path):
+    """The ordinary false positive in the same function, fixed by the same
+    strip: a page documenting the override it removed was reported as still
+    overriding."""
+    # Arrange
+    app = _index(
+        tmp_path,
+        '{% extends "global_base.html" %}\n{% block content %}h{% endblock %}\n'
+        "<!-- removed: {% block workspace_ai_pane %}x{% endblock %} -->\n",
+    )
+    from scitex_app.appmaker._validate import validate_templates
+
+    # Act
+    reported = validate_templates(app)
+    # Assert
+    assert not reported
+
+
+def test_a_css_rule_quoted_in_a_comment_is_not_applied(tmp_path):
+    """This is the shape of the incident scitex-ui reported: a path quoted
+    inside a CSS comment read as a live reference by a text scanner, which
+    failed every PR in a peer repository."""
+    # Arrange
+    (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "a.css").write_text(
+        "/* old: footer { display: none } */\nbody{color:red}\n", encoding="utf-8"
+    )
+    from scitex_app.appmaker._validate import validate_css
+
+    # Act
+    reported = validate_css(tmp_path)
+    # Assert
+    assert not reported
+
+
+def test_a_live_css_rule_after_a_comment_is_still_reported(tmp_path):
+    """The control. Hiding too much would convert the fix above into a silent
+    failure to enforce the frame rules at all."""
+    # Arrange
+    (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "a.css").write_text(
+        "/* note */\nfooter { display: none }\n", encoding="utf-8"
+    )
+    from scitex_app.appmaker._validate import validate_css
+
+    # Act
+    reported = validate_css(tmp_path)
+    # Assert
+    assert reported

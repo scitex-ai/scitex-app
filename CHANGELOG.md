@@ -7,6 +7,86 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-09-05
+
+Patch. Three more rules stop reading comments as code — and one of them stops
+letting a comment SATISFY a requirement.
+
+### Fixed — a comment could satisfy a frame requirement (FALSE NEGATIVE)
+
+`validate_templates` checks `"global_base.html" not in content` and
+`"block content" not in content`. Those are PRESENCE tests, so a page that
+extends nothing and defines no content block PASSED as long as the strings
+appeared in an HTML comment. Measured on the shipped 0.14.2 with controls:
+zero errors on a page meeting neither requirement.
+
+Every other instance of this blindness found the same day was a false
+POSITIVE — documentation read as code, noisy but visible. This one is silent,
+and `validate_templates` runs by DEFAULT rather than behind a `check_*` flag,
+so it is live in a publication gate.
+
+### Fixed — commented-out violations reported by three more rules
+
+    validate_js        live eval()      1, commented-out ALSO 1
+    validate_css       live rule        1, commented-out ALSO 1
+    validate_security  live os.system   1, commented-out ALSO 1
+
+The CSS case is the shape scitex-ui reported from their own incident: a path
+quoted inside a comment read as a live reference, failing every PR in a peer
+repository.
+
+### Added — `_validate/_comments.py`
+
+`strip_js_comments` (2026-09-03) and `strip_html_comments` (0.14.2) moved here
+and are joined by `strip_css_comments`; `_prefix` re-exports all three, since
+they were public there first. CSS has no line comment — `//` appears inside
+every `url(https://...)` — and a `/*` inside a quoted value does not open one.
+
+WHY A MODULE RATHER THAN THREE MORE IMPORTS. `strip_js_comments` had carried
+the whole argument in its docstring for two days. What was missing was not the
+rule but its SCOPE: nothing declared where it applied, so each new rule had to
+rediscover it. scitex-ui named the shape after hitting it themselves the same
+day. A module makes the scope explicit — this is where a rule that reads source
+text comes to have its comments removed.
+
+### Calibration — twelve cases, both directions per rule
+
+A stripper that hides too much converts each false positive into a false
+negative, where the finding disappears and nothing says why. So every fix is
+paired with the case that must STILL report:
+
+    js    live eval 1 / commented 0 / live AFTER a comment 1
+    css   live 1 / commented 0 / live after comment 1 / "/*" in a string 1
+    tpl   conformant 0 / missing both 2 / ONLY IN A COMMENT 2 (was 0)
+          forbidden live 1 / forbidden commented 0
+    py    live os.system 1 / commented 0 / live after comment 1
+          "#" in a string 1 / clean 0 / docstring 1 (deliberate)
+
+Suite 726 passed, 2 skipped.
+
+### The remaining rules are accounted for BY MECHANISM, not by an unread zero
+
+Rather than leaving six unprobed, each was resolved by asking what it reads:
+
+    validate_manifest / _privileges / _dependencies   json.loads — JSON has
+                                                      no comments to misread
+    validate_structure / _bundle_size                 read no text at all
+    validate_security                                 regex-scans .py  <- had it
+
+That last one is why this matters: a SECURITY rule was reporting the file that
+documents the call it removed. `strip_python_comments` tracks quotes rather
+than matching a pattern, because `S = "#"` is a value.
+
+DOCSTRINGS ARE LEFT REPORTING, deliberately. A docstring is a string the module
+genuinely contains, not a comment the parser discards; deciding which strings
+are prose is a separate judgement needing its own calibration, and guessing is
+how the first of these defects got here. Same treatment as a `<pre>` block.
+
+The first probe of css and templates returned 0/0 and was nearly read as clean
+— the LIVE case had also returned 0, so the zero said nothing. Every result
+above rests on a case that provably reports.
+
+
 ## [0.14.2] - 2026-09-05
 
 Patch. The armed prefix rule no longer reports documentation as a violation.
