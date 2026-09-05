@@ -7,6 +7,76 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.4] - 2026-09-05
+
+Patch. A scan root that sits inside a skipped directory returned zero instead
+of refusing — and the recommended method put callers there.
+
+### Fixed — the walk excluded files by ANCESTOR directory names
+
+`scannable_files` and `validate_prefix_safety` matched `PREFIX_SKIP_DIRS`
+against every component of a file's ABSOLUTE path. So a scan root under
+`.worktrees/`, `node_modules/`, `.venv/` — any of the nine skip names — had all
+of its files excluded by a directory the caller never chose, and returned zero
+files and zero findings.
+
+MY OWN ADVICE PUT A PEER THERE. I told scitex-hub to read the REF rather than a
+working tree, and to do it with a detached worktree. Worktrees live under
+`.worktrees/`, which is in the skip set precisely so a scan of a REPO ROOT does
+not descend into sibling worktrees. Both pieces of guidance are individually
+correct; together they produce a silent zero.
+
+hub reported "22 app dirs, 1,116 files, 0 findings, control returned 1" and
+retracted it: their tree holds **262** prefix findings. The scan had seen
+nothing at all.
+
+The fix is one change: the walk matches skip names RELATIVE to the scan root.
+Directories inside the app are still skipped; ancestors the caller never chose
+no longer count.
+
+MY FIRST VERSION ALSO REFUSED such a root, as belt-and-braces, and that was
+wrong. hub said what they would actually do with 0.14.4: their hooks DENY
+tracked-file edits outside `<repo>/.worktrees/<name>/`, so scanning a worktree
+is their NORMAL path, not an accident — the refusal fired on the mandated
+workflow. Once the match is relative, that scan is simply correct and there is
+nothing to guard. A guard that removes a capability is not a guard.
+
+They also pre-empted the wrong repair: an `allow_skipped_ancestor=True` escape
+hatch would re-open the silent zero. Right — and unnecessary, because there is
+now nothing to escape from.
+
+Calibrated:
+
+    1 finding / 1 file   a plain root
+    1 finding / 1 file   a root with node_modules INSIDE it (dependency skipped)
+    1 file               a root under .worktrees   (was 0 — the silent zero)
+    1 file               an exported tree, wherever it sits
+
+### Retraction — the hub evidence cited for arming in 0.14.0
+
+That release cited "scitex-hub 29 app dirs, 1,471 files, 0 findings, control
+returned exactly 1" as part of the case for arming `check_prefix_safety`. **That
+line should not have been written.** It is annotated as retracted in the 0.14.0
+entry above rather than deleted, since it is what the decision was actually made
+on.
+
+ARMING STANDS, ON DIFFERENT EVIDENCE. hub measured the shape that actually
+matters: `validate()` is called only on USER-SUBMITTED app projects — `_publish`,
+`_launcher`, `_scaffold`, `api_dev` — never on hub's own Django apps, which are
+not appmaker-shaped. So the gate is unaffected by their 262. The correct
+question was never "is hub's tree clean" but "what population does the gate
+read", and only the second was ever load-bearing.
+
+### And the denominator did not save it, for a reason worth naming
+
+hub reported 1,116 files beside 0 findings — the healthiest-looking possible
+result. The two numbers came from DIFFERENT INSTRUMENTS: the denominator from
+their own re-implementation of the walk (which only skips names below its root,
+so it never saw the ancestor), the numerator from ours (which did).
+`scannable_files` would have returned 0 and the report would have read NOT
+SCANNED. A denominator from a second implementation is not a denominator.
+
+
 ## [0.14.3] - 2026-09-05
 
 Patch. Three more rules stop reading comments as code — and one of them stops
@@ -214,6 +284,13 @@ distinguishable from a scan that never ran:
 
     scitex-writer / figrecipe / scholar   clean
     scitex-hub    29 app dirs, 1471 files, 0 findings; control returned 1
+
+**^ BOTH LINES ARE RETRACTED. See 0.14.1 and 0.14.4.** The writer/figrecipe
+zeros scanned directories that did not exist (0.14.1); hub's zero scanned a
+detached worktree, whose every file this rule excluded by an ancestor directory
+name (0.14.4). Their real numbers are 5, 19 and 262. Left in place rather than
+edited out: this is what the arming decision was actually made on, and deleting
+it would hide that.
 
 hub had asked to be consulted BEFORE arming and gave the go-ahead
 2026-09-05T20:16Z, ahead of the 09-07 they had committed to.
