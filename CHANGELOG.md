@@ -7,6 +7,69 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-09-05
+
+Patch. Three more rules stop reading comments as code — and one of them stops
+letting a comment SATISFY a requirement.
+
+### Fixed — a comment could satisfy a frame requirement (FALSE NEGATIVE)
+
+`validate_templates` checks `"global_base.html" not in content` and
+`"block content" not in content`. Those are PRESENCE tests, so a page that
+extends nothing and defines no content block PASSED as long as the strings
+appeared in an HTML comment. Measured on the shipped 0.14.2 with controls:
+zero errors on a page meeting neither requirement.
+
+Every other instance of this blindness found the same day was a false
+POSITIVE — documentation read as code, noisy but visible. This one is silent,
+and `validate_templates` runs by DEFAULT rather than behind a `check_*` flag,
+so it is live in a publication gate.
+
+### Fixed — commented-out violations reported by `validate_js` and `validate_css`
+
+    validate_js    live eval() 1, commented-out ALSO 1
+    validate_css   live rule   1, commented-out ALSO 1
+
+The CSS case is the shape scitex-ui reported from their own incident: a path
+quoted inside a comment read as a live reference, failing every PR in a peer
+repository.
+
+### Added — `_validate/_comments.py`
+
+`strip_js_comments` (2026-09-03) and `strip_html_comments` (0.14.2) moved here
+and are joined by `strip_css_comments`; `_prefix` re-exports all three, since
+they were public there first. CSS has no line comment — `//` appears inside
+every `url(https://...)` — and a `/*` inside a quoted value does not open one.
+
+WHY A MODULE RATHER THAN THREE MORE IMPORTS. `strip_js_comments` had carried
+the whole argument in its docstring for two days. What was missing was not the
+rule but its SCOPE: nothing declared where it applied, so each new rule had to
+rediscover it. scitex-ui named the shape after hitting it themselves the same
+day. A module makes the scope explicit — this is where a rule that reads source
+text comes to have its comments removed.
+
+### Calibration — twelve cases, both directions per rule
+
+A stripper that hides too much converts each false positive into a false
+negative, where the finding disappears and nothing says why. So every fix is
+paired with the case that must STILL report:
+
+    js    live eval 1 / commented 0 / live AFTER a comment 1
+    css   live 1 / commented 0 / live after comment 1 / "/*" in a string 1
+    tpl   conformant 0 / missing both 2 / ONLY IN A COMMENT 2 (was 0)
+          forbidden live 1 / forbidden commented 0
+
+Suite 720 passed, 2 skipped.
+
+### Not done, deliberately
+
+`validate_manifest`, `_security`, `_structure`, `_privileges`, `_bundle_size`
+and `_dependencies` have NOT been probed for this. The first probe of css and
+templates returned 0/0 and was nearly read as clean — the LIVE case had also
+returned 0, so the zero said nothing. Each remaining rule needs a case that
+provably reports before its silence can be interpreted.
+
+
 ## [0.14.2] - 2026-09-05
 
 Patch. The armed prefix rule no longer reports documentation as a violation.

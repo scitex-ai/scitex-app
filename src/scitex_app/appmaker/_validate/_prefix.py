@@ -191,132 +191,18 @@ PREFIX_SKIP_FILE_STEMS = (
 )
 
 
+# The strippers moved to `_comments` when the same blindness was found in
+# validate_js / validate_css / validate_templates. Re-exported here because
+# they were public from this module first.
+from ._comments import (  # noqa: F401
+    strip_css_comments,
+    strip_html_comments,
+    strip_js_comments,
+)
+
 def _is_build_config(path: Path) -> bool:
     """True for a bundler/tooling config, which runs at build time only."""
     return any(path.name.startswith(stem) for stem in PREFIX_SKIP_FILE_STEMS)
-
-
-#: Matches an HTML comment, non-greedy so the FIRST `-->` closes it. Unlike the
-#: JS case a regex is safe here: `<!--` has no second meaning inside markup, and
-#: `-->` inside a `<script>` string is handled by scanning scripts separately —
-#: see strip_html_comments.
-_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-_HTML_SCRIPT_BLOCK = re.compile(
-    r"<script\b[^>]*>.*?</script\s*>", re.DOTALL | re.IGNORECASE
-)
-
-
-def strip_html_comments(source: str) -> str:
-    """Blank out `<!-- ... -->`, leaving `<script>` bodies untouched.
-
-    WHY THIS EXISTS, AND WHY IT IS LATE. `strip_js_comments` below has solved
-    exactly this problem for JavaScript since 2026-09-03, with exactly this
-    argument in its docstring: "a detector keyed on a substring INVERTS ON
-    DOCUMENTATION — the file that best explains why it removed a bad call looks
-    identical to the file that still has it." `.html` was never given the same
-    treatment. Nobody noticed while the rule was a RECORD; it became visible the
-    week the rule became a GATE, because a false positive stopped being noise in
-    a report and started refusing someone's app.
-
-    Measured on the shipped 0.14.0 before this existed:
-
-        <!-- fetch("/api/x"); -->        1 finding   <- text no browser requests
-        <pre>fetch("/api/x");</pre>      1 finding   <- a teaching block
-
-    SCRIPT BODIES ARE EXCLUDED FROM THIS PASS, not because they are safe, but
-    because they are JavaScript and the JS stripper runs over them afterwards.
-    Blanking `<!-- -->` inside a script would also eat the legacy
-    `<!--` guard idiom and, worse, any `-->` appearing inside a JS string would
-    silently terminate a "comment" that never started — turning a false POSITIVE
-    into a false NEGATIVE, which is the trade `strip_js_comments` explicitly
-    refuses to make. A finding that vanishes tells no one why.
-
-    `<pre>` IS DELIBERATELY NOT HANDLED HERE. A code sample in a `<pre>` block
-    is documentation and reports today, but stripping it needs the same
-    both-directions calibration and a clear rule for distinguishing a sample
-    from live markup. Left reporting rather than guessed at; see the card.
-
-    Comments are replaced by spaces of the SAME LENGTH, never deleted, so
-    reported line and column numbers still point at the real source — the same
-    contract as the JS stripper, and the reason a file with a comment on line 3
-    does not misreport every finding after it.
-    """
-    spans = [m.span() for m in _HTML_SCRIPT_BLOCK.finditer(source)]
-
-    def _in_script(pos: int) -> bool:
-        return any(lo <= pos < hi for lo, hi in spans)
-
-    out = list(source)
-    for m in _HTML_COMMENT.finditer(source):
-        if _in_script(m.start()):
-            continue
-        for i in range(m.start(), m.end()):
-            if out[i] != "\n":
-                out[i] = " "
-    return "".join(out)
-
-
-def strip_js_comments(source: str) -> str:
-    """Blank out // and /* */ comments, PRESERVING STRING LITERALS.
-
-    WHY THIS EXISTS. Without it the scan reads commented-out code as code.
-    Measured 2026-09-03 on a file whose only match was inside a comment:
-
-        // legacy, replaced in 0.9: fetch("/api/old");
-        -> 1 finding, reported as a root-absolute request URL
-
-    A detector keyed on a substring INVERTS ON DOCUMENTATION: the file that
-    best explains why it removed a bad call looks identical to the file that
-    still has it. This is the third instance of that shape found in one night
-    -- scitex-ui hit it in a guard of theirs, I hit it in the mount-marker
-    reader, and this one had been shipping since 0.9.0.
-
-    WHY IT IS NOT A REGEX. `//` appears inside every absolute URL, so a naive
-    `//.*$` turns `fetch("https://api.example.com/x")` into `fetch("https:` --
-    mangling a string the scanner then misreads. That would trade a false
-    POSITIVE for a false NEGATIVE, which is worse: the finding disappears and
-    nothing says why. So this walks the source tracking whether it is inside a
-    quote, and only treats `//` and `/*` as comment starts outside one.
-
-    Comments are replaced by spaces of the SAME LENGTH, not deleted, so line
-    numbers and column offsets in findings still point at the real source.
-    """
-    out = []
-    i = 0
-    n = len(source)
-    quote = None  # the quote character currently open, or None
-    while i < n:
-        ch = source[i]
-        if quote is not None:
-            out.append(ch)
-            if ch == "\\" and i + 1 < n:  # escaped char inside a string
-                out.append(source[i + 1])
-                i += 2
-                continue
-            if ch == quote:
-                quote = None
-            i += 1
-            continue
-        if ch in "\"'`":
-            quote = ch
-            out.append(ch)
-            i += 1
-            continue
-        if ch == "/" and i + 1 < n and source[i + 1] == "/":
-            while i < n and source[i] != "\n":
-                out.append(" ")
-                i += 1
-            continue
-        if ch == "/" and i + 1 < n and source[i + 1] == "*":
-            while i < n and not (source[i] == "*" and i + 1 < n and source[i + 1] == "/"):
-                out.append("\n" if source[i] == "\n" else " ")
-                i += 1
-            out.append("  ")
-            i += 2
-            continue
-        out.append(ch)
-        i += 1
-    return "".join(out)
 
 
 #: The OPENING `{%` of a Django or Jinja tag, anywhere in the literal.

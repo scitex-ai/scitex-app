@@ -13,6 +13,7 @@ it. The check still ships unarmed.
 
 from __future__ import annotations
 
+from ._comments import strip_js_comments
 import re
 from pathlib import Path
 
@@ -90,9 +91,13 @@ def validate_js(app_dir: str | Path) -> list[str]:
             if JS_SKIP_DIRS & set(js_file.relative_to(root).parts):
                 continue
             try:
-                content = js_file.read_text(errors="replace")
+                raw = js_file.read_text(errors="replace")
             except OSError:
                 continue
+            # Comments are not code. Without this the file that DOCUMENTS a
+            # removed `eval()` is indistinguishable from the file that still
+            # calls it — measured on 0.14.2: live 1, commented-out also 1.
+            content = strip_js_comments(raw)
 
             rel = js_file.relative_to(root)
             for pattern in DANGEROUS_JS_PATTERNS:
