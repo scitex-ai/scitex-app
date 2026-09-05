@@ -7,6 +7,104 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-05
+
+Minor. One canonical workspace-CSS rule, measured against the shell instead of
+argued from a list. **Unarmed** — `validate()` does not call it.
+
+### Added — `validate_css_canonical()`, tiers 1 and 2 of three
+
+Three implementations of one spec lived across two repositories and disagreed
+in both directions on the same input:
+
+```
+#main-content { color: red }     passed the CLI rule, failed AppValidator
+footer { display: none }         the reverse
+```
+
+scitex-hub measured the shell on 2026-09-04 — 30 agents, HEAD pinned, a control
+in every loop, `defined_at` per row — and the table did not correct my list, it
+**invalidated my instrument**. The rule is ownership **by node**, not by name:
+
+- a node the shell renders, sizes or queries → no-touch
+- the container the app renders INTO → no `!important`
+- shared design tokens → read with `var()`, never redefine at `:root`
+- a **shared component** class (apps render their own resizers, toggle buttons,
+  sidebar elements) → free on the app's own nodes, no-`!important` because
+  `!important` also reaches the shell's instances
+
+That last line is why "does this stylesheet MENTION the name" is answerable and
+is the wrong question. `.stx-shell-*` occurs 842 times across 114 files;
+scitex-hub's own apps carry 42 legitimate selector lines on
+`stx-shell-sidebar__*`. A mention-ban fails all 42 — correct code.
+
+Tier 1 is therefore restricted to names an app can never legitimately own —
+ids (singular by definition) and the shell's own root classes — where "mentions
+it" and "selects the shell's node" coincide. Everything an app may own an
+INSTANCE of is tier 2, where only the abusive operations error. The tiering is
+not a severity ranking; it is the line between where the substring proxy holds
+and where it does not.
+
+New public names, all from `scitex_app.appmaker._validate`:
+
+```python
+validate_css_canonical(app_dir) -> CssScanReport
+css_files(app_dir) -> list[Path]          # the denominator walk
+CssScanReport(findings, files_scanned, checked, not_checked)
+SHELL_INSTANCE_NAMES, SHELL_INSTANCE_PREFIXES, APP_CONTAINERS,
+SHARED_COMPONENT_CLASSES, SHELL_TOKEN_PREFIXES, BODY_STATE_CLASSES
+```
+
+`CssScanReport` carries its own denominator and its own blind spot, and a
+validator rejects findings against zero files. `files_scanned == 0` reads
+NOT SCANNED, never clean — the failure mode that cost two measurements in one
+evening (0.14.1, 0.14.4).
+
+### Added — `check_css_canonical=` on `validate()` / `validate_with_warnings()`
+
+Defaults to **False**. The old `validate_css()` is what still runs. This flag
+is the arming switch, and arming means REPLACING that call, not adding to it —
+running both would report one CSS defect twice under two wordings. Whoever
+arms it deletes the `validate_css()` call in the same change.
+
+Arming waits on scitex-hub's sequence, accepted verbatim: *ship canonical
+unarmed with the blind spot declared → hub re-measures their five findings
+against the shipped rule, from a stated ref, with the denominator from
+`css_files()` → then arm.*
+
+### Not checked, and the report says so
+
+**Tier 3** is the structural rule that an app's selectors be scoped under its
+own root. A bare `[data-pane]{}` or `.panel-toggle-btn{}` reaches the shell's
+frame **without mentioning any protected name**, so no name-based validator —
+mine, hub's, or this one — can see it. It needs a parser. Card
+`app-css-tier3-structural-scoping-needs-a-parser-20260905`.
+
+Shipping without it was hub's call, and their condition was that the result
+must SAY SO in the return value: a validator blind to a whole class is a check
+that cannot fail for that class, and its green will be read as "this app's CSS
+is properly scoped" by someone with no reason to doubt it.
+
+The second residual: whether a bare `footer { … }` rule actually reaches the
+shell's footer. Semantically that is the right question and it is **not
+implementable by substring**, so the implementable part ships — `!important` on
+an unscoped `footer` and `footer { display: none }` are errors — and the rest
+is declared. `.myapp footer { … }`, `.status-footer`, `.site-footer` and
+`--footer-height` are calibrated non-findings.
+
+### Two corrections that came from measurement, not from reasoning
+
+- `.panel-resizer` was **tier 1** in the draft. Apps render it 41 times across
+  nine apps against the shell's 6, so a mention-ban would have failed correct
+  code in nine applications. Moved to tier 2. The error was in hub's one-line
+  09-04 *summary*, not in the measured table beside it — the compression is
+  where the fact was lost, and the table won.
+- The `footer` match fires on the **leftmost position only**. The first
+  narrowing still reported `.myapp footer { … }` — an app scoping a footer
+  inside its own subtree, exactly what the rule exists to permit. Found by
+  running the rule against code that ought to pass, which is the only place a
+  false positive is visible.
+
 ## [0.14.4] - 2026-09-05
 
 Patch. A scan root that sits inside a skipped directory returned zero instead

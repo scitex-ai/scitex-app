@@ -18,10 +18,9 @@ from scitex_app.validator import AppValidator
 validator = AppValidator("/path/to/myapp")      # accepts str or Path
 result = validator.validate()
 
-print(result.passed)     # bool
-print(result.errors)     # List[str] — fail conditions
-print(result.warnings)   # List[str] — advisory notices
-print(result.manifest)   # dict | None
+result.passed            # bool
+result.errors            # List[str] — fail conditions
+result.warnings          # List[str] — advisory notices; result.manifest: dict|None
 ```
 
 **Two entry points, and NEITHER IS A SUPERSET OF THE OTHER.** Read this before
@@ -47,12 +46,11 @@ validate(app_dir, check_js_safety=True, check_bundle_size=True,
          check_privileges=True)
 ```
 
-Off by default, and the default IS the arming switch. Measured against the
-fleet's app packages before shipping: the narrowed JS rule reports **0** on
-`scholar/_django` and `writer/_django`, and still fires on planted hazards.
-Zero findings is consistent both with "the fleet is clean" and with "the scan
-did not run", so those three stay unarmed until a peer reports a finding I did
-not construct.
+Off by default, and the default IS the arming switch. The narrowed JS rule
+reports **0** on `scholar/_django` and `writer/_django` and still fires on
+planted hazards — but zero is consistent both with "the fleet is clean" and
+with "the scan did not run", so those three stay unarmed until a peer reports
+a finding I did not construct.
 
 **`check_prefix_safety` is the exception: ARMED as of 0.14.0.** `validate()`
 runs it unless you pass `check_prefix_safety=False`, and its findings are
@@ -60,14 +58,10 @@ errors, so a caller that raises on a non-empty result — including scitex-hub's
 publication path — will refuse an app over it. From 0.14.0 an app carrying a
 root-absolute or document-relative request URL cannot be published.
 
-This paragraph said the prefix rule was opt-in until the day it was not. Worth
-naming, because it is the third place the same sentence went false at once: the
-rule's own docstring said "NOT ARMED", `validate_with_warnings` said "EVERY
-`check_*` KEYWORD IS OFF BY DEFAULT", and this file said opt-in. The first two
-were corrected in the arming change; **this one shipped stale to app developers
-for two releases**, which is the worst of the three — a docstring misleads a
-maintainer reading the source, a skill doc misleads someone who has no reason
-to check.
+This paragraph said "opt-in" until the day it was not — one of three places the
+same sentence went false at once, and **the only one that shipped stale to app
+developers**, for two releases. A wrong docstring misleads a maintainer reading
+the source; a wrong skill doc misleads someone with no reason to check.
 
 **And when you run the rule yourself, report the denominator.** "0 findings" is
 not a claim; "0 findings across N files" is, and N == 0 means NOT SCANNED
@@ -88,29 +82,26 @@ detached worktree.**
 git archive <ref> | tar -x -C "$(mktemp -d)"
 ```
 
-This used to say "use a detached worktree at origin/develop", and that advice
-cost scitex-hub a whole measurement on 2026-09-05. Worktrees live under
-`.worktrees/`, which this rule skips so that a scan of a REPO ROOT does not
-descend into sibling worktrees. Before 0.14.4 the skip matched against the
-file's ABSOLUTE path, so a scan whose ROOT was a worktree had every file
-excluded by an ancestor name: they reported 1,116 files / 0 findings and their
-tree in fact held 262.
-
-0.14.4 makes the match relative to the scan root, so scanning a worktree works
-correctly now. The export recipe is still the better habit for a REF — it is
-the ref and nothing else, with no untracked files or in-progress edits.
+This used to say "use a detached worktree", and that advice cost scitex-hub a
+whole measurement on 2026-09-05: `.worktrees/` is a skipped name, and before
+0.14.4 the skip matched the ABSOLUTE path, so a scan ROOTED in a worktree had
+every file excluded by an ancestor — 1,116 files / 0 findings on a tree holding
+262. 0.14.4 matches relative to the scan root, so worktrees scan correctly now;
+the export is still the better habit for a REF, being the ref and nothing else.
 
 A positive control (a temp tree with `fetch("/api/thing")`, which must return
-exactly 1) proves the instrument RUNS. It does not prove it is pointed at
-anything — a control runs on a tree that exists. Both, or neither is evidence.
-Since 0.14.1 a path that does not exist raises rather than answering "clean".
+exactly 1) proves the instrument RUNS, not that it is POINTED at anything — a
+control runs on a tree that exists. Both, or neither is evidence. Since 0.14.1
+a path that does not exist raises rather than answering "clean".
 
-What remains genuinely divided is the CSS and manifest half, where the two
-modules answer the SAME question differently — `#main-content { color: red }`
-passes the CLI and fails `AppValidator`; `footer { display: none }` does the
-reverse. Tracked on card
-`app-two-validators-docs-describe-the-uncalled-one-20260822`, waiting on the
-authoritative shell-selector list from scitex-hub.
+What remains genuinely divided is the CSS and manifest half: `#main-content
+{ color: red }` passes the CLI and fails `AppValidator`; `footer { display:
+none }` does the reverse. Card
+`app-two-validators-docs-describe-the-uncalled-one-20260822`. **The CSS half
+now has one answer**, measured against the shell rather than argued from either
+list: `validate_css_canonical()` (0.15.0, *Workspace CSS* below). It is
+UNARMED, so the divergence still describes what runs today; arming collapses
+the two. The manifest half is unchanged.
 
 ## Errors vs advice (CLI path)
 
@@ -140,29 +131,51 @@ collision the name avoids. Everything else `validate()` reports is a hard error
 whose wording matches its enforcement, and this is not a precedent for softening
 those.
 
-`AppValidator` validation pipeline (runs in order):
-1. `validate_manifest()` — required fields, valid JSON, and **no `version` key**
-2. `validate_structure()` — `_django/views.py` and `_django/urls.py` present
-3. `validate_css()` — no CSS targeting shell selectors (see below)
-4. `validate_js()` — no dangerous JS patterns
-5. `validate_bundle_size()` — total size < 50 MB (configurable via `max_bundle_size`)
-6. `validate_privileges()` — privilege types and scopes must be valid
+`AppValidator` runs, in order: `validate_manifest()` (required fields, valid
+JSON, **no `version` key**), `validate_structure()` (`_django/views.py` and
+`urls.py`), `validate_css()` (see *Workspace CSS*), `validate_js()`,
+`validate_bundle_size()` (50 MB, `max_bundle_size`), `validate_privileges()`.
 
-`version` in `manifest.json` is REJECTED by both implementations. The app
-version is derived at runtime from the installed `pip_package` via
-`importlib.metadata`; a hand-written one drifts, and did — every hub app tile
-once showed a wrong version from exactly this. Declare `pip_package` instead.
+`version` in `manifest.json` is REJECTED by both implementations — it is
+derived at runtime from `pip_package` via `importlib.metadata`. A hand-written
+one drifts, and did: every hub app tile once showed a wrong version from this.
 
-Shell selectors apps must NOT target:
-`#scitex-ai-panel`, `#main-content`, `.ws-module-pane`, `.workspace-header`,
-`.workspace-sidebar`, `.stx-shell-*`, `#workspace-container`, `.ws-app-sidebar`
+### Workspace CSS — what your app may and may not style
 
-Dangerous JS patterns blocked:
-`eval(`, `Function(`, `document.cookie`, `window.parent`, `window.top`,
-`__import__`, `os.system`, `subprocess`, `exec(`
+This was a flat list of eight names, "shell selectors apps must NOT target".
+**It described a validator nothing called**, and was wrong in both directions:
+`.stx-shell-*` is not blanket no-touch (hub's own apps carry 42 legitimate
+selector lines on `stx-shell-sidebar__*`), and it omitted names that are. The
+rule is **ownership by NODE, not by name**; the tables live in
+`scitex_app.appmaker._validate` and are deliberately not copied here:
 
-Skipped directories during scanning: `node_modules`, `dist`, `.vite`,
-`_docs`, `__pycache__`, `assets`
+| tier | what | rule |
+|---|---|---|
+| 1 | `SHELL_INSTANCE_NAMES` / `SHELL_INSTANCE_PREFIXES` — ids and shell root classes an app can never own | any mention is an error |
+| 2 | `APP_CONTAINERS` (the box you render INTO), `SHARED_COMPONENT_CLASSES` (you render your own instance), `SHELL_TOKEN_PREFIXES`, `BODY_STATE_CLASSES` | your own instance is yours; **no `!important`**, never redefine a token at `:root`/`html` |
+| 3 | selectors reaching the shell **without naming anything** — a bare `[data-pane]{}` | scope under your app's root — **NOT CHECKED, needs a parser** |
+
+```python
+from scitex_app.appmaker._validate import validate_css_canonical
+
+report = validate_css_canonical("path/to/app")
+print(report.summary())   # findings AND denominator AND blind spot
+report.files_scanned      # 0 means NOT SCANNED, not clean
+report.not_checked        # tier 3, and the bare-`footer` residual
+```
+
+**UNARMED** — `validate()` still runs the older four-name `validate_css()`;
+pass `check_css_canonical=True` for this one. Arming replaces that call rather
+than adding to it. Second declared residual: whether a bare `footer { … }`
+reaches the shell's footer. A substring test cannot tell, so `!important` on an
+unscoped `footer` and `footer { display: none }` are errors and every other
+bare-`footer` rule passes.
+
+Blocked JS patterns and skipped scan directories are `DANGEROUS_JS_PATTERNS`
+and `PREFIX_SKIP_DIRS` in the same module — read them from there. The two
+hand-copied lists that stood here had both drifted (the skip list omitted five
+names and invented one), and a stale list is worse than a pointer: nobody
+re-checks it.
 
 ## Minimal App Checklist
 
@@ -178,8 +191,7 @@ myapp/
 ```
 
 - manifest.json must have all 5 required fields
-- No CSS targeting shell selectors
-- No dangerous JS patterns
+- CSS scoped to your own nodes (*Workspace CSS*); no dangerous JS patterns
 - `_django/views.py` and `_django/urls.py` required for platform integration
 - Use `get_files()` for all file I/O — never `open()` directly in app logic
 - **Packaging**: Apps with a `bridge` key in manifest.json must keep
