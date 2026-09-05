@@ -7,6 +7,98 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-09-05
+
+Patch. The armed prefix rule no longer reports documentation as a violation.
+
+### Fixed — a URL inside an HTML comment was an ERROR
+
+`strip_js_comments` has stripped `//` and `/* */` since 2026-09-03, with the
+reason in its own docstring: a detector keyed on a substring INVERTS ON
+DOCUMENTATION — the file that best explains why it removed a bad call looks
+identical to the file that still has it. `.html` never got the same treatment.
+
+Nobody noticed while the rule was a RECORD. It became visible the week the rule
+became a GATE, because a false positive stopped being noise in a report and
+started refusing to publish an app over text no browser ever requests.
+
+`<script>` bodies are excluded from the HTML pass and left to the JS stripper
+that runs over them afterwards: `-->` occurs inside JavaScript strings, and
+treating one as a comment terminator would blank everything before it and make
+a real finding disappear — trading a false positive for a false negative, which
+is the trade `strip_js_comments` explicitly refuses. Comments are blanked to
+same-length spaces, never deleted, so reported line numbers still point at the
+real source.
+
+A `<pre>` code sample still reports. Distinguishing a teaching block from live
+markup needs its own calibration and is not guessed at here.
+
+### Fixed — `{% url %}` was reported as a violation
+
+A Django or Jinja tag is resolved by the server's URLconf, which under a mount
+already includes the mount prefix: it is the prescribed idiom. Measured on
+scitex-hub's tree, 11 of 339 findings were `{% url %}`, every one correct code.
+
+This is NOT the same judgement as `${...}` interpolation, which is still
+reported: there the LEADING SLASH is decidable whatever the expression yields.
+For a template tag nothing before the path is ours to read, and an unknown must
+not be collapsed into a violation.
+
+### Measured effect on the consumer trees, at their refs
+
+    scitex-hub       1975 files    339 -> 328    (-11, exactly the template tags)
+    figrecipe         116 files     19 ->  19
+    scitex-writer     144 files      5 ->   5
+    scitex-cards       94 files      4 ->   4
+    scitex-scholar     74 files      0 ->   0
+    scitex-storage     26 files      0 ->   0
+
+Nothing else moved. Both fixes were also calibrated in the direction that
+matters more — a live call after a comment, a live call on the same line as
+one, a `-->` inside a script string, and an interpolated root-absolute URL all
+still report, with correct line numbers.
+
+
+## [0.14.1] - 2026-09-05
+
+Patch. `validate_prefix_safety` no longer answers "clean" about a directory
+that is not there, and the walk behind a files-scanned count is now public.
+
+### Fixed — a missing path returned zero findings instead of refusing
+
+`validate_prefix_safety("/path/that/does/not/exist")` returned `[]`. `rglob`
+over a missing directory yields nothing, so a typo, a removed worktree, or a
+relative path resolved from the wrong directory read as a passing result. It
+now raises `FileNotFoundError` (and `NotADirectoryError` for a file).
+
+THIS IS NOT HYPOTHETICAL — IT IS HOW 0.14.0 WAS ARMED. The scan behind that
+decision pointed at `<repo>/.worktrees/prefix-check` in two peer repositories.
+Neither path existed. Both reported zero findings and were announced as clean;
+measured afterwards on the same refs with the published wheel, figrecipe has 19
+findings and scitex-writer 5. **The positive control passed throughout**,
+because a control runs on a temp tree that does exist. The instrument was
+working and aimed at nothing.
+
+`validate()` and `validate_with_warnings()` are unchanged for a missing app
+directory: they still report it as findings rather than raising, because a
+publication gate reads that list and must not start receiving an exception.
+The refusal is for the direct caller running the rule against their own tree.
+
+### Added — `scannable_files`, `PREFIX_SCAN_SUFFIXES`, `PREFIX_SKIP_DIRS`
+
+Public on `scitex_app.appmaker`. We ask consumers to report files-scanned
+beside their findings — "0 findings" is not a claim, "0 findings across N
+files" is, and N == 0 means NOT SCANNED rather than CLEAN. scitex-hub found
+that everything needed to produce that number was behind an underscore and
+imported from `_validate` to comply. A request we make of consumers cannot
+depend on a path we tell them not to touch; that is the same defect as
+`validate_prefix_safety` in 0.14.0, found the same day by the same peer.
+
+`scannable_files` is exported alongside the constants so a caller uses THIS
+walk rather than re-deriving the skip rules — a second implementation is a
+second thing to drift.
+
+
 ## [0.14.0] - 2026-09-05
 
 Minor, and BEHAVIOUR-CHANGING for every existing caller of `validate()`:

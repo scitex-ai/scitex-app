@@ -107,6 +107,9 @@ PREFIX_INFERRED_BASE = (
 
 PREFIX_SCAN_SUFFIXES = (".js", ".mjs", ".jsx", ".ts", ".tsx", ".html")
 
+#: The subset of the above whose comments are `<!-- -->` rather than `//`.
+_HTML_SUFFIXES = frozenset({".html", ".htm"})
+
 # Deliberately NOT validator.py's SKIP_DIRS, which excludes "assets" and "dist".
 # The built bundle is what ships and is where these URLs actually live —
 # scitex-writer's offending anchor is in a COMMITTED static/writer/assets/
@@ -193,6 +196,66 @@ def _is_build_config(path: Path) -> bool:
     return any(path.name.startswith(stem) for stem in PREFIX_SKIP_FILE_STEMS)
 
 
+#: Matches an HTML comment, non-greedy so the FIRST `-->` closes it. Unlike the
+#: JS case a regex is safe here: `<!--` has no second meaning inside markup, and
+#: `-->` inside a `<script>` string is handled by scanning scripts separately —
+#: see strip_html_comments.
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+_HTML_SCRIPT_BLOCK = re.compile(
+    r"<script\b[^>]*>.*?</script\s*>", re.DOTALL | re.IGNORECASE
+)
+
+
+def strip_html_comments(source: str) -> str:
+    """Blank out `<!-- ... -->`, leaving `<script>` bodies untouched.
+
+    WHY THIS EXISTS, AND WHY IT IS LATE. `strip_js_comments` below has solved
+    exactly this problem for JavaScript since 2026-09-03, with exactly this
+    argument in its docstring: "a detector keyed on a substring INVERTS ON
+    DOCUMENTATION — the file that best explains why it removed a bad call looks
+    identical to the file that still has it." `.html` was never given the same
+    treatment. Nobody noticed while the rule was a RECORD; it became visible the
+    week the rule became a GATE, because a false positive stopped being noise in
+    a report and started refusing someone's app.
+
+    Measured on the shipped 0.14.0 before this existed:
+
+        <!-- fetch("/api/x"); -->        1 finding   <- text no browser requests
+        <pre>fetch("/api/x");</pre>      1 finding   <- a teaching block
+
+    SCRIPT BODIES ARE EXCLUDED FROM THIS PASS, not because they are safe, but
+    because they are JavaScript and the JS stripper runs over them afterwards.
+    Blanking `<!-- -->` inside a script would also eat the legacy
+    `<!--` guard idiom and, worse, any `-->` appearing inside a JS string would
+    silently terminate a "comment" that never started — turning a false POSITIVE
+    into a false NEGATIVE, which is the trade `strip_js_comments` explicitly
+    refuses to make. A finding that vanishes tells no one why.
+
+    `<pre>` IS DELIBERATELY NOT HANDLED HERE. A code sample in a `<pre>` block
+    is documentation and reports today, but stripping it needs the same
+    both-directions calibration and a clear rule for distinguishing a sample
+    from live markup. Left reporting rather than guessed at; see the card.
+
+    Comments are replaced by spaces of the SAME LENGTH, never deleted, so
+    reported line and column numbers still point at the real source — the same
+    contract as the JS stripper, and the reason a file with a comment on line 3
+    does not misreport every finding after it.
+    """
+    spans = [m.span() for m in _HTML_SCRIPT_BLOCK.finditer(source)]
+
+    def _in_script(pos: int) -> bool:
+        return any(lo <= pos < hi for lo, hi in spans)
+
+    out = list(source)
+    for m in _HTML_COMMENT.finditer(source):
+        if _in_script(m.start()):
+            continue
+        for i in range(m.start(), m.end()):
+            if out[i] != "\n":
+                out[i] = " "
+    return "".join(out)
+
+
 def strip_js_comments(source: str) -> str:
     """Blank out // and /* */ comments, PRESERVING STRING LITERALS.
 
@@ -256,6 +319,24 @@ def strip_js_comments(source: str) -> str:
     return "".join(out)
 
 
+#: The OPENING `{%` of a Django or Jinja tag, anywhere in the literal.
+#:
+#: DELIBERATELY NOT `\{%.*?%\}`. That was the first version and it matched
+#: nothing, because the literal reaching this function is not the source text:
+#: the extractor stops at the inner quote, so
+#:
+#:     fetch("{% url 'api:search' %}")   arrives here as   "{% url "
+#:
+#: — an opening tag with no closing one. Written against what I assumed the
+#: literal looked like rather than what the extractor produces, and found by
+#: running the case rather than by reading the pattern.
+#:
+#: An opening `{%` is sufficient on its own: it has no other meaning inside a
+#: request URL. Unanchored so `"/{% ... %}"` and `"{% ... %}?page=1"` are both
+#: recognised as server-built.
+_TEMPLATE_TAG = re.compile(r"\{%")
+
+
 def _prefix_finding_class(url: str) -> str | None:
     """Classify one request-call URL literal. None = nothing to report.
 
@@ -271,6 +352,20 @@ def _prefix_finding_class(url: str) -> str | None:
     against their CORRECTED tree, and reproduced here against the shipped wheel.
     """
     if not url or url.startswith(_PREFIX_SAFE_LEADERS):
+        return None
+
+    # A Django/Jinja tag: the whole path is produced by the server's URLconf,
+    # which UNDER A MOUNT ALREADY INCLUDES THE MOUNT PREFIX. So this is not
+    # merely undecidable here — it is the prescribed idiom, and 0.14.0 reported
+    # it as a violation. Measured on scitex-hub's tree: 11 of 339 findings were
+    # `{% url %}`, every one of them correct code.
+    #
+    # NOT the same judgement as `${...}` below, and the difference is what makes
+    # both right: there the LEADING SLASH is decidable whatever the expression
+    # yields, so a root-absolute literal is still reported. Here nothing before
+    # the path is ours to read, and per this function's own three-valued rule an
+    # unknown must not be collapsed into a violation.
+    if _TEMPLATE_TAG.search(url):
         return None
 
     leading = _LEADING_INTERPOLATION.match(url)
@@ -294,6 +389,62 @@ def _prefix_finding_class(url: str) -> str | None:
     # DOCUMENT's URL, so it depends on whether the mount happened to be
     # requested with a trailing slash. Works at /app/ and 404s at /app.
     return "inferred-base"
+
+
+def scannable_files(app_dir: str | Path) -> list[Path]:
+    """The files this rule reads, in scan order — the DENOMINATOR of a result.
+
+    "0 findings" is not a claim on its own; "0 findings across N files" is. When
+    N is zero the honest report is NOT SCANNED, not CLEAN, and the two are
+    indistinguishable in a bare finding count.
+
+    This exists because the distinction was not academic. The measurement the
+    2026-09-05 arming decision rested on pointed at `<repo>/.worktrees/
+    prefix-check` in two peer repositories. Those paths DID NOT EXIST. rglob
+    over a missing directory yields nothing, so the scan reported zero findings
+    and was read as clean; the positive control passed throughout, because a
+    control runs on a temp tree that does exist. The instrument was working and
+    aimed at nothing.
+
+    Exported so a caller reporting a denominator uses THIS walk rather than
+    re-deriving it — a second implementation of the skip rules is a second
+    thing to drift. `PREFIX_SCAN_SUFFIXES` and `PREFIX_SKIP_DIRS` are public
+    for the same reason, at scitex-hub's request: they were asked to report
+    files-scanned and the constants needed to do it were behind an underscore.
+    """
+    root = Path(app_dir)
+    _refuse_unscannable(root)
+    out = []
+    for path in sorted(root.rglob("*")):
+        if path.suffix not in PREFIX_SCAN_SUFFIXES or not path.is_file():
+            continue
+        if any(part in PREFIX_SKIP_DIRS for part in path.parts):
+            continue
+        if _is_build_config(path):
+            continue
+        out.append(path)
+    return out
+
+
+def _refuse_unscannable(root: Path) -> None:
+    """Raise rather than answer "clean" about a directory that is not there.
+
+    A wrong path is a CALLER error and the only honest response is to say so.
+    Returning an empty list lets a typo, a removed worktree, or a relative path
+    resolved from the wrong cwd read as a passing result — and this rule is now
+    a gate, so a caller can also "clear" it by pointing it at nothing.
+    """
+    if not root.exists():
+        raise FileNotFoundError(
+            f"cannot scan {root}: no such path. A prefix-safety result of "
+            f"'no findings' would be indistinguishable from 'never scanned', "
+            f"so this refuses rather than reporting clean."
+        )
+    if not root.is_dir():
+        raise NotADirectoryError(
+            f"cannot scan {root}: not a directory. Pass the APP directory; "
+            f"scanning a single file is not what this rule measures."
+        )
 
 
 def validate_prefix_safety(app_dir: str | Path) -> list[str]:
@@ -348,14 +499,9 @@ def validate_prefix_safety(app_dir: str | Path) -> list[str]:
     """
     errors = []
     root = Path(app_dir)
+    _refuse_unscannable(root)
 
-    for path in sorted(root.rglob("*")):
-        if path.suffix not in PREFIX_SCAN_SUFFIXES or not path.is_file():
-            continue
-        if any(part in PREFIX_SKIP_DIRS for part in path.parts):
-            continue
-        if _is_build_config(path):
-            continue
+    for path in scannable_files(root):
         try:
             raw = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -363,6 +509,10 @@ def validate_prefix_safety(app_dir: str | Path) -> list[str]:
         # Comments are not code. Stripped with string literals preserved, and
         # replaced by same-length blanks so reported line numbers still match
         # the file on disk.
+        if path.suffix in _HTML_SUFFIXES:
+            # HTML comments first: an .html file is markup AND script, and the
+            # JS pass below cannot see `<!-- -->`.
+            raw = strip_html_comments(raw)
         content = strip_js_comments(raw)
         relpath = path.relative_to(root)
 

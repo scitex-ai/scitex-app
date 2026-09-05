@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 import json
 
 from scitex_app.appmaker._validate import (
@@ -562,3 +564,176 @@ def test_a_root_absolute_spec_with_import_meta_url_is_still_reported(tmp_path):
     found = _app_with_js(tmp_path, source)
     # Assert
     assert len(found) == 1
+
+
+def test_scanning_a_path_that_is_not_there_refuses_instead_of_reporting_clean(
+    tmp_path,
+):
+    """THIS IS THE BUG THAT ARMED THE RULE ON A FALSE MEASUREMENT.
+
+    The 2026-09-05 scan behind the arming decision pointed at
+    `<repo>/.worktrees/prefix-check` in two peer repositories. Neither path
+    existed. `rglob` over a missing directory yields nothing, so the scan
+    reported ZERO FINDINGS and was read as clean; both repositories in fact
+    carried findings (figrecipe 19, writer 5). The positive control passed the
+    whole time, because a control runs on a temp tree that does exist — the
+    instrument was working and aimed at nothing.
+
+    A written warning does not survive the next person in a hurry. This is the
+    mechanical barrier: a path that is not there cannot answer "clean".
+    """
+    # Arrange
+    from scitex_app.appmaker import validate_prefix_safety as _check
+
+    missing = tmp_path / "worktrees" / "never-created"
+    # Act
+    raised = pytest.raises(FileNotFoundError)
+    # Assert
+    with raised:
+        _check(missing)
+
+
+def test_the_denominator_is_reachable_so_a_zero_can_be_interpreted(tmp_path):
+    """scitex-ui's rule, adopted: "0 findings" is not a claim; "0 findings
+    across N files" is, and N==0 means NOT SCANNED rather than CLEAN.
+
+    We ask peers to report files-scanned beside their findings, so the walk
+    that produces N has to be ours — a second implementation of the skip rules
+    is a second thing to drift.
+    """
+    # Arrange
+    from scitex_app.appmaker import scannable_files
+
+    (tmp_path / "a.js").write_text('fetch("/api/x");', encoding="utf-8")
+    (tmp_path / "b.tsx").write_text("export const x = 1;", encoding="utf-8")
+    (tmp_path / "notes.md").write_text('fetch("/api/x")', encoding="utf-8")
+    skipped = tmp_path / "node_modules"
+    skipped.mkdir()
+    (skipped / "dep.js").write_text('fetch("/api/x");', encoding="utf-8")
+    # Act
+    names = sorted(p.name for p in scannable_files(tmp_path))
+    # Assert — the two source files, not the markdown and not the dependency.
+    assert names == ["a.js", "b.tsx"]
+
+
+def test_validate_still_returns_findings_for_a_missing_app_dir(tmp_path):
+    """The refusal is for the peer running the rule by hand, NOT for the gate.
+
+    validate() already reports a missing app directory as findings, and hub's
+    publication path reads that list. If the armed prefix check started raising
+    through validate(), a bad path would stop being a rejected app and start
+    being a 500.
+    """
+    # Arrange
+    from scitex_app.appmaker._validate import validate as _validate
+
+    # Act
+    reported = _validate(tmp_path / "no-such-app")
+    # Assert
+    assert reported
+
+
+def test_the_walk_constants_are_public_because_we_ask_peers_to_use_them():
+    """scitex-hub was asked to report files-scanned, and found that
+    PREFIX_SCAN_SUFFIXES and PREFIX_SKIP_DIRS were both behind an underscore;
+    they imported from `_validate` to comply. A request we make of consumers
+    cannot depend on a path we tell them not to touch."""
+    # Arrange
+    import scitex_app.appmaker as appmaker
+    # Act
+    exported = {"PREFIX_SCAN_SUFFIXES", "PREFIX_SKIP_DIRS", "scannable_files"}
+    # Assert
+    assert exported <= set(appmaker.__all__)
+
+
+def _html(tmp_path, source):
+    (tmp_path / "page.html").write_text(source, encoding="utf-8")
+    from scitex_app.appmaker import validate_prefix_safety as _check
+
+    return _check(tmp_path)
+
+
+def test_a_url_inside_an_html_comment_is_documentation_not_a_request(tmp_path):
+    """`strip_js_comments` has made this argument for JavaScript since
+    2026-09-03: "a detector keyed on a substring INVERTS ON DOCUMENTATION — the
+    file that best explains why it removed a bad call looks identical to the
+    file that still has it." `.html` was never given the same treatment.
+
+    Nobody noticed while the rule was a RECORD. It became visible the week the
+    rule became a GATE, because a false positive stopped being noise in a report
+    and started refusing to publish someone's app over text no browser requests.
+    """
+    # Arrange
+    source = '<!-- legacy, removed in 0.9: fetch("/api/old"); -->\n<p>hi</p>'
+    # Act
+    reported = _html(tmp_path, source)
+    # Assert
+    assert not reported
+
+
+def test_stripping_a_comment_does_not_swallow_the_live_call_after_it(tmp_path):
+    """The control, and the direction that matters more.
+
+    A stripper that hides too much converts a false POSITIVE into a false
+    NEGATIVE, which is strictly worse: the finding disappears and nothing says
+    why. `strip_js_comments` refuses that trade explicitly and so must this.
+    """
+    # Arrange
+    source = '<!-- old: fetch("/api/old"); -->\n<script>fetch("/api/x");</script>'
+    # Act
+    reported = _html(tmp_path, source)
+    # Assert — reported, and on line 2: comments are blanked, never deleted.
+    assert [e for e in reported if ":2:" in e]
+
+
+def test_a_terminator_inside_a_script_string_does_not_start_hiding_code(
+    tmp_path,
+):
+    """`-->` occurs inside JavaScript strings. If it were treated as a comment
+    terminator, everything up to it would be blanked and any finding in that
+    span would vanish silently — so script bodies are excluded from the HTML
+    pass and left to the JS stripper that runs over them afterwards."""
+    # Arrange
+    source = '<script>const marker = "-->"; fetch("/api/x");</script>'
+    # Act
+    reported = _html(tmp_path, source)
+    # Assert
+    assert reported
+
+
+def test_a_django_template_tag_is_the_prescribed_idiom_not_a_violation(
+    tmp_path,
+):
+    """`{% url %}` is resolved by the server's URLconf, which UNDER A MOUNT
+    ALREADY INCLUDES THE MOUNT PREFIX. 0.14.0 reported it as a violation:
+    measured on scitex-hub's tree, 11 of 339 findings were `{% url %}`, every
+    one of them correct code.
+
+    NOT the same judgement as `${...}` interpolation, which is still reported —
+    there the LEADING SLASH is decidable whatever the expression yields. Here
+    nothing before the path is ours to read, and an unknown must not be
+    collapsed into a violation.
+    """
+    # Arrange
+    source = "<script>fetch(\"{% url 'api:search' %}\");</script>"
+    # Act
+    reported = _html(tmp_path, source)
+    # Assert
+    assert not reported
+
+
+def test_an_interpolated_root_absolute_url_is_still_reported(tmp_path):
+    """The control for the exemption above: the template-tag skip must not
+    become a general "anything with a placeholder is fine". A leading slash is
+    decidable regardless of what the expression yields, and figrecipe ships
+    exactly this shape."""
+    # Arrange
+    (tmp_path / "app.js").write_text(
+        "fetch(`/apps/${BRIDGE_CONFIG.slug}/stats/run`);", encoding="utf-8"
+    )
+    from scitex_app.appmaker import validate_prefix_safety as _check
+
+    # Act
+    reported = _check(tmp_path)
+    # Assert
+    assert reported
