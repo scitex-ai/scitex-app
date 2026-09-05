@@ -11,31 +11,92 @@ from scitex_app.authz import (
     DENIED,
     DENIED_NOT_ENTITLED,
     DENIED_NOT_SIGNED_IN,
+    UNRESOLVED,
     VERDICT_KINDS,
+    ResolveState,
     Verdict,
     VerdictError,
     allowed,
     denied,
     denied_not_entitled,
     denied_not_signed_in,
+    unresolved,
 )
 
 
-# ─── the four kinds, and that there are exactly four ────────────────────────
+# ─── the five kinds, and that there are exactly five ────────────────────────
 
 
-def test_there_are_exactly_four_kinds():
-    """A fifth is REQUIRED the moment a verdict is fetched client-side.
+def test_there_are_exactly_five_kinds():
+    """WAS FOUR UNTIL 2026-09-05. Changed deliberately, in the same commit that
+    added the fifth, and the reason the count is asserted at all is that this
+    test is what forced the change to be a conversation.
 
-    Adding one is a deliberate, coordinated change — scitex-ui's switch is
-    exhaustive over these — so this asserts the count rather than leaving a
-    fifth to appear quietly.
+    It fired twice: once when I found a second unresolved axis and wanted to
+    add `unresolved` unilaterally, and once when the implementation finally
+    required it. Both times the red said "tell scitex-ui first", and both times
+    that was the correct instruction — their switch is exhaustive over these
+    values and a new one is a COMPILE error on their side.
+
+    So this is not a count for its own sake. Adding a sixth must be the same
+    kind of event: coordinated, and ordered TS-first, because the cross-package
+    check reads their INSTALLED wheel and Python-first goes red in a way this
+    side cannot clear.
     """
     # Arrange
     # Act
     count = len(VERDICT_KINDS)
     # Assert
-    assert count == 4
+    assert count == 5
+
+
+def test_unresolved_carries_no_payload():
+    """The reason resolution failed must not reach a page.
+
+    It does not change what the UI renders, and naming it discloses that the
+    service behind this gate is down to a reader who is not authenticated to
+    it — the same argument that kept the unresolved axis name out of the DOM.
+    """
+    # Arrange
+    verdict = unresolved()
+    # Act
+    plain = verdict.to_dict()
+    # Assert
+    assert plain == {"kind": UNRESOLVED}
+
+
+def test_unresolved_is_not_a_denial():
+    """It must never be foldable into the kind that asserts the user is out.
+
+    denied-because-not-signed-in CLAIMS the user is signed out. When resolution
+    failed we do not have that claim, and rendering it tells the user to sign
+    in to a service we could not reach.
+    """
+    # Arrange
+    verdict = unresolved()
+    # Act
+    kind = verdict.kind
+    # Assert
+    assert kind not in (DENIED, DENIED_NOT_SIGNED_IN, DENIED_NOT_ENTITLED)
+
+
+def test_a_sign_in_url_is_refused_on_unresolved():
+    # Arrange — offering a route on a verdict that does not know the answer
+    # invites the user to act on a state we have not established.
+    kind = UNRESOLVED
+    # Act
+    refusal = _refusal(kind=kind, sign_in_url="/accounts/signin")
+    # Assert
+    assert refusal is not None
+
+
+def test_an_upgrade_url_is_refused_on_unresolved():
+    # Arrange
+    kind = UNRESOLVED
+    # Act
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert refusal is not None
 
 
 def test_allowed_carries_no_payload():
@@ -229,6 +290,233 @@ def test_the_serialised_form_needs_no_scitex_app_types_to_read():
     plain = verdict.to_dict()
     # Assert
     assert all(isinstance(v, str) for v in plain.values())
+
+
+# ─── upgrade_url: OPTIONAL, and its absence has ONE meaning ─────────────────
+#
+# scitex-ui's requirement when they approved this payload: pin what absence
+# MEANS, because absence is a normal case here and an unpinned normal case is
+# where a consumer guesses. Absent = no upgrade surface configured (render
+# inert). Absent != "not yet resolved" — that is the `unresolved` kind.
+
+
+def test_upgrade_url_is_carried_when_supplied():
+    # Arrange
+    verdict = denied_not_entitled("pro", upgrade_url="/pricing/")
+    # Act
+    plain = verdict.to_dict()
+    # Assert
+    assert plain["upgrade_url"] == "/pricing/"
+
+
+def test_upgrade_url_is_optional_and_omitted_when_absent():
+    # Arrange — a hub that sells nothing has no upgrade surface, so this is a
+    # normal verdict rather than a malformed one.
+    verdict = denied_not_entitled("pro")
+    # Act
+    keys = set(verdict.to_dict())
+    # Assert
+    assert keys == {"kind", "entitlement"}
+
+
+def test_an_absent_upgrade_url_is_not_an_error():
+    """The asymmetry with sign_in_url, asserted rather than described.
+
+    sign_in_url is REQUIRED on its kind; upgrade_url is not. If this ever
+    becomes required, a self-hosted hub with nothing to sell can no longer
+    build a legal not-entitled verdict.
+    """
+    # Arrange
+    # Act
+    verdict = denied_not_entitled("pro")
+    # Assert
+    assert verdict.upgrade_url is None
+
+
+def test_upgrade_url_is_refused_on_a_plain_denial():
+    # Arrange — a route to upgrade on a verdict that is not about entitlement
+    # tells the user to do something that cannot help.
+    kind = DENIED
+    # Act
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert refusal is not None
+
+
+def test_the_upgrade_url_refusal_names_the_field():
+    # Arrange — the caller is a developer building the wrong shape; the message
+    # is the only thing that tells them WHICH field is at fault.
+    kind = DENIED
+    # Act
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert "upgrade_url" in str(refusal)
+
+
+def test_upgrade_url_is_refused_on_not_signed_in():
+    # Arrange — the kind that already carries a route carries only its own.
+    kind = DENIED_NOT_SIGNED_IN
+    # Act
+    refusal = _refusal(
+        kind=kind, sign_in_url="/accounts/signin", upgrade_url="/pricing/"
+    )
+    # Assert
+    assert refusal is not None
+
+
+def test_upgrade_url_is_refused_on_allowed():
+    # Arrange
+    kind = ALLOWED
+    # Act
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert refusal is not None
+
+
+# ─── the resolve state, which the tripwire below now watches ────────────────
+#
+# These describe the type; the tripwire describes the CONSTRAINT and was
+# written first, deliberately, while there was nothing to constrain.
+
+
+def test_there_are_exactly_three_resolve_states():
+    """A fourth would add a branch to can()'s A/B split without saying so.
+
+    Same reason the kind count is asserted above: the split is exhaustive over
+    these, so a fourth state must be a deliberate edit rather than something
+    that appears.
+    """
+    # Arrange
+    # Act
+    count = len(ResolveState)
+    # Assert
+    assert count == 3
+
+
+def test_not_attempted_is_distinct_from_failed():
+    """The one collapse that makes the whole decomposition unimplementable.
+
+    NOT_ATTEMPTED must RAISE (a caller who never resolved has violated the
+    contract) and FAILED must RETURN a verdict (a real operating state the
+    screen must still draw). Held as one value they are the same state and
+    can() cannot choose.
+    """
+    # Arrange
+    # Act
+    same = ResolveState.NOT_ATTEMPTED is ResolveState.FAILED
+    # Assert
+    assert same is False
+
+
+def test_a_resolve_state_is_not_a_string():
+    """It must not be able to leak into anything serialised.
+
+    A `str` subclass would survive `json.dumps` and a stray `to_dict()`, and
+    what it would leak is that resolution FAILED — i.e. that the service behind
+    this gate is currently down, to a reader who is not authenticated to it.
+    That is the same disclosure argument that kept the unresolved AXIS NAME out
+    of the DOM; this is the mechanical half of it.
+    """
+    # Arrange
+    state = ResolveState.FAILED
+    # Act
+    is_str = isinstance(state, str)
+    # Assert
+    assert is_str is False
+
+
+# ─── the resolve-state tripwire ─────────────────────────────────────────────
+#
+# A TRIPWIRE, NOT A CHECK. It guards a decision made 2026-09-04 with scitex-ui
+# about code that does not exist yet, and it is written to FAIL the moment that
+# code appears — which is the only moment the decision can be violated.
+#
+# THE DECISION. `can()` must distinguish two causes of "unresolved":
+#
+#     A. the caller never resolved        -> RAISE (a contract violation;
+#                                            returning a verdict renders a BUG
+#                                            as a legitimate "not yet known" UI)
+#     B. resolution attempted and FAILED  -> return an `unresolved` verdict
+#        (hub unreachable, timeout, 5xx)     (a real operating state; the screen
+#                                            must still draw something)
+#
+# THAT IS ONLY IMPLEMENTABLE IF THE RESOLVE RESULT IS THREE-VALUED:
+#
+#     NOT_ATTEMPTED | FAILED | RESOLVED
+#
+# Held as "a value, or None" it is TWO-valued, A and B become the same state,
+# and the decomposition silently becomes unimplementable. That is the same
+# three-value collapse this repo hit three times in one week (pass/fail/skip;
+# DIVERGED/AGREE/CANNOT-TELL) — recorded here BEFORE the code rather than found
+# in it afterwards.
+#
+# WHY A TRIPWIRE AND NOT A COMMENT. scitex-ui's objection to the card note, and
+# it is correct: a constraint written in prose fails NOTHING when someone writes
+# the resolver two-valued. It passes review, the suite is green, and nobody is
+# told the decomposition just died. That is §2's declaration-that-evaporates,
+# one step before it becomes a gate that cannot fail.
+#
+# IT ASSERTS THE SHAPE, NOT THE ABSENCE — rewritten 2026-09-04 on scitex-ui's
+# argument, which is better than the version I shipped hours earlier.
+#
+# The first draft asserted that NO resolver exists, so it went red the moment
+# someone added one. That punishes CORRECT work: the person who implements the
+# resolver properly is the first casualty, and the red means "progress" rather
+# than "defect". Repeated, that teaches a reader that red is something to push
+# past — the same harm as a permanently-red retired workflow.
+#
+# This version is silent while the resolver is absent and substantive the moment
+# it appears. Red here always means the same thing: the three-valued constraint
+# was violated. So it never fires on correct work, and its meaning is constant.
+#
+# A conditional guard that is vacuous today is exactly the gate-that-cannot-fail
+# this file is about — which is why it is CALIBRATED in the commit that
+# introduced it: a two-valued resolver makes it red, a three-valued one keeps it
+# green, both observed rather than reasoned.
+
+
+_RESOLVE_STATES = frozenset({"NOT_ATTEMPTED", "FAILED", "RESOLVED"})
+
+
+def _resolve_state_members():
+    """Members of any resolve-state type in authz, or None when there is none.
+
+    THREE-VALUED ITSELF, deliberately, since that is the property it guards:
+      None  -> no resolver yet (guard is vacuous, and says so)
+      set() -> a resolver exists but exposes no members (guard must FAIL: its
+               subject changed shape and it can no longer check what it claims)
+      names -> compare
+    """
+    import scitex_app.authz as authz_module
+
+    found = [
+        getattr(authz_module, n)
+        for n in dir(authz_module)
+        if "Resolve" in n or "resolve" in n
+    ]
+    if not found:
+        return None
+    names = set()
+    for obj in found:
+        names |= {
+            m for m in dir(obj) if m.isupper() and not m.startswith("_")
+        }
+    return names
+
+
+def test_a_resolve_state_if_present_is_three_valued():
+    """Vacuous until a resolver exists; substantive from the moment it does.
+
+    NOT_ATTEMPTED and FAILED must stay distinct: collapsing them makes
+    can()'s A/B split unimplementable (caller-never-resolved must RAISE,
+    resolution-attempted-and-failed must return an `unresolved` verdict).
+    """
+    # Arrange
+    members = _resolve_state_members()
+    # Act
+    verdict = _RESOLVE_STATES if members is None else members
+    # Assert
+    assert verdict == _RESOLVE_STATES
 
 
 # EOF

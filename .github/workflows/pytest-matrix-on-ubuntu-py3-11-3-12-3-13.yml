@@ -106,3 +106,20 @@ jobs:
           # conftest.py that puts its own root on sys.path, so it runs the
           # same way here, from the repo root, and from inside its folder.
           pytest examples/hello_world_app/tests -q
+
+      - name: Run the cross-package agreement checks
+        run: |
+          # THESE RAN NOWHERE UNTIL 2026-09-03, and both files claimed in their
+          # own docstrings that they ran here. Measured on PR #121:
+          #     test__django_marker_agreement.py   .ss......
+          #     test_authz_kinds_agreement.py      ..s.....
+          # The matrix job installs no scitex-ui, so every cross-package arm
+          # SKIPPED there; and this job -- the only one that installs it -- ran
+          # only the example's own tests. A skipped test and a passing test look
+          # identical in a summary line, which is how that survived a week.
+          #
+          # Kept in THIS job on purpose rather than moved into the matrix:
+          # scitex-app must not gain a dependency on scitex-ui, and this job is
+          # deliberately not a required context, so these stay a RECORD.
+          pytest tests/scitex_app/test__django_marker_agreement.py \
+                 tests/scitex_app/test_authz_kinds_agreement.py -q

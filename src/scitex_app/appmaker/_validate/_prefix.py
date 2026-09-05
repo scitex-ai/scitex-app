@@ -60,6 +60,42 @@ PREFIX_URL_BINDING = re.compile(
     re.IGNORECASE,
 )
 
+# A BINDING'S NAME IS NOT EVIDENCE ABOUT ITS VALUE. `ATTR_SIGN_IN_URL` ends in
+# _URL because it NAMES THE ATTRIBUTE THAT HOLDS a url -- the opposite of the
+# string being one. Measured in scitex-ui's dim/_Dim.ts:43:
+#
+#     const ATTR_SIGN_IN_URL = "data-stx-dim-sign-in-url";
+#     -> inferred-base request URL 'data-stx-dim-sign-in-url'
+#
+# So the binding pattern additionally requires the VALUE to carry a path
+# separator. Tightening the NAME list instead is whack-a-mole: ATTR_*_URL,
+# *_URL_PARAM and *_URL_HEADER are all the same shape.
+#
+# THE COST, stated because an enumeration's exclusions are invisible in its
+# output: `const url = "search"` -- a single segment with no separator, fetched
+# later -- is no longer reported. That value is genuinely UNDECIDABLE from the
+# literal alone, and this rule already refuses to report undecidable cases as
+# violations (see the variable-prefixed exclusion on validate_prefix_safety).
+# Reporting unknown as a violation is the bug this file was written to avoid.
+# The DIRECT form `fetch("search")` is unaffected -- it still reports.
+_BINDING_VALUE_IS_PATHLIKE = re.compile(r"[/]|^\$\{")
+
+# `new URL(<spec>, import.meta.url)` is the BUNDLER'S module-relative asset
+# reference. Vite/Rollup resolve it at BUILD time into a hashed asset URL; it
+# issues no runtime request and never resolves against the mount.
+#
+# THIS INDICTS AN EARLIER FIX OF MINE. On 2026-09-03 I removed exactly this
+# idiom -- `new URL(".", import.meta.url)` -- by excluding the FILE it appeared
+# in (vite.config, via PREFIX_SKIP_FILE_STEMS). That is not the discriminator.
+# The signature is the SECOND ARGUMENT, and the idiom is just as valid in
+# application source, where no file-based exclusion reaches it. Measured hours
+# later in scitex-ui's pdf-viewer/index.ts:110, reported against code that is
+# correct. Keying on WHERE a construct appears rather than WHAT it is leaves
+# the class intact.
+PREFIX_BUILD_TIME_URL = re.compile(
+    r"new\s+URL\s*\(\s*" + _LITERAL + r"\s*,\s*import\.meta\.url"
+)
+
 # Reading an implicit base out of the document/location and slicing it. These
 # produce a base by INFERENCE, which is what breaks across mounts.
 PREFIX_INFERRED_BASE = (
@@ -76,7 +112,46 @@ PREFIX_SCAN_SUFFIXES = (".js", ".mjs", ".jsx", ".ts", ".tsx", ".html")
 # scitex-writer's offending anchor is in a COMMITTED static/writer/assets/
 # index.js, and its TS source can disagree with it. Skipping build output would
 # hide the population this rule exists to measure.
-PREFIX_SKIP_DIRS = frozenset({"node_modules", ".git", "__pycache__", ".vite", "_docs"})
+# INSTALLED DEPENDENCIES ARE NOT THE APPLICATION, and until 2026-09-03 this set
+# said so for JavaScript only. "node_modules" was excluded from the first
+# version; the Python equivalent never was, so a scan pointed at a project ROOT
+# descended into the virtualenv and reported the app's own dependencies as its
+# violations. Measured against three peer checkouts, each of which holds a
+# .venv/:
+#     scitex-writer 46, scitex-scholar 46, scitex-ui 48 findings
+# dominated by playwright's driver bundle (a TEST tool), matplotlib's
+# web_backend templates, and figrecipe's built assets installed as a package.
+# None of those ship under the scanned app's mount, so none can break under it.
+# scitex-scholar in particular reads 46 here while its own source is clean.
+#
+# "site-packages" rather than the venv's NAME is what does the work: it holds
+# whatever the directory is called (.venv, venv, env, /opt/venv-sac). The two
+# venv names are listed as well so files directly under a venv root are covered.
+#
+# NOT added, deliberately: "dist" and "assets" - see the note above. Vendored
+# code the app SHIPS stays in scope for the same reason; scitex-writer's PDF.js
+# reaches the browser under the mount, so its findings are real.
+PREFIX_SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".vite",
+        "_docs",
+        "site-packages",
+        ".venv",
+        "venv",
+        # A LINKED WORKTREE IS ANOTHER CHECKOUT OF THIS SAME REPO, so every
+        # finding in the real tree is reported again for each worktree holding
+        # that file. Measured the same day, after the dependency fix above:
+        #     scitex-writer  10 rows -> 5 distinct, the rest .worktrees/ copies
+        #     scitex-ui       6 rows -> 3 distinct, likewise
+        # The duplicates name paths that are not the tree the author is fixing,
+        # and the count is a function of how many branches happen to be checked
+        # out — which is not a property of the application at all.
+        ".worktrees",
+    }
+)
 
 # BUILD CONFIGURATION IS NOT APPLICATION CODE, and this rule's own docstring
 # already said so — "Static/asset base paths (a bundler `base` setting) are NOT
@@ -87,6 +162,16 @@ PREFIX_SKIP_DIRS = frozenset({"node_modules", ".git", "__pycache__", ".vite", "_
 # idiom evaluated at BUILD time. It issues no request, reaches no browser, and
 # has no mount to resolve against. A documented exclusion that the code does not
 # implement is not an exclusion.
+# RE-CHECKED 2026-09-03 against the new construct-level rule, and KEPT.
+# Disabling this list entirely changes NOTHING on three real trees:
+#     writer delta=0   scholar delta=0   ui delta=0
+# so it is currently subsumed. It stays anyway, and the reason is the LIMIT of
+# that measurement rather than affection for the mechanism: the only build
+# config present in those trees is vite.config. Dropping the rollup/webpack/
+# esbuild entries on vite-only evidence would extrapolate past what was
+# measured. Re-run the comparison when a tree here carries one of the others;
+# if it is still zero, this list should go rather than linger as a second
+# mechanism for one job.
 PREFIX_SKIP_FILE_STEMS = (
     "vite.config",
     "rollup.config",
@@ -274,8 +359,30 @@ def validate_prefix_safety(app_dir: str | Path) -> list[str]:
         relpath = path.relative_to(root)
 
         seen_lines = set()
+        # Spans covering `new URL(<spec>, import.meta.url)`. Collected FIRST so
+        # a match landing inside one can be dropped: that literal is a module
+        # specifier the bundler resolves at build time, not a request URL.
+        # A ROOT-ABSOLUTE specifier is NOT exempt, even here: `new URL("/x", base)`
+        # discards the base's path and resolves from the origin root, so
+        # import.meta.url does not save it and it still breaks under a mount.
+        # Measured -- suppressing the whole construct silently killed a REAL
+        # finding in scitex-writer's built bundle:
+        #     claims-list.js:1 root-absolute '/static/writer/assets/pdf.worker.min.mjs'
+        # Found only by asking WHICH row disappeared rather than trusting a
+        # count that had moved in the direction I wanted.
+        build_time_spans = [
+            m.span()
+            for m in PREFIX_BUILD_TIME_URL.finditer(content)
+            if not m.group(1).startswith("/")
+        ]
         for pattern in (PREFIX_REQUEST_LITERAL, PREFIX_URL_BINDING, _XHR_OPEN_URL):
           for match in pattern.finditer(content):
+            if any(lo <= match.start() < hi for lo, hi in build_time_spans):
+                continue
+            if pattern is PREFIX_URL_BINDING and not _BINDING_VALUE_IS_PATHLIKE.search(
+                match.group(1)
+            ):
+                continue  # a url-ish NAME says nothing about the VALUE
             kind = _prefix_finding_class(match.group(1))
             if kind is None:
                 continue
