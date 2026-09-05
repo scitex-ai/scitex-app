@@ -231,6 +231,87 @@ def test_the_serialised_form_needs_no_scitex_app_types_to_read():
     assert all(isinstance(v, str) for v in plain.values())
 
 
+# ─── upgrade_url: OPTIONAL, and its absence has ONE meaning ─────────────────
+#
+# scitex-ui's requirement when they approved this payload: pin what absence
+# MEANS, because absence is a normal case here and an unpinned normal case is
+# where a consumer guesses. Absent = no upgrade surface configured (render
+# inert). Absent != "not yet resolved" — that is the `unresolved` kind.
+
+
+def test_upgrade_url_is_carried_when_supplied():
+    # Arrange
+    verdict = denied_not_entitled("pro", upgrade_url="/pricing/")
+    # Act
+    plain = verdict.to_dict()
+    # Assert
+    assert plain["upgrade_url"] == "/pricing/"
+
+
+def test_upgrade_url_is_optional_and_omitted_when_absent():
+    # Arrange — a hub that sells nothing has no upgrade surface, so this is a
+    # normal verdict rather than a malformed one.
+    verdict = denied_not_entitled("pro")
+    # Act
+    keys = set(verdict.to_dict())
+    # Assert
+    assert keys == {"kind", "entitlement"}
+
+
+def test_an_absent_upgrade_url_is_not_an_error():
+    """The asymmetry with sign_in_url, asserted rather than described.
+
+    sign_in_url is REQUIRED on its kind; upgrade_url is not. If this ever
+    becomes required, a self-hosted hub with nothing to sell can no longer
+    build a legal not-entitled verdict.
+    """
+    # Arrange
+    # Act
+    verdict = denied_not_entitled("pro")
+    # Assert
+    assert verdict.upgrade_url is None
+
+
+def test_upgrade_url_is_refused_on_a_plain_denial():
+    # Arrange — a route to upgrade on a verdict that is not about entitlement
+    # tells the user to do something that cannot help.
+    kind = DENIED
+    # Act
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert refusal is not None
+
+
+def test_the_upgrade_url_refusal_names_the_field():
+    # Arrange — the caller is a developer building the wrong shape; the message
+    # is the only thing that tells them WHICH field is at fault.
+    kind = DENIED
+    # Act
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert "upgrade_url" in str(refusal)
+
+
+def test_upgrade_url_is_refused_on_not_signed_in():
+    # Arrange — the kind that already carries a route carries only its own.
+    kind = DENIED_NOT_SIGNED_IN
+    # Act
+    refusal = _refusal(
+        kind=kind, sign_in_url="/accounts/signin", upgrade_url="/pricing/"
+    )
+    # Assert
+    assert refusal is not None
+
+
+def test_upgrade_url_is_refused_on_allowed():
+    # Arrange
+    kind = ALLOWED
+    # Act
+    refusal = _refusal(kind=kind, upgrade_url="/pricing/")
+    # Assert
+    assert refusal is not None
+
+
 # ─── the resolve-state tripwire ─────────────────────────────────────────────
 #
 # A TRIPWIRE, NOT A CHECK. It guards a decision made 2026-09-04 with scitex-ui
