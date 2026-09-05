@@ -39,6 +39,7 @@ into every self-hosted install.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Optional
 
 #: The four answers. `kind` is always exactly one of these.
@@ -160,11 +161,71 @@ def denied_not_entitled(entitlement: str) -> Verdict:
     return Verdict(kind=DENIED_NOT_ENTITLED, entitlement=entitlement)
 
 
+# ─── resolving the inputs a verdict is computed FROM ────────────────────────
+#
+# NOT PART OF THE VERDICT CONTRACT. `Verdict` crosses a package boundary as
+# plain data; this does not cross anything. It describes how far `can()`'s
+# CALLER got in resolving auth and entitlement before asking, and it exists
+# only inside this package.
+
+
+class ResolveState(Enum):
+    """How far resolution got. THREE-valued, and the third value is the point.
+
+    `can()` is synchronous and total: it answers from state already resolved,
+    and resolving is an explicit step BEFORE it. So `can()` must be able to
+    tell apart two situations that a "value, or None" field renders identical:
+
+        NOT_ATTEMPTED   the caller never resolved. A CONTRACT VIOLATION --
+                        "resolve before render" is the documented step. can()
+                        RAISES, because returning an `unresolved` verdict here
+                        would render a BUG as a legitimate "not yet known" UI,
+                        permanently and invisibly.
+
+        FAILED          resolution was attempted and did not succeed -- hub
+                        unreachable, timeout, 5xx. NOT a bug; a real operating
+                        state, and the screen must still draw something. can()
+                        RETURNS a verdict, because raising here pushes every
+                        app author into try/except writing their own
+                        unknown-display, scattering the judgement this module
+                        exists to hold in one place.
+
+        RESOLVED        an answer is available.
+
+    Held as "a value, or None", NOT_ATTEMPTED and FAILED become the same state
+    and that whole split silently becomes unimplementable. Agreed with
+    scitex-ui 2026-09-04; guarded since by a tripwire in this module's tests
+    that was written BEFORE this type existed, and which this type is the first
+    thing to make substantive.
+
+    WHY AN ENUM AND NOT STRINGS, unlike the verdict kinds directly above. Those
+    are strings because they are SERIALISED and read by another language. These
+    are not, and must not be: a string state would be one `to_dict()` away from
+    leaking "the service behind this gate is currently down" into page source,
+    which is availability information about a system the reader is not
+    authenticated to. Deliberately not a `str` subclass, so that leak cannot
+    happen by accident.
+
+    WHAT THIS TYPE DELIBERATELY DOES NOT DO: carry the resolved VALUE. A
+    container pairing state with value (refusing RESOLVED-without-a-value, the
+    way `Verdict` refuses a payload on the wrong kind) is the obvious next
+    shape and was considered here. It is not built because nothing resolves
+    anything yet -- there is no resolver, no hub URL configuration and no token
+    storage -- so its fields would be invented rather than observed. Recorded
+    as a deliberate omission so the next reader does not have to re-derive it.
+    """
+
+    NOT_ATTEMPTED = "not-attempted"
+    FAILED = "failed"
+    RESOLVED = "resolved"
+
+
 __all__ = [
     "ALLOWED",
     "DENIED",
     "DENIED_NOT_ENTITLED",
     "DENIED_NOT_SIGNED_IN",
+    "ResolveState",
     "VERDICT_KINDS",
     "Verdict",
     "VerdictError",
