@@ -299,10 +299,18 @@ def _prefix_finding_class(url: str) -> str | None:
 def validate_prefix_safety(app_dir: str | Path) -> list[str]:
     """Report request URLs that do not resolve correctly under an app mount.
 
-    NOT ARMED. `validate()` skips this unless `check_prefix_safety=True`, so
-    today this produces a RECORD, not a gate — no caller fails a build on it.
-    Saying so explicitly because calling it a "validator" implies the stronger
-    claim, and a check nobody branches on is not a check.
+    ARMED 2026-09-05. `validate()` runs this by default, so it is now a GATE:
+    callers that raise on a non-empty result — including scitex-hub's
+    PUBLICATION path — will refuse an app over it. It said "NOT ARMED … a check
+    nobody branches on is not a check" from the day it was written until the day
+    that stopped being true.
+
+    ARMED ON MEASUREMENT, NOT ON ELAPSED TIME. Every consumer repo was scanned
+    on its current ref, each against a positive control so a zero was
+    distinguishable from a scan that never ran: writer / figrecipe / scholar
+    clean, and scitex-hub 29 app dirs / 1471 files / 0 findings with a control
+    returning exactly 1. hub asked to be consulted before arming and gave the
+    go-ahead 2026-09-05T20:16Z.
 
     TWO CLASSES, and the second is the reason this rule exists:
 

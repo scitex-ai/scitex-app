@@ -102,7 +102,7 @@ __all__ = [
 def validate(
     app_dir: str | Path,
     *,
-    check_prefix_safety: bool = False,
+    check_prefix_safety: bool = True,
     check_js_safety: bool = False,
     check_bundle_size: bool = False,
     check_privileges: bool = False,
@@ -111,8 +111,11 @@ def validate(
 
     Returns list of error strings (empty = valid). Everything returned here is a
     FAILURE; advisory findings come back separately from
-    validate_with_warnings(). Every `check_*` keyword defaults to False, so the
-    set of checks a caller gets without asking is unchanged.
+    validate_with_warnings().
+
+    `check_prefix_safety` defaults to True as of 2026-09-05; the rest still
+    default to False. A caller that names no keyword therefore gets the prefix
+    rule, which is a BEHAVIOUR CHANGE for every existing call site.
     """
     errors, _ = validate_with_warnings(
         app_dir,
@@ -127,7 +130,7 @@ def validate(
 def validate_with_warnings(
     app_dir: str | Path,
     *,
-    check_prefix_safety: bool = False,
+    check_prefix_safety: bool = True,
     check_js_safety: bool = False,
     check_bundle_size: bool = False,
     check_privileges: bool = False,
@@ -149,16 +152,21 @@ def validate_with_warnings(
     matches their enforcement, including the forbidden `version` key, whose
     message cites the incident where every hub app tile showed a wrong version.
 
-    EVERY `check_*` KEYWORD IS OFF BY DEFAULT, and that default IS the arming
-    switch — flipping one to True is the whole of "arm that rule". They are
-    named keywords rather than one blanket flag so each stays greppable and
-    individually revisitable; each rule's own docstring says why it is not yet
-    armed and what has to be true first.
+    THE `check_*` DEFAULT IS THE ARMING SWITCH — flipping one to True is the
+    whole of "arm that rule". They are named keywords rather than one blanket
+    flag so each stays greppable and individually revisitable; each rule's own
+    docstring says whether it is armed, and if not, what has to be true first.
 
-        check_prefix_safety   request URLs that break under a mount
-        check_js_safety       dangerous patterns in the app's JavaScript
-        check_bundle_size     total shipped size against a threshold
-        check_privileges      shape of the manifest's privilege declaration
+        check_prefix_safety   request URLs that break under a mount   ARMED
+        check_js_safety       dangerous patterns in the app's JS      not armed
+        check_bundle_size     total shipped size against a threshold  not armed
+        check_privileges      shape of the privilege declaration      not armed
+
+    This paragraph read "EVERY `check_*` KEYWORD IS OFF BY DEFAULT" until the
+    day one was not. It is listed per-rule now because a sentence quantified
+    over all of them goes false the first time any single one is armed, and a
+    docstring that is false about the arming state of a GATE is worse than no
+    docstring — the reader has no reason to doubt it.
 
     The last three were PORTED from `scitex_app.validator.AppValidator`, where
     they worked, were tested, were described to app developers by the shipped
