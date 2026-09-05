@@ -194,16 +194,4 @@ def test_the_public_name_is_declared_in_all():
     assert declared is True
 
 
-def test_the_private_alias_still_resolves_to_the_same_function():
-    """The migration window: figrecipe's merged import must keep working."""
-    # Arrange
-    import scitex_app
-    from scitex_app._standalone import _hosts_to_allow
-
-    # Act
-    same = _hosts_to_allow is scitex_app.hosts_to_allow
-    # Assert
-    assert same is True
-
-
 # EOF
