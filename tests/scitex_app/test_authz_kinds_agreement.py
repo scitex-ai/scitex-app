@@ -103,7 +103,11 @@ from scitex_app.authz import (
     VERDICT_KINDS,
 )
 
-from ._ts_agreement import installed_scitex_ui_root, strip_ts_comments
+from ._ts_agreement import (
+    installed_scitex_ui_root,
+    installed_scitex_ui_version,
+    strip_ts_comments,
+)
 
 #: `export const ALLOWED = "allowed";` — anchored on the DECLARATION, never on
 #: the bare string, so prose naming a kind cannot satisfy it. The name is
@@ -226,11 +230,14 @@ def types_ts_source(ui_root: Path) -> str:
     """
     path = ui_root / _TYPES_TS_RELPATH
     assert path.exists(), (
-        f"scitex-ui is installed but does not ship {_TYPES_TS_RELPATH} — "
-        "either it has not been released yet (expected until scitex-ui ships "
-        "the dim component) or the path moved. Update the path rather than "
-        "deleting the check: five strings duplicated across two languages with "
-        "no reader-side verification is how the contract silently diverges."
+        f"scitex-ui {installed_scitex_ui_version()} is installed and does not "
+        f"ship {_TYPES_TS_RELPATH} — either that version predates the dim "
+        "component, or the path moved. CHECK THE VERSION FIRST: this leg "
+        "installs scitex-ui UNPINNED, so a PyPI propagation window can resolve "
+        "an older wheel and produce this failure with nothing wrong. Update "
+        "the path rather than deleting the check: five strings duplicated "
+        "across two languages with no reader-side verification is how the "
+        "contract silently diverges."
     )
     return path.read_text(encoding="utf-8")
 
@@ -287,11 +294,34 @@ def test_the_count_here_matches_the_count_asserted_in_test_authz():
 
 
 def test_the_typescript_kinds_agree_with_the_python_kinds(types_ts_source):
+    """A failure here names the WHEEL it read, and that is not decoration.
+
+    This leg installs scitex-ui UNPINNED. A wheel older than the newest kind
+    fails this comparison TRUTHFULLY about the artifact and FALSELY about the
+    contract, and the two are indistinguishable in the output unless the
+    version is in it. scitex-ui records each kind's introducing release beside
+    the kind in types.ts, so a reader with the version in hand can settle it in
+    one glance.
+    """
     # Arrange
     # Act
     ts_kinds = _read_ts_kinds(types_ts_source)
     # Assert
-    assert ts_kinds == _PY_KINDS
+    differing = sorted(
+        set(ts_kinds) | set(_PY_KINDS),
+        key=lambda name: (ts_kinds.get(name) == _PY_KINDS.get(name), name),
+    )
+    detail = ", ".join(
+        f"{name}: ts={ts_kinds.get(name)!r} py={_PY_KINDS.get(name)!r}"
+        for name in differing
+        if ts_kinds.get(name) != _PY_KINDS.get(name)
+    )
+    assert ts_kinds == _PY_KINDS, (
+        f"installed scitex-ui {installed_scitex_ui_version()} disagrees with "
+        f"this package: {detail}. If that version predates the differing kind, "
+        "this is a stale install rather than a broken contract — types.ts "
+        "records each kind's introducing release next to the kind."
+    )
 
 
 def test_a_kind_added_only_in_typescript_is_detected():
