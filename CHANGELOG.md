@@ -7,6 +7,58 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-09-05
+
+Patch. The armed prefix rule no longer reports documentation as a violation.
+
+### Fixed — a URL inside an HTML comment was an ERROR
+
+`strip_js_comments` has stripped `//` and `/* */` since 2026-09-03, with the
+reason in its own docstring: a detector keyed on a substring INVERTS ON
+DOCUMENTATION — the file that best explains why it removed a bad call looks
+identical to the file that still has it. `.html` never got the same treatment.
+
+Nobody noticed while the rule was a RECORD. It became visible the week the rule
+became a GATE, because a false positive stopped being noise in a report and
+started refusing to publish an app over text no browser ever requests.
+
+`<script>` bodies are excluded from the HTML pass and left to the JS stripper
+that runs over them afterwards: `-->` occurs inside JavaScript strings, and
+treating one as a comment terminator would blank everything before it and make
+a real finding disappear — trading a false positive for a false negative, which
+is the trade `strip_js_comments` explicitly refuses. Comments are blanked to
+same-length spaces, never deleted, so reported line numbers still point at the
+real source.
+
+A `<pre>` code sample still reports. Distinguishing a teaching block from live
+markup needs its own calibration and is not guessed at here.
+
+### Fixed — `{% url %}` was reported as a violation
+
+A Django or Jinja tag is resolved by the server's URLconf, which under a mount
+already includes the mount prefix: it is the prescribed idiom. Measured on
+scitex-hub's tree, 11 of 339 findings were `{% url %}`, every one correct code.
+
+This is NOT the same judgement as `${...}` interpolation, which is still
+reported: there the LEADING SLASH is decidable whatever the expression yields.
+For a template tag nothing before the path is ours to read, and an unknown must
+not be collapsed into a violation.
+
+### Measured effect on the consumer trees, at their refs
+
+    scitex-hub       1975 files    339 -> 328    (-11, exactly the template tags)
+    figrecipe         116 files     19 ->  19
+    scitex-writer     144 files      5 ->   5
+    scitex-cards       94 files      4 ->   4
+    scitex-scholar     74 files      0 ->   0
+    scitex-storage     26 files      0 ->   0
+
+Nothing else moved. Both fixes were also calibrated in the direction that
+matters more — a live call after a comment, a live call on the same line as
+one, a `-->` inside a script string, and an interpolated root-absolute URL all
+still report, with correct line numbers.
+
+
 ## [0.14.1] - 2026-09-05
 
 Patch. `validate_prefix_safety` no longer answers "clean" about a directory
