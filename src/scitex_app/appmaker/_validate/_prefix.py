@@ -296,6 +296,62 @@ def _prefix_finding_class(url: str) -> str | None:
     return "inferred-base"
 
 
+def scannable_files(app_dir: str | Path) -> list[Path]:
+    """The files this rule reads, in scan order — the DENOMINATOR of a result.
+
+    "0 findings" is not a claim on its own; "0 findings across N files" is. When
+    N is zero the honest report is NOT SCANNED, not CLEAN, and the two are
+    indistinguishable in a bare finding count.
+
+    This exists because the distinction was not academic. The measurement the
+    2026-09-05 arming decision rested on pointed at `<repo>/.worktrees/
+    prefix-check` in two peer repositories. Those paths DID NOT EXIST. rglob
+    over a missing directory yields nothing, so the scan reported zero findings
+    and was read as clean; the positive control passed throughout, because a
+    control runs on a temp tree that does exist. The instrument was working and
+    aimed at nothing.
+
+    Exported so a caller reporting a denominator uses THIS walk rather than
+    re-deriving it — a second implementation of the skip rules is a second
+    thing to drift. `PREFIX_SCAN_SUFFIXES` and `PREFIX_SKIP_DIRS` are public
+    for the same reason, at scitex-hub's request: they were asked to report
+    files-scanned and the constants needed to do it were behind an underscore.
+    """
+    root = Path(app_dir)
+    _refuse_unscannable(root)
+    out = []
+    for path in sorted(root.rglob("*")):
+        if path.suffix not in PREFIX_SCAN_SUFFIXES or not path.is_file():
+            continue
+        if any(part in PREFIX_SKIP_DIRS for part in path.parts):
+            continue
+        if _is_build_config(path):
+            continue
+        out.append(path)
+    return out
+
+
+def _refuse_unscannable(root: Path) -> None:
+    """Raise rather than answer "clean" about a directory that is not there.
+
+    A wrong path is a CALLER error and the only honest response is to say so.
+    Returning an empty list lets a typo, a removed worktree, or a relative path
+    resolved from the wrong cwd read as a passing result — and this rule is now
+    a gate, so a caller can also "clear" it by pointing it at nothing.
+    """
+    if not root.exists():
+        raise FileNotFoundError(
+            f"cannot scan {root}: no such path. A prefix-safety result of "
+            f"'no findings' would be indistinguishable from 'never scanned', "
+            f"so this refuses rather than reporting clean."
+        )
+    if not root.is_dir():
+        raise NotADirectoryError(
+            f"cannot scan {root}: not a directory. Pass the APP directory; "
+            f"scanning a single file is not what this rule measures."
+        )
+
+
 def validate_prefix_safety(app_dir: str | Path) -> list[str]:
     """Report request URLs that do not resolve correctly under an app mount.
 
@@ -348,14 +404,9 @@ def validate_prefix_safety(app_dir: str | Path) -> list[str]:
     """
     errors = []
     root = Path(app_dir)
+    _refuse_unscannable(root)
 
-    for path in sorted(root.rglob("*")):
-        if path.suffix not in PREFIX_SCAN_SUFFIXES or not path.is_file():
-            continue
-        if any(part in PREFIX_SKIP_DIRS for part in path.parts):
-            continue
-        if _is_build_config(path):
-            continue
+    for path in scannable_files(root):
         try:
             raw = path.read_text(encoding="utf-8", errors="replace")
         except OSError:

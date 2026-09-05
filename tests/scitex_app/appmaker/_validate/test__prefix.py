@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 import json
 
 from scitex_app.appmaker._validate import (
@@ -562,3 +564,83 @@ def test_a_root_absolute_spec_with_import_meta_url_is_still_reported(tmp_path):
     found = _app_with_js(tmp_path, source)
     # Assert
     assert len(found) == 1
+
+
+def test_scanning_a_path_that_is_not_there_refuses_instead_of_reporting_clean(
+    tmp_path,
+):
+    """THIS IS THE BUG THAT ARMED THE RULE ON A FALSE MEASUREMENT.
+
+    The 2026-09-05 scan behind the arming decision pointed at
+    `<repo>/.worktrees/prefix-check` in two peer repositories. Neither path
+    existed. `rglob` over a missing directory yields nothing, so the scan
+    reported ZERO FINDINGS and was read as clean; both repositories in fact
+    carried findings (figrecipe 19, writer 5). The positive control passed the
+    whole time, because a control runs on a temp tree that does exist — the
+    instrument was working and aimed at nothing.
+
+    A written warning does not survive the next person in a hurry. This is the
+    mechanical barrier: a path that is not there cannot answer "clean".
+    """
+    # Arrange
+    from scitex_app.appmaker import validate_prefix_safety as _check
+
+    missing = tmp_path / "worktrees" / "never-created"
+    # Act
+    raised = pytest.raises(FileNotFoundError)
+    # Assert
+    with raised:
+        _check(missing)
+
+
+def test_the_denominator_is_reachable_so_a_zero_can_be_interpreted(tmp_path):
+    """scitex-ui's rule, adopted: "0 findings" is not a claim; "0 findings
+    across N files" is, and N==0 means NOT SCANNED rather than CLEAN.
+
+    We ask peers to report files-scanned beside their findings, so the walk
+    that produces N has to be ours — a second implementation of the skip rules
+    is a second thing to drift.
+    """
+    # Arrange
+    from scitex_app.appmaker import scannable_files
+
+    (tmp_path / "a.js").write_text('fetch("/api/x");', encoding="utf-8")
+    (tmp_path / "b.tsx").write_text("export const x = 1;", encoding="utf-8")
+    (tmp_path / "notes.md").write_text('fetch("/api/x")', encoding="utf-8")
+    skipped = tmp_path / "node_modules"
+    skipped.mkdir()
+    (skipped / "dep.js").write_text('fetch("/api/x");', encoding="utf-8")
+    # Act
+    names = sorted(p.name for p in scannable_files(tmp_path))
+    # Assert — the two source files, not the markdown and not the dependency.
+    assert names == ["a.js", "b.tsx"]
+
+
+def test_validate_still_returns_findings_for_a_missing_app_dir(tmp_path):
+    """The refusal is for the peer running the rule by hand, NOT for the gate.
+
+    validate() already reports a missing app directory as findings, and hub's
+    publication path reads that list. If the armed prefix check started raising
+    through validate(), a bad path would stop being a rejected app and start
+    being a 500.
+    """
+    # Arrange
+    from scitex_app.appmaker._validate import validate as _validate
+
+    # Act
+    reported = _validate(tmp_path / "no-such-app")
+    # Assert
+    assert reported
+
+
+def test_the_walk_constants_are_public_because_we_ask_peers_to_use_them():
+    """scitex-hub was asked to report files-scanned, and found that
+    PREFIX_SCAN_SUFFIXES and PREFIX_SKIP_DIRS were both behind an underscore;
+    they imported from `_validate` to comply. A request we make of consumers
+    cannot depend on a path we tell them not to touch."""
+    # Arrange
+    import scitex_app.appmaker as appmaker
+    # Act
+    exported = {"PREFIX_SCAN_SUFFIXES", "PREFIX_SKIP_DIRS", "scannable_files"}
+    # Assert
+    assert exported <= set(appmaker.__all__)

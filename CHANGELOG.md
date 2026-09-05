@@ -7,6 +7,46 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-09-05
+
+Patch. `validate_prefix_safety` no longer answers "clean" about a directory
+that is not there, and the walk behind a files-scanned count is now public.
+
+### Fixed — a missing path returned zero findings instead of refusing
+
+`validate_prefix_safety("/path/that/does/not/exist")` returned `[]`. `rglob`
+over a missing directory yields nothing, so a typo, a removed worktree, or a
+relative path resolved from the wrong directory read as a passing result. It
+now raises `FileNotFoundError` (and `NotADirectoryError` for a file).
+
+THIS IS NOT HYPOTHETICAL — IT IS HOW 0.14.0 WAS ARMED. The scan behind that
+decision pointed at `<repo>/.worktrees/prefix-check` in two peer repositories.
+Neither path existed. Both reported zero findings and were announced as clean;
+measured afterwards on the same refs with the published wheel, figrecipe has 19
+findings and scitex-writer 5. **The positive control passed throughout**,
+because a control runs on a temp tree that does exist. The instrument was
+working and aimed at nothing.
+
+`validate()` and `validate_with_warnings()` are unchanged for a missing app
+directory: they still report it as findings rather than raising, because a
+publication gate reads that list and must not start receiving an exception.
+The refusal is for the direct caller running the rule against their own tree.
+
+### Added — `scannable_files`, `PREFIX_SCAN_SUFFIXES`, `PREFIX_SKIP_DIRS`
+
+Public on `scitex_app.appmaker`. We ask consumers to report files-scanned
+beside their findings — "0 findings" is not a claim, "0 findings across N
+files" is, and N == 0 means NOT SCANNED rather than CLEAN. scitex-hub found
+that everything needed to produce that number was behind an underscore and
+imported from `_validate` to comply. A request we make of consumers cannot
+depend on a path we tell them not to touch; that is the same defect as
+`validate_prefix_safety` in 0.14.0, found the same day by the same peer.
+
+`scannable_files` is exported alongside the constants so a caller uses THIS
+walk rather than re-deriving the skip rules — a second implementation is a
+second thing to drift.
+
+
 ## [0.14.0] - 2026-09-05
 
 Minor, and BEHAVIOUR-CHANGING for every existing caller of `validate()`:
