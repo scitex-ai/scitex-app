@@ -224,7 +224,15 @@ def validate_with_warnings(
         # carrying this defect today (scholar, writer, figrecipe) IS an embedded
         # `_django` package, so gating this on `not is_embedded` would skip
         # precisely the population it exists to measure — and pass, forever.
-        errors.extend(validate_prefix_safety(app_dir))
+        # GUARDED because validate_prefix_safety now REFUSES a path that is not
+        # there rather than answering "clean" about it. That refusal is right
+        # for a direct caller and wrong here: validate() already reports a
+        # missing app directory as findings, and a gate reading those findings
+        # must not start receiving an exception instead. The refusal is for the
+        # peer running the rule against their own tree by hand; the findings
+        # list is for the publication path.
+        if Path(app_dir).is_dir():
+            errors.extend(validate_prefix_safety(app_dir))
     # The three ported checks sit OUTSIDE the embedded/react gate above, like
     # the prefix rule and for the same reason: every app that would exercise
     # them today (scholar, writer, figrecipe) is an embedded `_django` package,
