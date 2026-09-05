@@ -12,6 +12,7 @@ from scitex_app.authz import (
     DENIED_NOT_ENTITLED,
     DENIED_NOT_SIGNED_IN,
     VERDICT_KINDS,
+    ResolveState,
     Verdict,
     VerdictError,
     allowed,
@@ -310,6 +311,58 @@ def test_upgrade_url_is_refused_on_allowed():
     refusal = _refusal(kind=kind, upgrade_url="/pricing/")
     # Assert
     assert refusal is not None
+
+
+# ─── the resolve state, which the tripwire below now watches ────────────────
+#
+# These describe the type; the tripwire describes the CONSTRAINT and was
+# written first, deliberately, while there was nothing to constrain.
+
+
+def test_there_are_exactly_three_resolve_states():
+    """A fourth would add a branch to can()'s A/B split without saying so.
+
+    Same reason the kind count is asserted above: the split is exhaustive over
+    these, so a fourth state must be a deliberate edit rather than something
+    that appears.
+    """
+    # Arrange
+    # Act
+    count = len(ResolveState)
+    # Assert
+    assert count == 3
+
+
+def test_not_attempted_is_distinct_from_failed():
+    """The one collapse that makes the whole decomposition unimplementable.
+
+    NOT_ATTEMPTED must RAISE (a caller who never resolved has violated the
+    contract) and FAILED must RETURN a verdict (a real operating state the
+    screen must still draw). Held as one value they are the same state and
+    can() cannot choose.
+    """
+    # Arrange
+    # Act
+    same = ResolveState.NOT_ATTEMPTED is ResolveState.FAILED
+    # Assert
+    assert same is False
+
+
+def test_a_resolve_state_is_not_a_string():
+    """It must not be able to leak into anything serialised.
+
+    A `str` subclass would survive `json.dumps` and a stray `to_dict()`, and
+    what it would leak is that resolution FAILED — i.e. that the service behind
+    this gate is currently down, to a reader who is not authenticated to it.
+    That is the same disclosure argument that kept the unresolved AXIS NAME out
+    of the DOM; this is the mechanical half of it.
+    """
+    # Arrange
+    state = ResolveState.FAILED
+    # Act
+    is_str = isinstance(state, str)
+    # Assert
+    assert is_str is False
 
 
 # ─── the resolve-state tripwire ─────────────────────────────────────────────
