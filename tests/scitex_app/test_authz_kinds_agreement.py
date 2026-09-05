@@ -60,17 +60,28 @@ this order, all four steps observed:
 THE FIFTH KIND WENT THE SAME WAY, and the ORDER IS THE LESSON. This check reads
 the INSTALLED scitex-ui, so:
 
-    TS first (their wheel ships UNRESOLVED, then Python)   this side is SILENT
+    TS first (their wheel ships UNRESOLVED, then Python)   this side went SILENT
     Python first                                           RED, and this side
                                                            CANNOT clear it —
                                                            it waits on someone
                                                            else's release
 
-Silence is not safety. `_read_ts_kinds` filters the far side to names Python
-declares, so an ADDITION over there is invisible here (measured; tracked on
-app-kinds-agreement-check-is-one-directional-20260905). TS-first was chosen
-because a red nobody can clear is worse than a gap somebody is watching by
-hand — not because the gap is fine.
+THAT SILENCE WAS A HOLE, AND IT IS NOW CLOSED. `_read_ts_kinds` used to filter
+the far side to names Python already declares, so an ADDITION over there was
+invisible here — measured on the shipped 0.20.2 wheel, TS 5 against Python 4
+compared EQUAL. The whole fifth-kind rollout ran through that window watched by
+hand rather than by this file.
+
+It now reads the `VerdictKind` UNION instead, which is where TypeScript itself
+says what the set is, and both directions are calibrated:
+
+    TS 5 vs Python 4   DETECTED   (was MISSED)
+    TS 5 vs Python 5   agrees     (the control, without which "not equal"
+                                   proves nothing)
+
+TS-first remains the right ORDER — a red nobody can clear is worse than one you
+can — but the reason is now only sequencing, not a gap somebody must remember to
+watch.
 
 Their words, and the reason the order is theirs to keep rather than mine to
 waive: "あなたの較正はあなたのものなので、私からは提案しません."
@@ -114,11 +125,75 @@ _PY_KINDS = {
 }
 
 
+#: `export type VerdictKind = | typeof ALLOWED | typeof DENIED ...;`
+#: THE UNION IS THE AUTHORITATIVE SET, and reading it is what makes this check
+#: two-directional. See _read_ts_kinds.
+_TS_KIND_UNION = re.compile(
+    r"export\s+type\s+VerdictKind\s*=\s*(?P<body>[^;]+);", re.S
+)
+_TS_UNION_MEMBER = re.compile(r"typeof\s+([A-Z_][A-Z0-9_]*)")
+
+
+#: The five kinds as scitex-ui 0.20.2 actually ships them — copied from the
+#: wheel, not written from memory. Local fixtures below mutate THIS rather than
+#: inventing a shape, so a control cannot pass by describing a file that does
+#: not exist. (Measured: a peer spent an evening on a "0 hits" result for a
+#: kind spelling they had reconstructed from memory and that was never real.)
+_TS_SOURCE_FIVE = """\
+export const ALLOWED = "allowed";
+export const DENIED = "denied";
+export const DENIED_NOT_SIGNED_IN = "denied-because-not-signed-in";
+export const DENIED_NOT_ENTITLED = "denied-because-not-entitled";
+export const UNRESOLVED = "unresolved";
+
+export type VerdictKind =
+  | typeof ALLOWED
+  | typeof DENIED
+  | typeof DENIED_NOT_SIGNED_IN
+  | typeof DENIED_NOT_ENTITLED
+  | typeof UNRESOLVED;
+"""
+
+
 def _read_ts_kinds(source: str) -> dict[str, str]:
-    """Declared name -> value from TypeScript source, ignoring comments. Pure."""
+    """Declared name -> value from TypeScript source, ignoring comments. Pure.
+
+    READS THE UNION, NOT THE LOOSE CONSTANTS, and that distinction is the whole
+    fix. The previous implementation ended with
+
+        return {n: v for n, v in found.items() if n in _PY_KINDS}
+
+    which filtered the far side to names THIS side already declares — so a kind
+    added in TypeScript and absent in Python was silently dropped, and the
+    comparison passed. Measured 2026-09-05 on the shipped scitex-ui 0.20.2
+    wheel, not on a fixture: TS 5 / Python 4 PASSED. The check detected renames
+    and removals and was blind to additions, while its own docstring opened with
+    "must AGREE", which is a symmetric word.
+
+    Dropping that filter needs somewhere authoritative to draw the set FROM,
+    otherwise any unrelated `export const` in the file reads as a kind.
+    TypeScript already has that place: the `VerdictKind` union. Measured on the
+    same wheel — `types.ts` exports exactly five `const`s, all kinds, plus
+    types/interfaces the constant pattern cannot match — so today the two
+    agree; tomorrow the union is what decides.
+
+    Returns the union's members mapped to the VALUES their constants declare.
+    A union member with no constant maps to None, which cannot equal any Python
+    kind, so it fails LOUDLY rather than vanishing.
+    """
     stripped = strip_ts_comments(source)
-    found = dict(_TS_KIND_CONSTANT.findall(stripped))
-    return {name: value for name, value in found.items() if name in _PY_KINDS}
+    values = dict(_TS_KIND_CONSTANT.findall(stripped))
+
+    union = _TS_KIND_UNION.search(stripped)
+    if union is None:
+        # NOT an empty result: the subject changed shape and this check can no
+        # longer read what it claims to. Falling back to the constants would
+        # quietly restore the one-directional behaviour this function exists to
+        # end, so return them UNFILTERED and let the comparison fail.
+        return values
+
+    members = _TS_UNION_MEMBER.findall(union.group("body"))
+    return {name: values.get(name) for name in members}
 
 
 @pytest.fixture
@@ -217,6 +292,72 @@ def test_the_typescript_kinds_agree_with_the_python_kinds(types_ts_source):
     ts_kinds = _read_ts_kinds(types_ts_source)
     # Assert
     assert ts_kinds == _PY_KINDS
+
+
+def test_a_kind_added_only_in_typescript_is_detected():
+    """THE ARM THAT DID NOT EXIST, and whose absence made this file's opening
+    sentence — "must AGREE" — a claim it could not back.
+
+    Measured on the shipped scitex-ui 0.20.2 wheel before the fix: a TypeScript
+    side declaring five kinds against a Python side declaring four came back
+    EQUAL, because the reader filtered the far side to names this side already
+    had. Renames and removals were caught; additions were invisible.
+
+    That is not a hypothetical direction. It is exactly what a peer adding a
+    kind ahead of us looks like, and the rollout of the fifth kind ran in that
+    state deliberately, watched by hand rather than by this test.
+    """
+    # Arrange — a sixth kind, present in the union and its constant, that this
+    # package has never heard of.
+    source = _TS_SOURCE_FIVE.replace(
+        'export const UNRESOLVED = "unresolved";',
+        'export const UNRESOLVED = "unresolved";\n'
+        'export const DEFERRED = "deferred";',
+    ).replace("  | typeof UNRESOLVED;", "  | typeof UNRESOLVED\n  | typeof DEFERRED;")
+    # Act
+    found = _read_ts_kinds(source)
+    # Assert
+    assert found != _PY_KINDS
+
+
+def test_the_five_shipped_kinds_still_agree():
+    """Calibration for the arm above: without this, "not equal" proves nothing,
+    because a reader that returned garbage would also satisfy it."""
+    # Arrange
+    # Act
+    found = _read_ts_kinds(_TS_SOURCE_FIVE)
+    # Assert
+    assert found == _PY_KINDS
+
+
+def test_a_constant_outside_the_union_is_not_read_as_a_kind():
+    """Why the union rather than the loose constants.
+
+    Dropping the old name filter needs an authoritative place to draw the set
+    from, or any unrelated `export const` in the file becomes a kind. The union
+    is where TypeScript itself says what the kinds are.
+    """
+    # Arrange — a constant that is deliberately NOT a verdict kind.
+    source = _TS_SOURCE_FIVE.replace(
+        'export const ALLOWED = "allowed";',
+        'export const ATTR_GATE = "data-stx-gate";\n'
+        'export const ALLOWED = "allowed";',
+    )
+    # Act
+    found = _read_ts_kinds(source)
+    # Assert
+    assert "ATTR_GATE" not in found
+
+
+def test_a_union_member_with_no_constant_fails_rather_than_vanishing():
+    """A dangling member must not be silently dropped — it maps to None, which
+    equals no Python kind, so the comparison goes red instead of quiet."""
+    # Arrange
+    source = _TS_SOURCE_FIVE.replace('export const DENIED = "denied";', "")
+    # Act
+    found = _read_ts_kinds(source)
+    # Assert
+    assert found["DENIED"] is None
 
 
 def test_a_commented_out_declaration_is_not_read_as_a_declaration():
