@@ -81,6 +81,25 @@ for row in validate_prefix_safety(app_dir):
     print(row)
 ```
 
+**To scan a REF rather than a working tree, export it — do not reach for a
+detached worktree.**
+
+```bash
+git archive <ref> | tar -x -C "$(mktemp -d)"
+```
+
+This used to say "use a detached worktree at origin/develop", and that advice
+cost scitex-hub a whole measurement on 2026-09-05. Worktrees live under
+`.worktrees/`, which this rule skips so that a scan of a REPO ROOT does not
+descend into sibling worktrees. Before 0.14.4 the skip matched against the
+file's ABSOLUTE path, so a scan whose ROOT was a worktree had every file
+excluded by an ancestor name: they reported 1,116 files / 0 findings and their
+tree in fact held 262.
+
+0.14.4 makes the match relative to the scan root, so scanning a worktree works
+correctly now. The export recipe is still the better habit for a REF — it is
+the ref and nothing else, with no untracked files or in-progress edits.
+
 A positive control (a temp tree with `fetch("/api/thing")`, which must return
 exactly 1) proves the instrument RUNS. It does not prove it is pointed at
 anything — a control runs on a tree that exists. Both, or neither is evidence.

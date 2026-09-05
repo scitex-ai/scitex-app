@@ -737,3 +737,70 @@ def test_an_interpolated_root_absolute_url_is_still_reported(tmp_path):
     reported = _check(tmp_path)
     # Assert
     assert reported
+
+
+def test_a_worktree_is_scannable_because_the_skip_match_is_root_relative(
+    tmp_path,
+):
+    """MY OWN ADVICE PRODUCED A SILENT ZERO HERE, AND MY FIRST FIX WAS WRONG TOO.
+
+    I told scitex-hub to scan the REF rather than a working tree, and to do it
+    with a detached worktree. Worktrees live under `.worktrees/`, which is in
+    PREFIX_SKIP_DIRS so a scan of a REPO ROOT does not descend into sibling
+    worktrees. Both pieces of advice are individually right; together they
+    excluded every file by an ANCESTOR name the caller never chose. hub reported
+    1,116 files / 0 findings and retracted it — their tree holds 262.
+
+    MY FIRST FIX ALSO REFUSED such a root, as belt-and-braces. hub pointed out
+    what that would actually do: their hooks DENY tracked-file edits outside
+    `<repo>/.worktrees/<name>/`, so scanning a worktree is their NORMAL path.
+    The refusal fired on the mandated workflow. Once the match is relative to
+    the scan root the scan is simply correct, so there was nothing to guard —
+    the "guard" only removed a capability.
+    """
+    # Arrange
+    from scitex_app.appmaker import scannable_files
+
+    root = tmp_path / "repo" / ".worktrees" / "topic"
+    root.mkdir(parents=True)
+    (root / "a.js").write_text('fetch("/api/x");', encoding="utf-8")
+    # Act
+    names = [p.name for p in scannable_files(root)]
+    # Assert
+    assert names == ["a.js"]
+
+
+def test_a_skipped_directory_INSIDE_the_root_is_still_skipped(tmp_path):
+    """The control, and the behaviour the skip set exists for.
+
+    The repair must not become "stop skipping". A dependency tree inside the
+    app is still excluded; only ANCESTORS of the scan root stop counting,
+    because the caller did not choose those.
+    """
+    # Arrange
+    from scitex_app.appmaker import scannable_files, validate_prefix_safety
+
+    (tmp_path / "a.js").write_text('fetch("/api/x");', encoding="utf-8")
+    dep = tmp_path / "node_modules"
+    dep.mkdir()
+    (dep / "dep.js").write_text('fetch("/api/y");', encoding="utf-8")
+    # Act
+    found = (len(validate_prefix_safety(tmp_path)), len(scannable_files(tmp_path)))
+    # Assert — the app's own file, not the dependency's.
+    assert found == (1, 1)
+
+
+def test_an_exported_tree_scans_wherever_it_happens_to_sit(tmp_path):
+    """The prescribed method must work. `git archive <ref> | tar -x` into a
+    temp directory is how you read a REF without a worktree, and it has to be
+    scannable no matter what the temp path is called."""
+    # Arrange
+    from scitex_app.appmaker import scannable_files
+
+    root = tmp_path / "export" / "tree"
+    root.mkdir(parents=True)
+    (root / "a.js").write_text('fetch("/api/x");', encoding="utf-8")
+    # Act
+    files = scannable_files(root)
+    # Assert
+    assert len(files) == 1

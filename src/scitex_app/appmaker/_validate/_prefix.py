@@ -304,7 +304,12 @@ def scannable_files(app_dir: str | Path) -> list[Path]:
     for path in sorted(root.rglob("*")):
         if path.suffix not in PREFIX_SCAN_SUFFIXES or not path.is_file():
             continue
-        if any(part in PREFIX_SKIP_DIRS for part in path.parts):
+        # RELATIVE to the scan root, deliberately. `path.parts` walks the whole
+        # absolute path, so a scan root that merely SITS under a skipped
+        # directory had every one of its files excluded by an ANCESTOR name the
+        # caller never chose. Measured: a root under `.worktrees/` returned 0
+        # files and 0 findings while containing a live violation.
+        if any(part in PREFIX_SKIP_DIRS for part in path.relative_to(root).parts):
             continue
         if _is_build_config(path):
             continue
@@ -319,6 +324,27 @@ def _refuse_unscannable(root: Path) -> None:
     Returning an empty list lets a typo, a removed worktree, or a relative path
     resolved from the wrong cwd read as a passing result — and this rule is now
     a gate, so a caller can also "clear" it by pointing it at nothing.
+
+    THE SECOND CASE COST A PEER A WHOLE MEASUREMENT, AND MY OWN ADVICE CAUSED
+    IT. I told scitex-hub to scan the REF rather than a working tree, and to do
+    that with a detached worktree. Worktrees live under `.worktrees/`, which is
+    in PREFIX_SKIP_DIRS so that a scan of a REPO ROOT does not descend into
+    sibling worktrees. Both pieces are individually right; together they produce
+    a silent zero, because the walk excluded every file by an ANCESTOR name.
+    hub reported 1,116 files / 0 findings and their tree in fact holds 262.
+
+    THE FIX IS THE RELATIVE MATCH, AND ONLY THAT. My first version also REFUSED
+    a root sitting inside a skipped directory — belt-and-braces, and wrong.
+    Once the walk matches relative to the root, such a scan is CORRECT, so the
+    refusal removed a capability rather than adding a guard. hub found it by
+    saying what they would actually do: their hooks DENY tracked-file edits
+    outside `<repo>/.worktrees/<name>/`, so scanning a worktree is their normal
+    path, not an accident. A guard that fires on the mandated workflow is a
+    guard aimed at the wrong thing.
+
+    They were explicit that an `allow_skipped_ancestor=True` escape hatch would
+    be the wrong answer — it re-opens the silent zero — and they are right. The
+    answer is that there is nothing to escape from once the match is relative.
     """
     if not root.exists():
         raise FileNotFoundError(
