@@ -7,6 +7,73 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-05
+
+Minor: `scitex_app.authz` gains a fifth verdict kind, an optional upgrade
+route, and the three-valued resolve state that `can()` will be built on. All
+additive — nothing existing changes shape.
+
+WHY THE FIFTH KIND EXISTS, since four were declared complete in 0.12.0.
+`can()` is committed SYNCHRONOUS AND TOTAL: it answers from state resolved
+before it is called. That splits "unresolved" into two situations a
+"value, or None" field renders identical — the caller who never resolved
+(a contract violation, which must RAISE) and resolution that was attempted
+and FAILED (a real operating state, which must still return something the
+screen can draw). The second case had no verdict to return. It does now.
+
+COORDINATION. These strings are declared twice, in two languages, in two
+repositories — scitex-ui renders what this package builds, and their switch
+is exhaustive, so a new kind is a compile error on their side by design. The
+fifth kind was added WITH them and ordered TS-FIRST: scitex-ui shipped
+`UNRESOLVED` in 0.20.2 first, because this repo's cross-package check reads
+the INSTALLED scitex-ui and a Python-first order goes red in a way this side
+cannot clear.
+
+### Added
+
+- **`UNRESOLVED` / `unresolved()` — "we do not know", and never a denial.**
+  Carries NO payload. Not the failure REASON either: timeout,
+  misconfiguration and network do not change what the UI renders, and naming
+  one discloses that the service behind a gate is currently down to a reader
+  who is not authenticated to it. A server-side log is where that belongs.
+  Do NOT use it for a caller who skipped resolution — that is a bug, and
+  rendering it as a legitimate "not yet known" UI hides the bug forever.
+
+- **`ResolveState` — NOT_ATTEMPTED / FAILED / RESOLVED.** The prerequisite
+  the split above rests on. An `Enum`, deliberately NOT a `str` subclass,
+  unlike the verdict kinds in the same module: those are strings because they
+  are serialised and read by another language; this one must never survive a
+  `json.dumps` or a stray `to_dict()`, for the disclosure reason above. A
+  test asserts it is not a `str`.
+
+  Deliberately NOT built: a container pairing the state with the resolved
+  VALUE. Nothing resolves anything yet — no resolver, no hub URL
+  configuration, no token storage — so its fields would be invented rather
+  than observed.
+
+- **`upgrade_url` on `denied-because-not-entitled`, optional.** Confirmed
+  with scitex-hub: the destination is their pricing page. `billing_checkout`
+  is a POST target and can never be somewhere a denied user is sent. The
+  value is supplied BY THE HUB rather than built here, because the hub URL is
+  configurable and a self-hosted deployment's answer differs.
+
+  ITS ABSENCE IS MEANINGFUL and is pinned: absent means this hub has no
+  upgrade surface configured, so render inert. It NEVER means "not yet
+  resolved" — that is the `unresolved` kind, and conflating them would put
+  the same three-value collapse back one layer down.
+
+### Unchanged, and worth stating
+
+The validator needed NO new code for the fifth kind. Every payload arm is
+written as an EXCLUSION (`kind not in _PERMITS_...` → refuse), so a kind
+absent from those tuples lands in the refusing branch by default: the safe
+default for a new kind is "carries nothing". Measured before the kind
+existed and again after, with a control — the same `upgrade_url` is still
+ACCEPTED on `denied-because-not-entitled`, so the refusals mean something.
+
+`can()` itself is still NOT in this release. What remains is hub URL
+configuration, token storage, and the function.
+
 ## [0.12.1] - 2026-09-03
 
 Patch: the mount-prefix scan was measuring the wrong population, and then
