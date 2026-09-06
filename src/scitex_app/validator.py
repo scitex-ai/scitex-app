@@ -28,11 +28,19 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Required manifest fields. NOTE: `version` is intentionally NOT required — the
-# app version is the single source of truth of the installed `pip_package` (the
-# dist name), read at runtime via importlib.metadata. A hand-written manifest
-# `version` is forbidden (see validate_manifest).
-MANIFEST_REQUIRED_FIELDS = {"name", "slug", "label", "pip_package", "icon"}
+# Required manifest fields — IMPORTED, not declared. NOTE: `version` is
+# intentionally NOT required; the app version is the single source of truth of
+# the installed `pip_package` (the dist name), read at runtime via
+# importlib.metadata, and a hand-written manifest `version` is forbidden (see
+# validate_manifest).
+#
+# This module used to declare its own five-key set against the CLI's six, so
+# `license` was required by one entry point and not the other, and the coverage
+# table in the skills shipped for weeks comparing them check-by-check without
+# saying so. Same defect as the JS pattern list fixed in 0.16.2, same remedy.
+from scitex_app.appmaker._validate._manifest import (  # noqa: E402
+    MANIFEST_REQUIRED_KEYS as MANIFEST_REQUIRED_FIELDS,
+)
 
 # Valid privilege types
 VALID_PRIVILEGE_TYPES = {"filesystem", "network", "api"}
@@ -151,7 +159,7 @@ class AppValidator:
                     self._result.add_error(f"manifest.json is invalid JSON: {exc}")
                     return
 
-                missing = MANIFEST_REQUIRED_FIELDS - set(manifest.keys())
+                missing = set(MANIFEST_REQUIRED_FIELDS) - set(manifest.keys())
                 if missing:
                     self._result.add_error(
                         f"manifest.json missing required fields: "

@@ -42,6 +42,12 @@ def make_valid_manifest(path: Path) -> None:
             "label": "Test App",
             "pip_package": "test-app",
             "icon": "fas fa-flask",
+            # REQUIRED since the two required-key lists were converged. This
+            # fixture encoded "a valid manifest" as five keys, which is the
+            # AppValidator half of the divergence baked into the suite: the
+            # tests agreed with the implementation because both were wrong in
+            # the same direction.
+            "license": "MIT",
         },
     )
 
@@ -1141,3 +1147,71 @@ class TestConstants:
 
 
 # EOF
+
+
+def test_appvalidator_and_the_cli_share_one_required_key_list():
+    """SAME OBJECT, not merely equal.
+
+    These were two declarations of one fact for months — the CLI's six keys
+    against AppValidator's five — so `license` was required by one entry point
+    and not the other, and the shipped coverage table compared them
+    check-by-check without saying so.
+
+    Asserts identity rather than equality because an equality test goes green
+    again the moment someone re-declares the list in both places, which is
+    exactly the state that produced the divergence.
+    """
+    # Arrange
+    from scitex_app.appmaker._validate._manifest import MANIFEST_REQUIRED_KEYS
+    from scitex_app.validator import MANIFEST_REQUIRED_FIELDS
+    # Act
+    shared = MANIFEST_REQUIRED_FIELDS is MANIFEST_REQUIRED_KEYS
+    # Assert
+    assert shared
+
+
+def test_the_required_key_list_cannot_be_mutated_by_a_caller():
+    """It is imported by two modules, so a list would be mutable shared state:
+    any importer could append a key and change validation for every caller in
+    the interpreter. scitex-writer's point, applied to the second list."""
+    # Arrange
+    from scitex_app.validator import MANIFEST_REQUIRED_FIELDS
+    # Act
+    kind = type(MANIFEST_REQUIRED_FIELDS)
+    # Assert
+    assert kind is tuple
+
+
+def test_a_caller_cannot_append_to_the_required_key_list():
+    """The TYPE and the HAZARD are two claims. scitex-writer measured the
+    difference on the JS list; this asserts the one anybody actually cares
+    about — that mutation fails."""
+    # Arrange
+    from scitex_app.validator import MANIFEST_REQUIRED_FIELDS
+    # Act
+    attempt = getattr(MANIFEST_REQUIRED_FIELDS, "append", None)
+    # Assert
+    assert attempt is None
+
+
+def test_appvalidator_now_requires_license(tmp_path):
+    """THE BEHAVIOUR CHANGE, stated as a test rather than left to be
+    discovered. Before this, a manifest with no `license` passed AppValidator
+    and failed the CLI."""
+    # Arrange
+    from scitex_app.validator import MANIFEST_REQUIRED_FIELDS
+    # Act
+    required = set(MANIFEST_REQUIRED_FIELDS)
+    # Assert
+    assert "license" in required
+
+
+def test_version_is_still_not_required(tmp_path):
+    """THE CONTROL. Converging upward must not quietly add `version`, which is
+    derived at runtime from pip_package and is FORBIDDEN in a manifest."""
+    # Arrange
+    from scitex_app.validator import MANIFEST_REQUIRED_FIELDS
+    # Act
+    required = set(MANIFEST_REQUIRED_FIELDS)
+    # Assert
+    assert "version" not in required

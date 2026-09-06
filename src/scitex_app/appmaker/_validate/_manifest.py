@@ -5,7 +5,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-MANIFEST_REQUIRED_KEYS = ["name", "slug", "label", "pip_package", "icon", "license"]
+# THE ONE REQUIRED-KEY LIST. scitex_app.validator imports this rather than
+# declaring a second one — it declared its own for months, five keys against
+# these six, so `license` was required by the CLI and not by AppValidator and
+# nothing said so. Syncing two lists is a promise; importing one is a guarantee,
+# and that promise had already been broken once here and once in the JS pattern
+# list (0.16.2), both silently, both in the direction that disagrees about a
+# peer's app.
+#
+# A TUPLE, not a list: this object is imported, so a list would be mutable
+# shared state that any importer could `.append()` to, changing validation for
+# every caller in the interpreter. (scitex-writer, 2026-09-06.)
+MANIFEST_REQUIRED_KEYS = ("name", "slug", "label", "pip_package", "icon", "license")
 
 
 def validate_manifest(app_dir: str | Path) -> list[str]:
