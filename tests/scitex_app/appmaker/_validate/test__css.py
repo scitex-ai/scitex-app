@@ -234,6 +234,52 @@ def _refusal_message(tmp_path):
     return str(excinfo.value)
 
 
+def _legacy_manifest_refusal(tmp_path):
+    """The refusal for a directory carrying a manifest in another format."""
+    (tmp_path / "static").mkdir()
+    (tmp_path / "manifest.yaml").write_text("name: notebook\n", encoding="utf-8")
+    with pytest.raises(NotAnAppDirectoryError) as excinfo:
+        validate_css_canonical(tmp_path)
+    return str(excinfo.value)
+
+
+def test_a_manifest_in_another_format_is_named_in_the_refusal(tmp_path):
+    """scitex-hub's apps/legacy/notebook_app carries a manifest.YAML and ships
+    CSS, so "not an app directory" is simply false about it. Naming what WAS
+    found is what separates the two causes for the caller."""
+    # Arrange
+    message = _legacy_manifest_refusal(tmp_path)
+    # Act
+    names_what_it_found = "manifest.yaml" in message
+    # Assert
+    assert names_what_it_found
+
+
+def test_a_legacy_manifest_is_not_called_the_wrong_directory(tmp_path):
+    """The two causes need different fixes and the old message gave only the
+    first. Telling this caller to "loop over your app dirs" sends them to do
+    the thing they already did — the directory WAS in their loop, and this
+    call is why it got skipped."""
+    # Arrange
+    message = _legacy_manifest_refusal(tmp_path)
+    # Act
+    misdirects = "loop over your app dirs" in message
+    # Assert
+    assert not misdirects
+
+
+def test_a_bare_directory_still_says_nothing_manifest_shaped_was_found(tmp_path):
+    """THE CONTROL for the pair above. Without it, "names what it found" is
+    equally consistent with a message that always mentions a legacy manifest,
+    and "does not misdirect" with one that never gives directions at all."""
+    # Arrange
+    message = _refusal_message(tmp_path)
+    # Act
+    says_nothing_found = "nothing else manifest-shaped" in message
+    # Assert
+    assert says_nothing_found
+
+
 def test_the_refusal_names_the_missing_manifest(tmp_path):
     """An error that only states what broke is half-written — name the file
     whose absence decided it, so the caller can check it themselves."""
