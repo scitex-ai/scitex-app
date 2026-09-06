@@ -12,6 +12,7 @@ branches MUST NOT set this — drift goes silent.
 """
 
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -27,4 +28,12 @@ def test_audit_all_clean():
         )
     from scitex_dev.testing import audit_all_for_package
 
-    audit_all_for_package('scitex-app')
+    # PIN THE TREE. Without `path=`, audit-all resolves its own target by
+    # GUESSING FROM CWD — so running pytest from the main checkout while
+    # editing a linked worktree grades the WRONG TREE and still reports a
+    # confident pass. Measured 2026-09-06: a violation that CI caught
+    # (STX-TQ002, PR #158) passed here three times, because cwd was the main
+    # checkout on develop and the edit was in .worktrees/. scitex-dev warns
+    # about this on stderr; a warning nobody reads is not a guard.
+    repo_root = Path(__file__).resolve().parents[2]
+    audit_all_for_package('scitex-app', path=repo_root)

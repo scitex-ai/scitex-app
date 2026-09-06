@@ -202,7 +202,9 @@ def test_the_pattern_list_cannot_be_mutated_by_a_caller():
     Asserts the TYPE rather than catching AttributeError, because a caller that
     reaches for `.append()` on a tuple is already a bug the reader should see.
     """
-    # Arrange / Act
-    kind = type(DANGEROUS_JS_PATTERNS)
+    # Arrange
+    patterns = DANGEROUS_JS_PATTERNS
+    # Act
+    kind = type(patterns)
     # Assert
     assert kind is tuple
