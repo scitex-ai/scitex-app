@@ -7,6 +7,79 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-06
+
+Minor. `can()`'s hub configuration — and the DEFAULT IS THE DECISION.
+
+### Added — `hub_url()`, and an unconfigured install has NO HUB
+
+Operator ruling, 2026-09-06, relayed by scitex-hub:
+
+> 「ハブなしを規定にしてもらってで、うるさく失敗するヒントは出すでいいと思います」
+> — make no-hub the default, and it is fine to fail noisily with hints.
+
+`SCITEX_APP_HUB_URL`, defaulting to **None**. A blank value reads as
+"explicitly no hub", because setting a variable to empty is how an operator
+says none in a shell profile or compose file where deleting the line is
+awkward.
+
+**Why not default to the hosted hub.** A default of `https://scitex.ai` makes
+"no hub" unexpressible by omission: a self-hosted install that configures
+nothing would contact our service at its first authorization check, chosen by
+nobody. The two failure modes are not symmetric in **detectability** —
+
+- default no-hub, hub wanted → every hub-dependent action is `denied`; the
+  operator sees missing features and goes looking. Wrong, loud, self-correcting.
+- default scitex.ai, isolation wanted → it silently works, and the only symptom
+  is in a log the install's own operator cannot read.
+
+One failure announces itself to whoever can fix it; the other does not.
+
+And structurally: a non-empty default **collapses a three-valued state into
+two**. "no hub configured" / "configured but unreachable" / "configured and
+answering" must stay distinguishable — the same reason `denied` and
+`unresolved` are different kinds. A default URL makes UNCONFIGURED
+indistinguishable from CONFIGURED.
+
+**It could not reuse an existing knob.** `SCITEX_API_URL` (files backend) and
+`SCITEX_SERVER_URL` (`app dev-install` / `submit`) both default to
+`http://127.0.0.1:8000`, so resolving the hub from either would have made the
+ruling false the moment it shipped.
+
+### Added — `denied_no_hub()`, which keeps two surfaces apart
+
+    the VERDICT   plain `denied`, payload-free BY CONSTRUCTION. It crosses into
+                  page source as `data-stx-gate` and is read by someone not
+                  authenticated to this deployment.
+    the HINT      a WARNING on this package's logger naming the variable to
+                  set. Never reaches the DOM.
+
+The ruling asked for hints; the audiences differ. Whoever installed this can act
+on "set `SCITEX_APP_HUB_URL`"; a *visitor* to someone else's deployment cannot,
+and a failure reason in page source tells an unauthenticated reader about a
+service they cannot see — the disclosure question settled with scitex-ui on
+09-05. Recorded as a reading that can be overturned rather than discovered: if
+the intent was that the page visitor sees it, the payload rule reopens and
+scitex-ui is in that conversation.
+
+Fires **once per process**, not per call: `can()` runs per render, and a warning
+repeated hundreds of times on one page is noise that reads as silence — the
+failure the ruling was trying to avoid, arrived at from the other side.
+
+### Naming
+
+`SCITEX_APP_HUB_URL` follows the operator's naming rule of the same day
+(confirmed explicitly): **prefix by where the thing is SET, not by what it
+points at** — 「どこに何が設定されてるのかわからない」. It is set on the app's install,
+so the app's namespace with hub as the subject. A test pins the literal,
+because every other test here asserts against the constant and would pass
+through a silent rename; after release, changing it is a migration, not an edit.
+
+The two existing names (`SCITEX_API_URL`, `SCITEX_SERVER_URL`) are **not**
+renamed here. They are published contracts with live installs, so that is a
+staged migration — alias, DeprecationWarning, one release — carded separately
+rather than bundled into a ruling that did not ask for it.
+
 ## [0.15.3] - 2026-09-06
 
 Patch. The reference example failed the validator this package ships, and the
