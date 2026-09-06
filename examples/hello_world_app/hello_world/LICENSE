@@ -1,0 +1,13 @@
+GNU Affero General Public License v3.0 only (AGPL-3.0-only)
+
+This example app is distributed as part of scitex-app and is covered by that
+project's licence. The full text is in the repository root LICENSE file.
+
+    https://www.gnu.org/licenses/agpl-3.0.txt
+
+WHY THIS FILE EXISTS AS A POINTER RATHER THAN A FULL COPY. `scitex-app app
+validate` requires a LICENSE beside a standalone app's manifest, because an app
+submitted to the store travels on its own and must carry its terms with it.
+This one does not travel on its own — it ships inside scitex-app — so a
+34 KB verbatim copy inside an example directory would add noise without adding
+a fact. An app you actually publish should carry the full text.

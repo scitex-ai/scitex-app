@@ -2,7 +2,12 @@
   "name": "hello_world",
   "slug": "hello-world",
   "label": "Hello World",
-  "version": "0.1.0",
+  "pip_package": "scitex-app",
   "icon": "fas fa-hand-spock",
-  "frontend_type": "django"
+  "license": "AGPL-3.0",
+  "description": "The smallest app that mounts anywhere: a Django app that reads its own mount prefix from the marker instead of assuming it is at the site root.",
+  "frontend_type": "django",
+  "dependencies": {
+    "python": ["scitex-app", "scitex-ui", "django"]
+  }
 }

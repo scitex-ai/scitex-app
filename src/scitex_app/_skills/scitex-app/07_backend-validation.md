@@ -26,7 +26,15 @@ result.warnings          # List[str] — advisory notices; result.manifest: dict
 **Two entry points, and NEITHER IS A SUPERSET OF THE OTHER.** Read this before
 relying on either. `AppValidator` (above) is the class documented here; the CLI
 `scitex-app app validate` calls `scitex_app.appmaker.validate`, a separate
-implementation. Measured coverage:
+implementation.
+
+**THEY DO NOT TAKE THE SAME `app_dir`**, and the table below compares them
+check-by-check without saying so. The CLI wants the directory holding
+`manifest.json` (`<pkg>/_django`); `AppValidator` resolves it from the package
+root. Hand the CLI a package root and it reports `manifest.json not found`
+while `AppValidator` reads it fine — measured on scholar, 15 errors vs 3, and
+**0 vs 0** once each gets the path it wants. Agreement at the right roots is
+what hides this. Measured coverage, each at its own root:
 
 | check | `scitex-app app validate` | `AppValidator` |
 | --- | --- | --- |
@@ -38,8 +46,7 @@ implementation. Measured coverage:
 | bundle size cap | yes (opt-in) | yes |
 | privilege types and scopes | yes (opt-in) | yes |
 
-The last three were **ported into the CLI path** and are no longer exclusive to
-`AppValidator`. They are opt-in:
+The last three were **ported into the CLI path**, no longer exclusive. Opt-in:
 
 ```python
 validate(app_dir, check_js_safety=True, check_bundle_size=True,
@@ -48,20 +55,17 @@ validate(app_dir, check_js_safety=True, check_bundle_size=True,
 
 Off by default, and the default IS the arming switch. The narrowed JS rule
 reports **0** on `scholar/_django` and `writer/_django` and still fires on
-planted hazards — but zero is consistent both with "the fleet is clean" and
-with "the scan did not run", so those three stay unarmed until a peer reports
-a finding I did not construct.
+planted hazards — but zero is equally consistent with "the scan did not run",
+so those three stay unarmed until a peer reports a finding I did not construct.
 
-**`check_prefix_safety` is the exception: ARMED as of 0.14.0.** `validate()`
-runs it unless you pass `check_prefix_safety=False`, and its findings are
-errors, so a caller that raises on a non-empty result — including scitex-hub's
-publication path — will refuse an app over it. From 0.14.0 an app carrying a
-root-absolute or document-relative request URL cannot be published.
+**`check_prefix_safety` is the exception: ARMED as of 0.14.0.** Its findings
+are errors, so a caller that raises on a non-empty result — including hub's
+publication path — refuses an app carrying a root-absolute or
+document-relative request URL. Pass `check_prefix_safety=False` to opt out.
 
-This paragraph said "opt-in" until the day it was not — one of three places the
-same sentence went false at once, and **the only one that shipped stale to app
-developers**, for two releases. A wrong docstring misleads a maintainer reading
-the source; a wrong skill doc misleads someone with no reason to check.
+This said "opt-in" until the day it was not — of the three places that went
+false at once, **the only one that shipped stale to app developers**, for two
+releases. A wrong docstring misleads a maintainer; this misleads a stranger.
 
 **And when you run the rule yourself, report the denominator.** "0 findings" is
 not a claim; "0 findings across N files" is, and N == 0 means NOT SCANNED
@@ -89,19 +93,18 @@ every file excluded by an ancestor — 1,116 files / 0 findings on a tree holdin
 262. 0.14.4 matches relative to the scan root, so worktrees scan correctly now;
 the export is still the better habit for a REF, being the ref and nothing else.
 
-A positive control (a temp tree with `fetch("/api/thing")`, which must return
-exactly 1) proves the instrument RUNS, not that it is POINTED at anything — a
-control runs on a tree that exists. Both, or neither is evidence. Since 0.14.1
-a path that does not exist raises rather than answering "clean".
+A positive control (a temp tree with `fetch("/api/thing")` returning exactly 1)
+proves the instrument RUNS, not that it is POINTED anywhere — a control runs on
+a tree that exists. Both, or neither is evidence. Since 0.14.1 a missing path
+raises rather than answering "clean".
 
-What remains genuinely divided is the CSS and manifest half: `#main-content
-{ color: red }` passes the CLI and fails `AppValidator`; `footer { display:
-none }` does the reverse. Card
-`app-two-validators-docs-describe-the-uncalled-one-20260822`. **The CSS half
-now has one answer**, measured against the shell rather than argued from either
-list: `validate_css_canonical()` (0.15.0, *Workspace CSS* below). It is
-UNARMED, so the divergence still describes what runs today; arming collapses
-the two. The manifest half is unchanged.
+Still divided on CSS: `#main-content { color: red }` passes the CLI and fails
+`AppValidator`; `footer { display: none }` does the reverse. `validate_css_canonical()`
+(0.15.0, *Workspace CSS* below) is the one measured answer but is UNARMED, so
+the divergence describes what runs today. On MANIFESTS the only divergence is
+`license`, required by the CLI alone — measured 2026-09-06 across the 7 apps
+`validate()` serves, 6 already declare it. Card
+`app-two-validators-docs-describe-the-uncalled-one-20260822`.
 
 ## Errors vs advice (CLI path)
 
@@ -114,8 +117,7 @@ errors = validate(app_dir)                       # failures only
 errors, warnings = validate_with_warnings(app_dir)
 ```
 
-Only `errors` fails a build. `scitex-app app validate` prints advisory notices
-in yellow, whether or not the app passes, and exits non-zero **only** on errors.
+Only `errors` fails a build; advisory notices print in yellow either way.
 
 Two findings are advisory:
 
@@ -124,21 +126,19 @@ Two findings are advisory:
 | `manifest.json 'name' should end with '_app' / '-app'` | an app can have a real reason not to — a name that would COLLIDE with an existing registry entry — and there is no exemption mechanism |
 | `use --workspace-* / --text-* instead of --color-*` | the deprecated variables still render; this is drift from the spec, not a broken app |
 
-Both used to be **enforced as failures despite being worded as advice**, because
-`validate()` returned one flat list and the CLI exits 1 on any entry. That made
-the first one unclearable: the only escape it prescribed was to introduce the
-collision the name avoids. Everything else `validate()` reports is a hard error
-whose wording matches its enforcement, and this is not a precedent for softening
-those.
+Both were once **enforced as failures despite being worded as advice** — one
+flat list, and the CLI exits 1 on any entry — which made the first unclearable:
+its only prescribed escape was the collision the name avoids. Everything else
+is a hard error whose wording matches its enforcement; not a precedent.
 
 `AppValidator` runs, in order: `validate_manifest()` (required fields, valid
 JSON, **no `version` key**), `validate_structure()` (`_django/views.py` and
 `urls.py`), `validate_css()` (see *Workspace CSS*), `validate_js()`,
 `validate_bundle_size()` (50 MB, `max_bundle_size`), `validate_privileges()`.
 
-`version` in `manifest.json` is REJECTED by both implementations — it is
-derived at runtime from `pip_package` via `importlib.metadata`. A hand-written
-one drifts, and did: every hub app tile once showed a wrong version from this.
+`version` in `manifest.json` is REJECTED by both — it is derived at runtime
+from `pip_package`. A hand-written one drifts, and did: every hub app tile once
+showed a wrong version from this. The shipped example carried one until 0.15.3.
 
 ### Workspace CSS — what your app may and may not style
 
