@@ -174,6 +174,36 @@ SHARED_COMPONENT_CLASSES = (
 #: the class.
 _FOOTER_ELEMENT = re.compile(r"(^|,)\s*footer(?![\w-])")
 
+#: Blank the ARGUMENTS of functional pseudo-classes before the leftmost test.
+#:
+#: `:is(header, footer) .x` puts `footer` after a COMMA, so the leftmost rule
+#: reads it as a second selector in a list and fires. It is not one — it is an
+#: argument, and `:is()` / `:not()` / `:where()` / `:has()` all take selector
+#: lists whose commas are internal. `:not(footer)` is the sharpest case: the
+#: rule EXCLUDES a footer and the detector called that targeting one.
+#:
+#: scitex-hub found this against 0.14.4 in `public_app/css/pricing.css`
+#: (`body > :first-child:not(header):not(main):not(footer)`), which the
+#: canonical already passed — `(` is not a boundary. The hole was in the
+#: HYPOTHETICAL they offered beside it, `:is(header, footer)`, which fires.
+#: Their concrete example was already handled and their generalisation was
+#: right anyway; measuring both is what separated them.
+#:
+#: Blanking rather than deleting keeps offsets and the leftmost/`,` structure
+#: intact, so nothing else shifts under the test.
+_PSEUDO_ARGS = re.compile(r"\(([^()]*)\)")
+
+
+def _strip_pseudo_args(selector: str) -> str:
+    """Replace the contents of every parenthesised group with spaces. Applied
+    repeatedly so nested groups (`:has(:not(footer))`) collapse from the inside
+    out."""
+    previous = None
+    while previous != selector:
+        previous = selector
+        selector = _PSEUDO_ARGS.sub(lambda m: "(" + " " * len(m.group(1)) + ")", selector)
+    return selector
+
 #: TIER 2 — shared design tokens. An app may READ them with `var(--x)`; it must
 #: not REDEFINE them at `:root`, which changes them for the whole shell.
 SHELL_TOKEN_PREFIXES = ("--color-", "--workspace-", "--stx-")
@@ -202,6 +232,13 @@ _NOT_CHECKED = (
     "footer — the honest rule is 'any mention', but a substring test cannot "
     "tell the selector `footer` from `.status-footer` or `--footer-height`, "
     "and one app legitimately renders its own (same parser, same card)",
+    "a BODY-CLASS-scoped footer rule (`body.myapp-page footer {display:none}`) "
+    "— it is not leftmost, so this rule passes it, and unlike `.myapp footer` "
+    "it DOES reach the shell's footer, which lives inside <body>. The two "
+    "differ only in whether the scoping element contains the shell's node, "
+    "which is a DOM fact and not a string fact. It is also a documented shell "
+    "pattern rather than a defect, so the rule is the shell's to state before "
+    "it can be enforced (same parser, same card)",
 )
 
 
@@ -302,6 +339,8 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
         rel = css_file.relative_to(root)
 
         for selector, body in _rule_blocks(content):
+            # Both footer checks below read this, never the raw selector.
+            bare = _strip_pseudo_args(selector)
             # TIER 1 — any mention.
             for name in SHELL_INSTANCE_NAMES:
                 if name in selector:
@@ -332,7 +371,7 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
                             f"!important reaches the shell's instances too"
                         )
 
-                if _FOOTER_ELEMENT.search(selector):
+                if _FOOTER_ELEMENT.search(bare):
                     findings.append(
                         f"{rel}: !important on the shell's footer element — "
                         f"an app may render its own <footer>, but a bare "
@@ -349,15 +388,21 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
                             f"the whole shell"
                         )
 
-        # TIER 2b(ii) — hiding the shell's footer, with or without
-        # !important. Carried over from the rule this replaces, where it was a
-        # separate check; scitex-hub's baseline found a real instance.
-        if re.search(
-            r"(^|[};,])\s*footer(?![\w-])[^{}]*\{[^}]*display\s*:\s*none",
-            content,
-            re.DOTALL,
-        ):
-            findings.append(f"{rel}: must not hide the shell's footer")
+            # TIER 2b(ii) — hiding the shell's footer, with or without
+            # !important. Carried over from the rule this replaces, where
+            # scitex-hub's baseline found a real instance.
+            #
+            # MOVED INSIDE the rule loop. It used to run once per FILE against
+            # a `footer … { … display:none }` regex over the whole content,
+            # which carried the same pseudo-class hole as the check above and
+            # could not be fixed in the same place. Reading the block's own
+            # selector makes the two footer checks share one definition of
+            # "this selector's subject is a bare footer" instead of two that
+            # drift.
+            if _FOOTER_ELEMENT.search(bare) and re.search(
+                r"display\s*:\s*none", body
+            ):
+                findings.append(f"{rel}: must not hide the shell's footer")
 
         # TIER 2c — setting shell state. Reading it (`body.zen-mode .mine`) is
         # fine; a rule whose SUBJECT is the body state class is not.

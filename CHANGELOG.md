@@ -92,7 +92,7 @@ an unscoped `footer` and `footer { display: none }` are errors — and the rest
 is declared. `.myapp footer { … }`, `.status-footer`, `.site-footer` and
 `--footer-height` are calibrated non-findings.
 
-### Two corrections that came from measurement, not from reasoning
+### Three corrections that came from measurement, not from reasoning
 
 - `.panel-resizer` was **tier 1** in the draft. Apps render it 41 times across
   nine apps against the shell's 6, so a mention-ban would have failed correct
@@ -104,6 +104,33 @@ is declared. `.myapp footer { … }`, `.status-footer`, `.site-footer` and
   inside its own subtree, exactly what the rule exists to permit. Found by
   running the rule against code that ought to pass, which is the only place a
   false positive is visible.
+- **A comma inside `:is()` is not a selector list.** `:is(header, footer) .x`
+  puts `footer` after a comma, so the leftmost test read an argument as a
+  second selector and fired. `:not(footer)` is the sharpest form of this: the
+  rule EXCLUDES a footer and the detector called that targeting one. Both
+  footer checks now read the selector with parenthesised arguments blanked,
+  and the `display:none` half moved inside the rule loop so the two share one
+  definition instead of two that drift.
+
+  scitex-hub found this against 0.14.4 in a real file
+  (`body > :first-child:not(header):not(main):not(footer)`) — which the
+  canonical already passed, because `(` is not a boundary character. **The
+  hole was in the hypothetical they offered beside it**, `:is(header, footer)`.
+  Their example was already handled and their generalisation was right anyway;
+  only running both separated them.
+
+### One thing this cannot check, added to `not_checked`
+
+`body.myapp-page footer { display: none }` is not leftmost, so this rule passes
+it — and unlike `.myapp footer` it DOES reach the shell's footer, which lives
+inside `<body>`. The two selectors differ only in whether the scoping element
+contains the shell's node: a DOM fact, not a string fact, which is tier 3
+wearing another hat.
+
+It must not simply be banned either. scitex-hub does this deliberately and
+documents it shell-side, so a ban would fail their design rather than catch a
+defect. What the shell permits is the shell's to state; the validator's job
+here is to say it did not look.
 
 ## [0.14.4] - 2026-09-05
 
