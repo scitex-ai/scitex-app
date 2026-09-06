@@ -603,7 +603,21 @@ class TestValidateJs:
         assert any("dangerous pattern" in e for e in validator._result.errors)
 
 
-    def test_subprocess_in_js_adds_error(self, tmp_path):
+    def test_a_variable_named_subprocess_is_not_a_browser_hazard(self, tmp_path):
+        """INVERTED 2026-09-06. This test asserted the defect.
+
+        `\bsubprocess\b` is the PYTHON forbidden list copy-pasted into a JS
+        scanner, and it matched the VARIABLE NAME in this fixture — not
+        anything dangerous. scitex-writer hit the same family through the
+        surviving `\bexec\s*\(` on `re.exec(line)` in a tokenizer loop, and
+        reported it instead of renaming their variable to dodge the checker.
+
+        NOTE WHAT IS ACTUALLY HAZARDOUS IN THIS FIXTURE and is NOT caught:
+        `require('child_process')`. No pattern in either list matches it. So
+        the old test passed for the wrong reason twice over — it fired on an
+        identifier and stayed silent on the call. Recorded rather than fixed
+        here: widening the rule is a separate decision, and it is unarmed.
+        """
         # Arrange
         js = tmp_path / "bad.js"
         js.write_text("const subprocess = require('child_process');", encoding="utf-8")
@@ -611,7 +625,7 @@ class TestValidateJs:
         # Act
         validator.validate_js()
         # Assert
-        assert validator._result.passed is False
+        assert validator._result.passed is True
 
     def test_document_cookie_adds_error(self, tmp_path):
         # Arrange
