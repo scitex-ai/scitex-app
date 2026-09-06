@@ -7,6 +7,109 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-09-06
+
+Patch. A longer name is a different name, and one rule is one finding. Both
+came out of scitex-hub's second step-2 run, and both were attributed by them to
+their own code rather than to this rule.
+
+### Fixed — an exact name matched every name that EXTENDS it
+
+`.stx-shell-sidebar__header` and `.stx-shell-sidebar__header-compact` are
+unrelated selectors; a rule on the second cannot touch the first. `name in
+selector` said otherwise, so eight `__header-compact` rules in `writer_app`
+were reported as `!important on the shared component
+'.stx-shell-sidebar__header'` — **a finding naming a class the selector does
+not contain**.
+
+hub read the same eight as "writer minted a class inside the shell's BEM
+namespace, and the shell renders zero of them, so nothing is reached". That is
+true, and worth raising with writer — but it explained the wrong thing. The
+rule was not correctly reporting a phantom target; it was matching a different
+class.
+
+`-` is a legal class-name character, so the guard is `(?![\w-])`, the same
+boundary the footer rule already carried and this one did not. The leading side
+needs none: `.foo` cannot occur inside `.my-foo`, because the `.` is part of
+the token. `SHELL_INSTANCE_PREFIXES` are exempt and stay substring matches —
+they are prefix FAMILIES by construction (`.wft-` is meant to match
+`.wft-node`), which is exactly the distinction `in` erased: it made every exact
+name behave like a prefix.
+
+Also fixed for `#main-content-2`, `#workspace-layout-old`,
+`.workspace-pane-mine`, `.panel-resizer-custom` — measured, all six tiers.
+
+### Fixed — one rule produced two findings
+
+`.stx-shell-sidebar` and `.stx-shell-sidebar__header` are both in
+`SHARED_COMPONENT_CLASSES` and both substring-matched the same selector, so a
+single declaration reported twice under two names. **hub's eight findings were
+four rules.**
+
+A count that inflates is worse than one that is merely incomplete, because it
+reads as more evidence than exists — and this one inflated inside a number
+being used to decide whether to arm. A matched name that is a proper substring
+of another matched name is now dropped; the most specific match describes the
+selector. Two genuinely different names (`.panel-resizer, .h-resizer`) still
+report twice, because neither contains the other.
+
+### What this does to hub's measurement
+
+Their 0.15.1 run: 428 files, 27 findings, all 27 opened, **9 defects**. Eight
+of the 27 were the `__header-compact` group. Those were four rules, and after
+this release they are zero — so the number they re-run against 0.15.2 should
+fall by eight, and none of the nine defects is among them.
+
+Not restated here as a corrected total: that is hub's number to produce from
+their own ref, and predicting it is the thing this changelog keeps saying not
+to do.
+
+### Added — every finding now carries `file:line:` and the selector it matched
+
+scitex-hub named the mechanism of their own mistake precisely enough to remove
+it:
+
+> "The rule I have been quoting at myself all evening is 'a finding is a claim
+> about a string, so open the match'. I opened the FILE. Opening the match
+> means reading the string the tool actually emitted and checking it appears
+> where the tool says it does. I did not do the last step, and it is the step."
+
+They went to the file, found a class that looked like the reported one, and
+wrote a correct paragraph about the wrong object — **arriving at the right
+verdict from the wrong evidence, which is worse than being wrong, because a
+wrong verdict gets challenged and a right one does not.**
+
+That step was hard for a reason in this code, not in their method: four of the
+message forms named a class without quoting the selector, and none carried a
+position. So the finding now reads
+
+    static/a.css:177: !important on the shared component '.panel-resizer' in
+    'div[class*="editor"]:not(.panel-resizer)' — …
+
+and "does the named thing actually appear in what was matched?" is answerable
+from the finding text alone. Put side by side, the substring bug above is
+visible on sight. A warning would not have helped; this is the mechanical
+form of the rule.
+
+The `display:none` and body-state checks moved inside the rule loop to get a
+line, joining the footer check that moved there in 0.15.1.
+
+### What is NOT fixed, and stays declared
+
+Ten of hub's 27 were rules confined by an ancestor to the app's own subtree
+(`.writer-workspace .h-resizer`, `body.scholar-page #main-content`). The
+`!important` is real and cannot reach a shell instance outside that subtree.
+Detecting that is the subject question — the same one the
+`:is(header, footer)` trade and tier 3 are already waiting on a parser for —
+so it stays in `not_checked` rather than being half-implemented.
+
+hub's own read, which decided it: *"an advisory rule that reports a
+scoped-but-`!important` rule is not wrong; it made me go look, and going to
+look is what found the resizer bug."* That bug — `.panel-resizer` given
+`z-index: 100 !important` in one writer file and `z-index: 1 !important` in
+another, both bare, on a class the shell renders 50 times, load order deciding
+which wins for every app on the page — is what the rule exists to find.
+
 ## [0.15.1] - 2026-09-06
 
 Patch. An EXCLUDED name is not a target — and a MATCHED one still is. The first
