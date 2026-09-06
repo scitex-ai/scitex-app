@@ -1325,3 +1325,66 @@ def test_exactly_one_public_name_reaches_the_manifest_key_list():
     ]
     # Assert
     assert public_routes == ["scitex_app.validator"]
+
+
+# ---------------------------------------------------------------------------
+# SKIP_DIRS — the THIRD list declared twice, after DANGEROUS_JS_PATTERNS
+# (0.16.2) and MANIFEST_REQUIRED_KEYS (0.18.0). Found by looking for the shape,
+# not by anyone hitting it.
+# ---------------------------------------------------------------------------
+
+
+def test_appvalidator_and_the_js_rule_share_one_skip_list():
+    """SAME OBJECT, not merely equal. They were byte-identical and separate,
+    which is precisely the state that preceded both previous drifts."""
+    # Arrange
+    from scitex_app.appmaker._validate._js import JS_SKIP_DIRS
+    from scitex_app.validator import SKIP_DIRS
+    # Act
+    shared = SKIP_DIRS is JS_SKIP_DIRS
+    # Assert
+    assert shared
+
+
+def test_the_skip_list_cannot_be_mutated_by_a_caller():
+    """Imported by two modules, so a mutable set would let any importer change
+    what every caller in the interpreter scans."""
+    # Arrange
+    from scitex_app.validator import SKIP_DIRS
+    # Act
+    kind = type(SKIP_DIRS)
+    # Assert
+    assert kind is frozenset
+
+
+def test_a_caller_cannot_add_a_skip_directory():
+    """The HAZARD, not the declaration — the distinction scitex-writer drew on
+    the pattern list. A frozenset has no `.add`."""
+    # Arrange
+    from scitex_app.validator import SKIP_DIRS
+    # Act
+    # Assert
+    with pytest.raises(AttributeError):
+        SKIP_DIRS.add("evil")
+
+
+def test_the_prefix_skip_list_stays_deliberately_different():
+    """THE CONTROL THAT PROTECTS A DIVERGENCE RATHER THAN A CONVERGENCE.
+
+    `_prefix.PREFIX_SKIP_DIRS` has nine entries to this one's six, and the
+    difference is INTENDED: prefix safety must read built bundles (`dist`,
+    `assets`) because the shipped URL lives there, and this rule must not
+    because minified vendor code trips it.
+
+    Without this assertion, a later tidy-up that sees "three skip lists" could
+    collapse all three and be green — mistaking a deliberate divergence for a
+    duplicate. Every other test here pushes toward convergence; this one marks
+    where convergence would be a bug.
+    """
+    # Arrange
+    from scitex_app.appmaker._validate._prefix import PREFIX_SKIP_DIRS
+    from scitex_app.validator import SKIP_DIRS
+    # Act
+    same = SKIP_DIRS is PREFIX_SKIP_DIRS or set(SKIP_DIRS) == set(PREFIX_SKIP_DIRS)
+    # Assert
+    assert not same
