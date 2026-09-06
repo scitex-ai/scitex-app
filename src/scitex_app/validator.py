@@ -130,7 +130,15 @@ from scitex_app.appmaker._validate._js import DANGEROUS_JS_PATTERNS
 DEFAULT_MAX_BUNDLE_SIZE = 50 * 1024 * 1024
 
 # Directories to skip during CSS/JS scanning (build artifacts, docs, etc.)
-SKIP_DIRS = {"node_modules", "dist", ".vite", "_docs", "__pycache__", "assets"}
+# Directories skipped when walking an app's files — IMPORTED, not declared.
+# The third instance of one fact declared twice; see the note beside the
+# canonical definition. NOT the same as _prefix.PREFIX_SKIP_DIRS, whose nine
+# entries differ DELIBERATELY: prefix safety must read built bundles, this rule
+# must not. A test asserts that difference so a future "tidy-up" cannot collapse
+# the two by mistaking a deliberate divergence for a duplicate.
+from scitex_app.appmaker._validate._js import (  # noqa: E402
+    JS_SKIP_DIRS as SKIP_DIRS,
+)
 
 
 @dataclass

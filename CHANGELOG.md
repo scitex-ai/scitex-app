@@ -7,10 +7,51 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-09-06
+
+Patch. A third list declared twice, and a correction to 0.19.0's own changelog.
+
+### Fixed — one skip-directory list, imported and immutable
+
+    validator.SKIP_DIRS   set, 6 entries
+    _js.JS_SKIP_DIRS      set, 6 entries — byte-identical, separate object
+
+Third instance of one fact declared twice, after the JS pattern list (0.16.2)
+and the manifest key list (0.18.0). **Equal today is exactly how both of those
+started.** `validator.py` now imports it; a test asserts the two names are the
+SAME OBJECT, because an equality test goes green the moment someone re-declares.
+
+Now a **frozenset** — it is imported by two modules, so a mutable set would let
+any importer `.add()` a directory and change what every caller in the
+interpreter scans. `PREFIX_SKIP_DIRS` was already a frozenset; this matches.
+Both uses are `&` intersection, unaffected.
+
+**`_prefix.PREFIX_SKIP_DIRS` is deliberately NOT the same** — nine entries
+versus six, because prefix safety must read built bundles and this rule must
+not. A test asserts they stay different, so a later tidy-up cannot collapse a
+deliberate divergence by mistaking it for a duplicate.
+
+### Fixed — 0.19.0's changelog claimed more than `__all__` delivers
+
+It said ten names "stop being importable-by-accident". They do not: they remain
+module attributes and `from scitex_app.validator import re` still works.
+`__all__` governs `import *` and the documented surface.
+
+**Declared not-public and not-importable are two claims, and the entry shipped
+the second while the code did the first** — the same distinction this project
+spent 0.16.2–0.19.0 enforcing everywhere else. Found by scitex-writer,
+measuring the released wheel rather than reading the announcement.
+
 ## [0.19.0] - 2026-09-06
 
 Minor. `scitex_app.validator` now declares its public surface. No behaviour
-changes; ten names stop being importable-by-accident.
+changes; ten names stop being *advertised* as part of it.
+
+> **Corrected in 0.19.1.** This entry originally said those names "stop being
+> importable-by-accident". That overstates what `__all__` does — the names are
+> still module attributes and `from scitex_app.validator import re` still
+> works. `__all__` governs `import *` and the documented surface, nothing more.
+> Reported by scitex-writer, who measured it on the released wheel.
 
 ### Added — `__all__`, and singularity becomes assertable
 

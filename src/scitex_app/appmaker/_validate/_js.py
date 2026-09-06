@@ -67,7 +67,24 @@ JS_SCAN_SUFFIXES = ("*.js", "*.ts", "*.tsx", "*.jsx")
 #                   dist would report the app for code it did not write
 #
 # Same repo, same kind of scan, opposite decisions, both intentional.
-JS_SKIP_DIRS = {"node_modules", "dist", ".vite", "_docs", "__pycache__", "assets"}
+# THE ONE SKIP LIST FOR THIS FAMILY. scitex_app.validator imports this as
+# SKIP_DIRS rather than declaring a second one — it declared its own for months,
+# byte-identical and a separate object, which is the state that preceded both
+# previous drifts (the JS pattern list, 0.16.2; the manifest key list, 0.18.0).
+# Equal today is exactly how those two started.
+#
+# A FROZENSET, not a set: it is imported by two modules, so a mutable set would
+# let any importer .add() or .discard() a directory and change what every caller
+# in the interpreter scans. PREFIX_SKIP_DIRS below is already a frozenset; this
+# now matches. Both uses are `&` intersection, which is unaffected.
+#
+# NAME NOTE: `JS_` is too narrow for what this now serves — AppValidator's
+# `_should_skip` uses it for the CSS walk as well as the JS one. Renaming an
+# exported name is a wider change than this one and is recorded on
+# app-appvalidator-css-check-is-a-substring-scan-20260906 rather than done here.
+JS_SKIP_DIRS = frozenset(
+    {"node_modules", "dist", ".vite", "_docs", "__pycache__", "assets"}
+)
 
 
 def validate_js(app_dir: str | Path) -> list[str]:
