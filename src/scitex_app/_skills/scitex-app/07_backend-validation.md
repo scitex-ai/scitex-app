@@ -148,21 +148,21 @@ rule is **ownership by NODE, not by name**; tables live in
 ```python
 from scitex_app.appmaker._validate import validate_css_canonical
 
-report = validate_css_canonical("path/to/app")
-print(report.summary())   # findings, denominator, blind spot, root doubt
+report = validate_css_canonical("path/to/app")   # RAISES on a non-app root
+print(report.summary())   # findings, denominator, blind spot
 report.files_scanned      # 0 means NOT SCANNED, not clean
 report.not_checked        # tier 3, and the bare-`footer` residual
-report.root_looks_like_an_app   # False => you pointed at a repo root
 for f in report.details:  # BRANCH ON f.rule, never on the message text
     f.rule, f.tier, f.path, f.line, f.selector, f.subject
 ```
 
-**One app, not a tree.** A repo root pools shell and infra CSS this rule was
-never written for: hub scanned theirs and got 604 files / 346 findings where
-the app population was 250 / 15 — and their enumeration control agreed exactly
-with an independent walk, because a control proves COMPLETENESS, never
-POPULATION. `root_looks_like_an_app` (an app dir has a `manifest.json`) says so
-in `summary()` — a caveat, not a refusal.
+**One app, not a tree — it REFUSES rather than warns.** A root without
+`manifest.json` raises `NotAnAppDirectoryError`; to sweep a tree loop your app
+dirs, calling this per app (`css_files()` is the walk, ungated). Until 0.20.0
+it returned the count beside a caveat: hub read 346 findings on their root —
+app population 15 — as a 12.8x regression, with a floor asserted and a control
+firing. Both passed: one asks if the walk found files, the other if the rule
+can fire; **neither asks if the tree is in scope.**
 
 **Branch on `rule`, never the message.** Findings were strings, so the only
 consumer keyword-matched them and mis-bucketed 316. `findings`/`str(f)` unchanged.

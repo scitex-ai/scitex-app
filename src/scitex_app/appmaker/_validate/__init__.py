@@ -34,6 +34,7 @@ from ._css import (
     SHELL_INSTANCE_PREFIXES,
     SHELL_TOKEN_PREFIXES,
     CssScanReport,
+    NotAnAppDirectoryError,
     css_files,
     validate_css_canonical,
 )
@@ -99,6 +100,7 @@ __all__ = [
     "SHARED_COMPONENT_CLASSES",
     "SHELL_INSTANCE_NAMES",
     "SHELL_INSTANCE_PREFIXES",
+    "NotAnAppDirectoryError",
     "SHELL_TOKEN_PREFIXES",
     "VALID_API_SCOPES",
     "VALID_FILESYSTEM_SCOPES",
