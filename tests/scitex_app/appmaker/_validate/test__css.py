@@ -510,3 +510,107 @@ def test_a_body_class_scoped_footer_rule_is_declared_not_silently_allowed(tmp_pa
     # Assert — silent, and the silence is declared.
     hidden = "BODY-CLASS-scoped" in " ".join(report.not_checked)
     assert (bool(report.findings), hidden) == (False, True)
+
+
+# --------------------------------------------------------------------------
+# EXCLUDED vs MATCHED — the distinction #144 did not make
+#
+# scitex-hub ran 0.15.0 against their own tree (develop@4ec9c4066, 428 files,
+# 29 findings) and the first real-population run found this in ten minutes.
+# Their `:not()` half was right; their `:is()` half was not, and taking their
+# suggested list wholesale would have turned a false positive into a false
+# negative.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "css",
+    [
+        'div[class*="editor"]:not(.panel-resizer) { overflow: visible !important }\n',
+        ":not(#workspace-layout) { color: red }\n",
+        ":not(.wft-node) { color: red }\n",
+        ":not(#main-content) { color: red !important }\n",
+        ".x:has(.panel-resizer) { color: red !important }\n",
+        ":has(:not(.panel-resizer)) { color: red !important }\n",
+    ],
+    ids=["hub-real", "tier1-id", "tier1-prefix", "tier2-container", "has", "nested"],
+)
+def test_a_name_that_is_excluded_or_conditional_is_not_a_target(tmp_path, css):
+    """`:not(X)` EXCLUDES X; `:has(X)` makes X a condition on an ancestor. In
+    neither is X styled, so a protected name appearing there is not a target.
+
+    The first case is hub's, from `writer_app/css/editor/editor.css:177` — a
+    rule about editors that explicitly excludes resizers, reported as styling
+    one. The same file's OTHER finding is genuine (`.panel-resizer::before {
+    z-index: 100 !important }`), so the file is 1 real + 1 false rather than
+    two of either, which is the whole reason a finding count is not a defect
+    count.
+    """
+    # Arrange
+    app = _app(tmp_path, css)
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert not report.findings
+
+
+def test_a_name_inside_a_matching_pseudo_class_IS_still_a_target(tmp_path):
+    """THE HALF OF HUB'S SUGGESTION I DID NOT TAKE, and the reason the module
+    carries two strippers instead of one.
+
+    hub proposed `:is(.foo, .h-resizer)` as a must-NOT-fire case beside their
+    `:not()` finding. But `:is()` is a MATCHING pseudo-class: this rule applies
+    `!important` to every `.h-resizer` on the page, including the shell's.
+    Blanking `:is()` for the membership question — the obvious way to reuse
+    the stripper #144 already had — would have converted their false positive
+    into a false negative, silently.
+
+    The two questions are genuinely different:
+
+        membership  is this protected name a TARGET of this rule?
+        leftmost    does this selector list BEGIN with a bare `footer`?
+
+    and only the second one wants every internal comma gone.
+    """
+    # Arrange
+    app = _app(tmp_path, ":is(.foo, .h-resizer) { color: red !important }\n")
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert len(report.findings) == 1
+
+
+def test_a_footer_subject_under_a_leading_is_is_the_declared_residual(tmp_path):
+    """`:is(header, footer) { …!important }` DOES reach the shell's footer and
+    this rule does not report it — asserted as a KNOWN zero.
+
+    The leftmost test drops every comma inside `:is()`, because keeping them
+    would fire on the far commoner `:is(header, footer) .x { … }`, where the
+    footer is an ANCESTOR and the subject is `.x`. Telling those apart means
+    knowing which compound is the subject, which is the parser again.
+
+    Both shapes are asserted here, in the same test, so the trade is visible:
+    the miss below is the price of the pass above it, not an oversight.
+    """
+    # Arrange
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    subject = _app(tmp_path / "a", ":is(header, footer) { padding: 0 !important }\n")
+    ancestor = _app(tmp_path / "b", ":is(header, footer) .x { color: red !important }\n")
+    # Act
+    missed = validate_css_canonical(subject).findings
+    correct = validate_css_canonical(ancestor).findings
+    # Assert — the ancestor form is right, the subject form is the declared gap.
+    assert (bool(missed), bool(correct)) == (False, False)
+
+
+def test_the_subject_residual_is_named_in_the_report(tmp_path):
+    """A gap the caller cannot see is a check that cannot fail. This one is in
+    `not_checked` beside tier 3 and the body-class footer, so a green from this
+    rule carries all three."""
+    # Arrange
+    app = _app(tmp_path, ".mine { color: red }\n")
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert "SUBJECT" in " ".join(report.not_checked)

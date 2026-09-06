@@ -7,6 +7,75 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-09-06
+
+Patch. An EXCLUDED name is not a target — and a MATCHED one still is. The first
+run against a real population found this in ten minutes.
+
+### Fixed — `:not()` and `:has()` arguments read as targets
+
+```css
+div[class*="editor"]:not(.panel-resizer) { overflow: visible !important }
+```
+
+reported `!important on the shared component '.panel-resizer'`. The rule
+EXCLUDES resizers from a rule about editors; it does not style one. Same
+semantics as the `:not(footer)` case 0.15.0 fixed, in a check that fix did not
+reach: 0.15.0 blanked parenthesised arguments in the two FOOTER checks only,
+and the name-membership checks — tier 1 ids, tier 1 prefixes, `APP_CONTAINERS`,
+`SHARED_COMPONENT_CLASSES`, and the `:root` token check — all still read the
+raw selector.
+
+Found by scitex-hub running 0.15.0 against their own tree
+(`develop@4ec9c4066`, 428 files scanned via `css_files()`, 29 findings) — real
+code, from `writer_app/css/editor/editor.css:177`. That file's OTHER finding is
+genuine (`.panel-resizer::before { z-index: 100 !important }`), so it is 1 real
+plus 1 false rather than two of either.
+
+### And the half of that report NOT taken — `:is()` still targets
+
+hub proposed `:is(.foo, .h-resizer)` and `:where(.stx-shell-sidebar)` as
+must-NOT-fire cases beside the `:not()` finding. **`:is()` and `:where()` are
+MATCHING pseudo-classes**: `:is(.foo, .h-resizer) { color: red !important }`
+applies `!important` to every `.h-resizer` on the page, the shell's included.
+Blanking them for the membership question — the obvious way to reuse the
+stripper 0.15.0 already had — would have converted a false positive into a
+false NEGATIVE, silently.
+
+So the module now carries two strippers, deliberately, against the usual rule
+that a second implementation is a defect. They answer two different questions:
+
+    membership   is this protected name a TARGET of this rule?
+                 `:not(.panel-resizer)` excludes it  -> no
+                 `:is(.foo, .h-resizer)` matches it  -> YES
+    leftmost     does this selector list BEGIN with a bare `footer`?
+                 every internal comma is noise, `:is()` included
+
+Only the second wants every comma gone. One stripper cannot serve both.
+
+### Added to `not_checked` — the residual this trade leaves
+
+`:is(header, footer) { …!important }` DOES reach the shell's footer and is not
+reported. The leftmost test drops every comma inside `:is()`, because keeping
+them would fire on the far commoner `:is(header, footer) .x { … }`, where the
+footer is an ANCESTOR and the subject is `.x`. Separating the two means knowing
+which compound is the subject — the parser again, same card. Asserted as a
+known zero beside the shape it pays for, so the trade is visible rather than
+looking like an oversight.
+
+### On the number
+
+hub's 29 is a FINDING count and is not reported here as a defect count: they
+opened a sample (3 verified real, 1 verified false, 25 unopened) and will
+re-run against this release before saying more. `.panel-resizer` inside
+`div[class*="…"]:not(…)` looks like a `writer_app` idiom rather than a one-off,
+so the total may move materially.
+
+The denominator did not move: 428 files under `css_files()`'s skip-set walk and
+428 under 0.14.4's `.git`-only walk. Expected — hub's app dirs carry no
+`node_modules` — and reported anyway, because "no movement" is only evidence
+when it was going to be reported either way.
+
 ## [0.15.0] - 2026-09-05
 
 Minor. One canonical workspace-CSS rule, measured against the shell instead of
