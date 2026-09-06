@@ -188,3 +188,21 @@ def test_the_narrowed_list_still_catches_real_browser_hazards():
     hits = [p for p in DANGEROUS_JS_PATTERNS if re.search(p, hazardous)]
     # Assert
     assert len(hits) == 2
+
+
+def test_the_pattern_list_cannot_be_mutated_by_a_caller():
+    """A LIST HERE WOULD BE MUTABLE SHARED STATE.
+
+    The object is imported by scitex_app.validator, so with a list any importer
+    could `.append()` a pattern and change validation for every caller in the
+    interpreter — including a test that forgets to undo it. Raised by
+    scitex-writer 2026-09-06 as the one part of their answer that is a live bug
+    rather than a preference.
+
+    Asserts the TYPE rather than catching AttributeError, because a caller that
+    reaches for `.append()` on a tuple is already a bug the reader should see.
+    """
+    # Arrange / Act
+    kind = type(DANGEROUS_JS_PATTERNS)
+    # Assert
+    assert kind is tuple

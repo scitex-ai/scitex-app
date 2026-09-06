@@ -604,7 +604,7 @@ class TestValidateJs:
 
 
     def test_a_variable_named_subprocess_is_not_a_browser_hazard(self, tmp_path):
-        """INVERTED 2026-09-06. This test asserted the defect.
+        r"""INVERTED 2026-09-06. This test asserted the defect.
 
         `\bsubprocess\b` is the PYTHON forbidden list copy-pasted into a JS
         scanner, and it matched the VARIABLE NAME in this fixture — not

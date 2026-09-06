@@ -41,13 +41,19 @@ from pathlib import Path
 # tell that from `RegExp.exec`. These are browser bundles, so Node is not the
 # threat model; if server-side JS ever ships, the rule to add is one that names
 # child_process, not one that matches every `.exec(`.
-DANGEROUS_JS_PATTERNS = [
+# A TUPLE, NOT A LIST, AND THAT IS THE POINT. This object is imported by
+# scitex_app.validator, so a module-level list would be mutable shared state:
+# anything that imports it could `.append()` a pattern and change validation for
+# every caller in that interpreter — including a test that forgets to undo it.
+# A tuple makes that unrepresentable. Rebuilding the module rebuilds the object,
+# so nothing is lost. (scitex-writer, 2026-09-06, as a consumer of both names.)
+DANGEROUS_JS_PATTERNS = (
     r"\beval\s*\(",
     r"\bFunction\s*\(",
     r"\bdocument\.cookie\b",
     r"\bwindow\.parent\b",
     r"\bwindow\.top\b",
-]
+)
 
 JS_SCAN_SUFFIXES = ("*.js", "*.ts", "*.tsx", "*.jsx")
 
