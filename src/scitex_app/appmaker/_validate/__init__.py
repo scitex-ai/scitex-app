@@ -37,6 +37,9 @@ from ._css import (
     css_files,
     validate_css_canonical,
 )
+from ._css_finding import (
+    CssFinding,
+)
 from ._dependencies import validate_dependencies
 from ._frame import (
     FORBIDDEN_BLOCK_OVERRIDES,
@@ -76,6 +79,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "APP_CONTAINERS",
     "BODY_STATE_CLASSES",
+    "CssFinding",
     "CssScanReport",
     "DANGEROUS_JS_PATTERNS",
     "DEFAULT_MAX_BUNDLE_SIZE",

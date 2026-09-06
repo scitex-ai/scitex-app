@@ -7,8 +7,8 @@ tags: [scitex-app-backend-validation]
 
 # Backend SDK — App Validation
 
-Companion to [02_backend-sdk.md](02_backend-sdk.md) (split out for SK401
-budget). Path resolution helpers live in [03_paths.md](03_paths.md).
+Companion to [02_backend-sdk.md](02_backend-sdk.md); path helpers are in
+[03_paths.md](03_paths.md).
 
 ## App Validation
 
@@ -28,13 +28,12 @@ relying on either. `AppValidator` (above) is the class documented here; the CLI
 `scitex-app app validate` calls `scitex_app.appmaker.validate`, a separate
 implementation.
 
-**THEY DO NOT TAKE THE SAME `app_dir`**, and the table below compares them
-check-by-check without saying so. The CLI wants the directory holding
+**THEY DO NOT TAKE THE SAME `app_dir`.** The CLI wants the directory holding
 `manifest.json` (`<pkg>/_django`); `AppValidator` resolves it from the package
 root. Hand the CLI a package root and it reports `manifest.json not found`
 while `AppValidator` reads it fine — measured on scholar, 15 errors vs 3, and
-**0 vs 0** once each gets the path it wants. Agreement at the right roots is
-what hides this. Measured coverage, each at its own root:
+**0 vs 0** once each gets the path it wants. Agreement at the right roots hides
+it. Measured coverage, each at its own root:
 
 | check | `scitex-app app validate` | `AppValidator` |
 | --- | --- | --- |
@@ -54,22 +53,19 @@ validate(app_dir, check_js_safety=True, check_bundle_size=True,
 ```
 
 Off by default, and the default IS the arming switch. The narrowed JS rule
-reports **0** on `scholar/_django` and `writer/_django` and still fires on
-planted hazards — but zero is equally consistent with "the scan did not run",
-so those three stay unarmed until a peer reports a finding I did not construct.
+reports **0** on `scholar/_django` and `writer/_django` and fires on planted
+hazards — but zero is equally consistent with "the scan did not run", so those
+three stay unarmed until a peer reports a finding I did not construct.
 
-**`check_prefix_safety` is the exception: ARMED as of 0.14.0.** Its findings
-are errors, so a caller that raises on a non-empty result — including hub's
-publication path — refuses an app carrying a root-absolute or
-document-relative request URL. Pass `check_prefix_safety=False` to opt out.
+**`check_prefix_safety` is the exception: ARMED as of 0.14.0.** Its findings are
+errors, so a caller that raises on a non-empty result — including hub's
+publication path — refuses an app carrying a root-absolute or document-relative
+request URL; pass `check_prefix_safety=False` to opt out. This said "opt-in" for
+two releases after it stopped being true, the one stale place that shipped to
+app developers.
 
-This said "opt-in" until the day it was not — of the three places that went
-false at once, **the only one that shipped stale to app developers**, for two
-releases. A wrong docstring misleads a maintainer; this misleads a stranger.
-
-**And when you run the rule yourself, report the denominator.** "0 findings" is
-not a claim; "0 findings across N files" is, and N == 0 means NOT SCANNED
-rather than CLEAN:
+**Report the denominator.** "0 findings" is not a claim; "0 findings across N
+files" is, and N == 0 means NOT SCANNED rather than CLEAN:
 
 ```python
 from scitex_app.appmaker import scannable_files, validate_prefix_safety
@@ -79,31 +75,26 @@ for row in validate_prefix_safety(app_dir):
     print(row)
 ```
 
-**To scan a REF rather than a working tree, export it — do not reach for a
-detached worktree.**
+**To scan a REF, export it — not a detached worktree.**
 
 ```bash
 git archive <ref> | tar -x -C "$(mktemp -d)"
 ```
 
-This used to say "use a detached worktree", and that advice cost scitex-hub a
-whole measurement on 2026-09-05: `.worktrees/` is a skipped name, and before
-0.14.4 the skip matched the ABSOLUTE path, so a scan ROOTED in a worktree had
-every file excluded by an ancestor — 1,116 files / 0 findings on a tree holding
-262. 0.14.4 matches relative to the scan root, so worktrees scan correctly now;
-the export is still the better habit for a REF, being the ref and nothing else.
+This used to say "use a detached worktree", which cost hub a whole measurement:
+before 0.14.4 the `.worktrees/` skip matched the ABSOLUTE path, so a scan rooted
+in one had every file excluded by an ancestor — 1,116 files / 0 findings on a
+tree holding 262. Fixed in 0.14.4; the export is still the better habit for a
+REF, being the ref and nothing else.
 
-A positive control (a temp tree with `fetch("/api/thing")` returning exactly 1)
-proves the instrument RUNS, not that it is POINTED anywhere — a control runs on
-a tree that exists. Both, or neither is evidence. Since 0.14.1 a missing path
-raises rather than answering "clean".
+A positive control proves the instrument RUNS, not that it is POINTED anywhere.
+Both, or neither is evidence. Since 0.14.1 a missing path raises, not "clean".
 
 Still divided on CSS: `#main-content { color: red }` passes the CLI and fails
-`AppValidator`; `footer { display: none }` does the reverse. `validate_css_canonical()`
-(0.15.0, *Workspace CSS* below) is the one measured answer but is UNARMED, so
-the divergence describes what runs today. On MANIFESTS the only divergence is
-`license`, required by the CLI alone — measured 2026-09-06 across the 7 apps
-`validate()` serves, 6 already declare it. Card
+`AppValidator`; `footer { display: none }` does the reverse.
+`validate_css_canonical()` is the one measured answer but is UNARMED, so the
+divergence describes what runs today. On MANIFESTS the only divergence is
+`license`, required by the CLI alone (6 of the 7 apps already declare it). Card
 `app-two-validators-docs-describe-the-uncalled-one-20260822`.
 
 ## Errors vs advice (CLI path)
@@ -136,18 +127,17 @@ JSON, **no `version` key**), `validate_structure()` (`_django/views.py` and
 `urls.py`), `validate_css()` (see *Workspace CSS*), `validate_js()`,
 `validate_bundle_size()` (50 MB, `max_bundle_size`), `validate_privileges()`.
 
-`version` in `manifest.json` is REJECTED by both — it is derived at runtime
-from `pip_package`. A hand-written one drifts, and did: every hub app tile once
-showed a wrong version from this. The shipped example carried one until 0.15.3.
+`version` in `manifest.json` is REJECTED by both — derived at runtime from
+`pip_package`. A hand-written one drifts, and did: every hub app tile once showed
+a wrong version. The shipped example carried one until 0.15.3.
 
 ### Workspace CSS — what your app may and may not style
 
-This was a flat list of eight names, "shell selectors apps must NOT target".
-**It described a validator nothing called**, and was wrong in both directions:
-`.stx-shell-*` is not blanket no-touch (hub's own apps carry 42 legitimate
-selector lines on `stx-shell-sidebar__*`), and it omitted names that are. The
-rule is **ownership by NODE, not by name**; the tables live in
-`scitex_app.appmaker._validate` and are deliberately not copied here:
+This was a flat list of eight names describing **a validator nothing called**,
+wrong both ways: `.stx-shell-*` is not blanket no-touch (hub's apps carry 42
+legitimate `stx-shell-sidebar__*` lines) and it omitted names that are. The
+rule is **ownership by NODE, not by name**; tables live in
+`scitex_app.appmaker._validate`, deliberately not copied here:
 
 | tier | what | rule |
 |---|---|---|
@@ -159,23 +149,33 @@ rule is **ownership by NODE, not by name**; the tables live in
 from scitex_app.appmaker._validate import validate_css_canonical
 
 report = validate_css_canonical("path/to/app")
-print(report.summary())   # findings AND denominator AND blind spot
+print(report.summary())   # findings, denominator, blind spot, root doubt
 report.files_scanned      # 0 means NOT SCANNED, not clean
 report.not_checked        # tier 3, and the bare-`footer` residual
+report.root_looks_like_an_app   # False => you pointed at a repo root
+for f in report.details:  # BRANCH ON f.rule, never on the message text
+    f.rule, f.tier, f.path, f.line, f.selector, f.subject
 ```
 
-**UNARMED** — `validate()` still runs the older four-name `validate_css()`;
-pass `check_css_canonical=True` for this one. Arming replaces that call rather
-than adding to it. Second declared residual: whether a bare `footer { … }`
-reaches the shell's footer. A substring test cannot tell, so `!important` on an
-unscoped `footer` and `footer { display: none }` are errors and every other
-bare-`footer` rule passes.
+**One app, not a tree.** A repo root pools shell and infra CSS this rule was
+never written for: hub scanned theirs and got 604 files / 346 findings where
+the app population was 250 / 15 — and their enumeration control agreed exactly
+with an independent walk, because a control proves COMPLETENESS, never
+POPULATION. `root_looks_like_an_app` (an app dir has a `manifest.json`) says so
+in `summary()` — a caveat, not a refusal.
 
-Blocked JS patterns and skipped scan directories are `DANGEROUS_JS_PATTERNS`
-and `PREFIX_SKIP_DIRS` in the same module — read them from there. The two
-hand-copied lists that stood here had both drifted (the skip list omitted five
-names and invented one), and a stale list is worse than a pointer: nobody
-re-checks it.
+**Branch on `rule`, never the message.** Findings were strings, so the only
+consumer keyword-matched them and mis-bucketed 316. `findings`/`str(f)` unchanged.
+
+**UNARMED** — `validate()` still runs the older four-name `validate_css()`;
+pass `check_css_canonical=True`. Arming replaces that call, not adds to it.
+Second declared residual: a substring test cannot tell whether a bare
+`footer { … }` reaches the shell's, so `!important` on an unscoped `footer` and
+`footer { display: none }` are errors and every other bare-`footer` passes.
+
+Blocked JS patterns and skipped scan dirs are `DANGEROUS_JS_PATTERNS` and
+`PREFIX_SKIP_DIRS` in the same module. The hand-copied lists that stood here
+had both drifted; a stale list is worse than a pointer — nobody re-checks it.
 
 ## Minimal App Checklist
 
@@ -194,7 +194,7 @@ myapp/
 - CSS scoped to your own nodes (*Workspace CSS*); no dangerous JS patterns
 - `_django/views.py` and `_django/urls.py` required for platform integration
 - Use `get_files()` for all file I/O — never `open()` directly in app logic
-- **Packaging**: Apps with a `bridge` key in manifest.json must keep
-  `_django/frontend/src/` in their source tree. scitex-hub discovers
-  bridges by scanning sibling directories. Use an `[app]` optional extra
-  for platform Python deps. In CI, clone the repo as a sibling.
+- **Packaging**: apps with a `bridge` key must keep `_django/frontend/src/` in
+  their source tree — hub discovers bridges by scanning sibling directories.
+  Use an `[app]` optional extra for platform Python deps; in CI, clone the repo
+  as a sibling.

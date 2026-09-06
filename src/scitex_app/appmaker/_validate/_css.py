@@ -96,6 +96,7 @@ from ._css_tables import (
     SHELL_INSTANCE_PREFIXES,
     SHELL_TOKEN_PREFIXES,
 )
+from ._css_finding import CssFinding
 
 @dataclass(frozen=True)
 class CssScanReport:
@@ -116,6 +117,8 @@ class CssScanReport:
     files_scanned: int = 0
     checked: tuple[str, ...] = _CHECKED
     not_checked: tuple[str, ...] = _NOT_CHECKED
+    details: tuple[CssFinding, ...] = ()
+    root_looks_like_an_app: bool = True
 
     def __post_init__(self) -> None:
         if self.files_scanned < 0:
@@ -124,6 +127,17 @@ class CssScanReport:
             raise ValueError(
                 "findings reported against zero scanned files — the numerator "
                 "and denominator disagree about what was read"
+            )
+        # THE TWO REPRESENTATIONS MUST NOT DRIFT. `findings` is the string form
+        # kept for existing consumers and `details` is the record form; they
+        # describe the same findings, so a report where they disagree is a bug
+        # in this module, not a caller error. Checked here rather than trusted,
+        # because the whole point of adding `details` is that someone will act
+        # on it instead of the prose.
+        if self.details and tuple(str(d) for d in self.details) != self.findings:
+            raise ValueError(
+                "findings and details disagree — the string form and the "
+                "record form must describe the same findings, in order"
             )
 
     @property
@@ -138,7 +152,29 @@ class CssScanReport:
             if self.scanned_nothing
             else f"{len(self.findings)} finding(s) across {self.files_scanned} stylesheet(s)"
         )
-        return head + "\n  checked: " + "; ".join(self.checked) + "\n  NOT checked: " + "; ".join(
+        # THE ROOT WARNING GOES FIRST, because it changes what every number
+        # below it means. scitex-hub scanned their repo ROOT through a
+        # parameter named `app_dir` and got 604 files / 346 findings where the
+        # right population was 28 app dirs / 250 files / 15 findings — 333 of
+        # them were not app code. Their enumeration control was sound and
+        # agreed exactly with an independent walk; two instruments, same
+        # number, same wrong tree.
+        #
+        # NOT a refusal. Scanning a tree deliberately is legitimate, and this
+        # rule cannot know the caller's intent. What it can do is say that the
+        # root does not look like the thing the parameter is named after — the
+        # same way `files_scanned == 0` reads NOT SCANNED rather than clean.
+        prefix = (
+            ""
+            if self.root_looks_like_an_app
+            else (
+                "ROOT DOES NOT LOOK LIKE AN APP DIRECTORY (no manifest.json) — "
+                "this rule scopes to ONE app; a repo root pools shell and "
+                "infrastructure CSS this rule was never written for. The "
+                "count below is real, but it may not be about app code.\n"
+            )
+        )
+        return prefix + head + "\n  checked: " + "; ".join(self.checked) + "\n  NOT checked: " + "; ".join(
             self.not_checked
         )
 
@@ -176,7 +212,23 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
     call this. See the module docstring for what it does not check."""
     files = css_files(app_dir)
     root = Path(app_dir)
-    findings: list[str] = []
+    found: list[CssFinding] = []
+
+    def add(rule, tier, rel, line, selector, message, subject=""):
+        """ONE PLACE THAT BUILDS A FINDING. Eight call sites used to format
+        their own string, which is how the prefix and the message drifted
+        apart into something a consumer had to re-parse."""
+        found.append(
+            CssFinding(
+                rule=rule,
+                tier=tier,
+                path=str(rel),
+                line=line,
+                selector=selector,
+                message=message,
+                subject=subject,
+            )
+        )
 
     for css_file in files:
         try:
@@ -195,46 +247,59 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
             bare = _strip_pseudo_args(targets)
             # TIER 1 — any mention.
             for name in _matched_names(targets, SHELL_INSTANCE_NAMES):
-                findings.append(
-                    f"{rel}:{line}: selector {selector!r} names {name!r}, which the "
-                    f"shell renders and owns — style your own nodes instead"
+                add(
+                    "shell-instance-name", "1", rel, line, selector,
+                    f"selector {selector!r} names {name!r}, which the "
+                    f"shell renders and owns — style your own nodes instead",
+                    subject=name,
                 )
             for prefix in SHELL_INSTANCE_PREFIXES:
                 if prefix in targets:
-                    findings.append(
-                        f"{rel}:{line}: selector {selector!r} names the shell-owned "
-                        f"{prefix}* family — style your own nodes instead"
+                    add(
+                        "shell-instance-prefix", "1", rel, line, selector,
+                        f"selector {selector!r} names the shell-owned "
+                        f"{prefix}* family — style your own nodes instead",
+                        subject=prefix,
                     )
 
             # TIER 2a — containers and shared components: !important only.
             if "!important" in body:
                 for name in _matched_names(targets, APP_CONTAINERS):
-                    findings.append(
-                        f"{rel}:{line}: !important on {name!r} in {selector!r} — the app "
-                        f"renders INSIDE it; style your children, never the box"
+                    add(
+                        "important-on-app-container", "2a", rel, line, selector,
+                        f"!important on {name!r} in {selector!r} — the app "
+                        f"renders INSIDE it; style your children, never the box",
+                        subject=name,
                     )
                 for name in _matched_names(targets, SHARED_COMPONENT_CLASSES):
-                    findings.append(
-                        f"{rel}:{line}: !important on the shared component {name!r} in "
+                    add(
+                        "important-on-shared-component", "2a", rel, line,
+                        selector,
+                        f"!important on the shared component {name!r} in "
                         f"{selector!r} — your own instance is yours to style, "
-                        f"but !important reaches the shell's instances too"
+                        f"but !important reaches the shell's instances too",
+                        subject=name,
                     )
 
                 if _FOOTER_ELEMENT.search(bare):
-                    findings.append(
-                        f"{rel}:{line}: !important on the shell's footer element in "
+                    add(
+                        "important-on-shell-footer", "2a", rel, line, selector,
+                        f"!important on the shell's footer element in "
                         f"{selector!r} — an app may render its own <footer>, "
-                        f"but a bare `footer` rule reaches the shell's too"
+                        f"but a bare `footer` rule reaches the shell's too",
+                        subject="footer",
                     )
 
             # TIER 2b — tokens: read freely, never redefine at :root.
             if re.search(r"(^|[\s,])(:root|html)([\s,]|$)", targets):
                 for prefix in SHELL_TOKEN_PREFIXES:
                     if re.search(rf"^\s*{re.escape(prefix)}", body, re.MULTILINE):
-                        findings.append(
-                            f"{rel}:{line}: redefines {prefix}* tokens at {selector!r} "
+                        add(
+                            "redefines-shell-tokens", "2b", rel, line, selector,
+                            f"redefines {prefix}* tokens at {selector!r} "
                             f"— read them with var(), never redefine them for "
-                            f"the whole shell"
+                            f"the whole shell",
+                            subject=prefix,
                         )
 
             # TIER 2b(ii) — hiding the shell's footer, with or without
@@ -251,9 +316,11 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
             if _FOOTER_ELEMENT.search(bare) and re.search(
                 r"display\s*:\s*none", body
             ):
-                findings.append(
-                    f"{rel}:{line}: must not hide the shell's footer, and "
-                    f"{selector!r} is not scoped to the app's own"
+                add(
+                    "hides-shell-footer", "2b", rel, line, selector,
+                    f"must not hide the shell's footer, and "
+                    f"{selector!r} is not scoped to the app's own",
+                    subject="footer",
                 )
 
             # TIER 2c — setting shell state. Reading it (`body.zen-mode .mine`)
@@ -266,13 +333,24 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
             if selector.strip() == "body":
                 for state in BODY_STATE_CLASSES:
                     if state in body:
-                        findings.append(
-                            f"{rel}:{line}: sets the shell state class "
+                        add(
+                            "sets-shell-state", "2c", rel, line, selector,
+                            f"sets the shell state class "
                             f"{state!r} — the shell owns this state; react to "
-                            f"it, do not drive it"
+                            f"it, do not drive it",
+                            subject=state,
                         )
 
-    return CssScanReport(findings=tuple(findings), files_scanned=len(files))
+    # AN APP DIRECTORY HAS A manifest.json; A REPO ROOT DOES NOT. This is the
+    # cheapest predicate that separates the two, and it is the one that would
+    # have caught both wrong denominators of 2026-09-06 — hub's 604-file repo
+    # root, and my own 37 manifests pooled from three unrelated populations.
+    return CssScanReport(
+        findings=tuple(str(f) for f in found),
+        files_scanned=len(files),
+        details=tuple(found),
+        root_looks_like_an_app=(root / "manifest.json").is_file(),
+    )
 
 
 # EOF
