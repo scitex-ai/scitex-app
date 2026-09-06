@@ -197,11 +197,55 @@ _PSEUDO_ARGS = re.compile(r"\(([^()]*)\)")
 def _strip_pseudo_args(selector: str) -> str:
     """Replace the contents of every parenthesised group with spaces. Applied
     repeatedly so nested groups (`:has(:not(footer))`) collapse from the inside
-    out."""
+    out.
+
+    FOR THE LEFTMOST TEST ONLY. It answers a STRUCTURAL question — "does this
+    selector list begin with a bare `footer`?" — for which every internal comma
+    is noise regardless of which pseudo-class it sits in. Do not reach for it
+    to answer the membership question below; see `_strip_excluded` for why the
+    two cannot share one stripper.
+    """
     previous = None
     while previous != selector:
         previous = selector
         selector = _PSEUDO_ARGS.sub(lambda m: "(" + " " * len(m.group(1)) + ")", selector)
+    return selector
+
+
+#: `:not(X)` EXCLUDES X and `:has(X)` makes X a condition on an ancestor. In
+#: neither is X styled, so a protected name appearing there is not a target.
+_EXCLUDED_ARG = re.compile(r":(?:not|has)\([^()]*\)", re.IGNORECASE)
+
+
+def _strip_excluded(selector: str) -> str:
+    """Blank `:not(...)` and `:has(...)` whole, repeatedly so nesting collapses
+    from the inside out.
+
+    DELIBERATELY NOT `_strip_pseudo_args`, AND THIS IS THE OPPOSITE OF THE
+    USUAL LESSON. Two strippers here are not one rule implemented twice: they
+    answer two different questions, and collapsing them breaks one of the two.
+
+        membership  "is this protected name a TARGET of this rule?"
+                    `:not(.panel-resizer)` excludes it     -> not a target
+                    `:is(.foo, .h-resizer)` MATCHES it     -> IS a target
+        leftmost    "does this selector list begin with a bare `footer`?"
+                    every internal comma is noise, `:is()` included
+
+    So membership must keep `:is()` / `:where()` contents and drop `:not()` /
+    `:has()`; the leftmost test must drop all four. Blanking everything for
+    membership would silently stop reporting `:is(.foo, .h-resizer)
+    {!important}`, which really does style the shell's resizers.
+
+    scitex-hub proposed `:is(.foo, .h-resizer)` and `:where(.stx-shell-sidebar)`
+    as must-NOT-fire cases alongside their `:not()` finding. The `:not()` half
+    was right and is fixed here; the `:is()` half is not — `:is()` is a
+    matching pseudo-class, and treating it like `:not()` would have converted
+    their false positive into a false negative.
+    """
+    previous = None
+    while previous != selector:
+        previous = selector
+        selector = _EXCLUDED_ARG.sub(lambda m: " " * len(m.group(0)), selector)
     return selector
 
 #: TIER 2 — shared design tokens. An app may READ them with `var(--x)`; it must
@@ -232,6 +276,12 @@ _NOT_CHECKED = (
     "footer — the honest rule is 'any mention', but a substring test cannot "
     "tell the selector `footer` from `.status-footer` or `--footer-height`, "
     "and one app legitimately renders its own (same parser, same card)",
+    "a `footer` that is the SUBJECT of a leading matching pseudo-class "
+    "(`:is(header, footer) {…!important}`) — the leftmost test drops every "
+    "comma inside `:is()` / `:where()`, because keeping them would fire on the "
+    "far commoner `:is(header, footer) .x {…}`, where the footer is an "
+    "ANCESTOR and the subject is `.x`. Separating the two needs to know which "
+    "compound is the subject (same parser, same card)",
     "a BODY-CLASS-scoped footer rule (`body.myapp-page footer {display:none}`) "
     "— it is not leftmost, so this rule passes it, and unlike `.myapp footer` "
     "it DOES reach the shell's footer, which lives inside <body>. The two "
@@ -339,17 +389,20 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
         rel = css_file.relative_to(root)
 
         for selector, body in _rule_blocks(content):
-            # Both footer checks below read this, never the raw selector.
-            bare = _strip_pseudo_args(selector)
+            # TWO strippers, for two different questions — see
+            # `_strip_excluded`. `targets` is what this rule STYLES;
+            # `bare` is the selector list with every internal comma removed.
+            targets = _strip_excluded(selector)
+            bare = _strip_pseudo_args(targets)
             # TIER 1 — any mention.
             for name in SHELL_INSTANCE_NAMES:
-                if name in selector:
+                if name in targets:
                     findings.append(
                         f"{rel}: selector {selector!r} names {name!r}, which the "
                         f"shell renders and owns — style your own nodes instead"
                     )
             for prefix in SHELL_INSTANCE_PREFIXES:
-                if prefix in selector:
+                if prefix in targets:
                     findings.append(
                         f"{rel}: selector {selector!r} names the shell-owned "
                         f"{prefix}* family — style your own nodes instead"
@@ -358,13 +411,13 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
             # TIER 2a — containers and shared components: !important only.
             if "!important" in body:
                 for name in APP_CONTAINERS:
-                    if name in selector:
+                    if name in targets:
                         findings.append(
                             f"{rel}: !important on {name!r} — the app renders "
                             f"INSIDE it; style your children, never the box"
                         )
                 for name in SHARED_COMPONENT_CLASSES:
-                    if name in selector:
+                    if name in targets:
                         findings.append(
                             f"{rel}: !important on the shared component {name!r} "
                             f"— your own instance is yours to style, but "
@@ -379,7 +432,7 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
                     )
 
             # TIER 2b — tokens: read freely, never redefine at :root.
-            if re.search(r"(^|[\s,])(:root|html)([\s,]|$)", selector):
+            if re.search(r"(^|[\s,])(:root|html)([\s,]|$)", targets):
                 for prefix in SHELL_TOKEN_PREFIXES:
                     if re.search(rf"^\s*{re.escape(prefix)}", body, re.MULTILINE):
                         findings.append(
