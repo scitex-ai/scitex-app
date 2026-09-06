@@ -265,3 +265,82 @@ def test_a_live_css_rule_after_a_comment_is_still_reported(tmp_path):
     reported = validate_css(tmp_path)
     # Assert
     assert reported
+
+
+# ---------------------------------------------------------------------------
+# NAME BOUNDARY — added 2026-09-06. `re.escape(selector)` matched any name that
+# merely STARTED with a protected one. scitex-hub measured 42 legitimate
+# `stx-shell-sidebar__*` selector lines across nine apps; every one of them
+# fired this rule. Same root cause as the bare `.stx-shell-` prefix removed
+# from AppValidator's SHELL_SELECTORS in the same change.
+# ---------------------------------------------------------------------------
+
+
+def _css(tmp_path, text):
+    d = tmp_path / "app"
+    (d / "static").mkdir(parents=True)
+    (d / "static" / "a.css").write_text(text, encoding="utf-8")
+    return d
+
+
+def test_an_apps_own_bem_element_is_not_a_protected_selector(tmp_path):
+    # Arrange
+    app = _css(tmp_path, ".stx-shell-sidebar__header-compact { color: red !important }\n")
+    # Act
+    errors = validate_css(app)
+    # Assert
+    assert errors == []
+
+
+def test_a_class_ending_in_footer_is_not_the_footer_element(tmp_path):
+    """`.myapp-footer` is a name an app is entitled to. The bare `footer`
+    table entry used to claim it."""
+    # Arrange
+    app = _css(tmp_path, ".myapp-footer { color: red !important }\n")
+    # Act
+    errors = validate_css(app)
+    # Assert
+    assert errors == []
+
+
+def test_a_class_ending_in_footer_may_be_hidden(tmp_path):
+    """The footer-hiding check carried the same defect and needed the same
+    boundary — an app hiding its OWN footer is not hiding the shell's."""
+    # Arrange
+    app = _css(tmp_path, ".myapp-footer { display: none }\n")
+    # Act
+    errors = validate_css(app)
+    # Assert
+    assert errors == []
+
+
+def test_the_exact_protected_name_still_fires(tmp_path):
+    """CONTROL. Without it, the three assertions above are equally consistent
+    with 'the boundary works' and 'the rule stopped firing'."""
+    # Arrange
+    app = _css(tmp_path, ".stx-shell-sidebar { color: red !important }\n")
+    # Act
+    errors = validate_css(app)
+    # Assert
+    assert len(errors) == 1
+
+
+def test_the_bare_footer_element_still_fires(tmp_path):
+    """CONTROL for the leading boundary specifically: `footer` as an element
+    must still be caught, which is what makes `.myapp-footer` a real
+    discrimination rather than a disabled rule."""
+    # Arrange
+    app = _css(tmp_path, "footer { color: red !important }\n")
+    # Act
+    errors = validate_css(app)
+    # Assert
+    assert len(errors) == 1
+
+
+def test_hiding_the_shells_footer_still_fires(tmp_path):
+    # Arrange
+    app = _css(tmp_path, "footer { display: none }\n")
+    # Act
+    errors = validate_css(app)
+    # Assert
+    assert len(errors) == 1
