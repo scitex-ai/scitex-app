@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from scitex_app.appmaker._validate import (
     DANGEROUS_JS_PATTERNS,
     validate_js,
@@ -199,8 +201,19 @@ def test_the_pattern_list_cannot_be_mutated_by_a_caller():
     scitex-writer 2026-09-06 as the one part of their answer that is a live bug
     rather than a preference.
 
-    Asserts the TYPE rather than catching AttributeError, because a caller that
-    reaches for `.append()` on a tuple is already a bug the reader should see.
+    THIS ASSERTS THE DECLARATION, NOT THE HAZARD, and those are two claims.
+    `type(x) is tuple` says how the object was written; it does not say a caller
+    cannot mutate it. In CPython they coincide, but coinciding is not being the
+    same claim — see the two tests below, which assert the one anybody actually
+    cares about. This one is kept because it fails at the DECLARATION, which is
+    the earlier and more legible place.
+
+    (An earlier version of this docstring argued that the type check was
+    PREFERABLE to catching AttributeError "because a caller that reaches for
+    .append() on a tuple is already a bug the reader should see". That is an
+    argument about which failure is legible to a maintainer, and I presented it
+    as if it settled whether the hazard was closed. scitex-writer measured the
+    difference and was right.)
     """
     # Arrange
     patterns = DANGEROUS_JS_PATTERNS
@@ -208,3 +221,27 @@ def test_the_pattern_list_cannot_be_mutated_by_a_caller():
     kind = type(patterns)
     # Assert
     assert kind is tuple
+
+
+def test_a_caller_cannot_append_a_pattern():
+    """THE HAZARD ITSELF. The worry was never the declaration — it was that an
+    importer could add a pattern and change validation for every caller in the
+    interpreter. This is the assertion that says that cannot happen."""
+    # Arrange
+    patterns = DANGEROUS_JS_PATTERNS
+    # Act
+    # Assert
+    with pytest.raises(AttributeError):
+        patterns.append(r"\bevil\(")
+
+
+def test_a_caller_cannot_replace_a_pattern():
+    """The OTHER mutation path. `.append` is one method name; item assignment is
+    a different way to the same damage, and asserting only the first would make
+    this a test about `append` rather than about mutability."""
+    # Arrange
+    patterns = DANGEROUS_JS_PATTERNS
+    # Act
+    # Assert
+    with pytest.raises(TypeError):
+        patterns[0] = r"\bharmless\("

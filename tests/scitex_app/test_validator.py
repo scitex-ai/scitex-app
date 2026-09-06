@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 
 from scitex_app.validator import (
     AppValidator,
@@ -1182,16 +1184,30 @@ def test_the_required_key_list_cannot_be_mutated_by_a_caller():
     assert kind is tuple
 
 
-def test_a_caller_cannot_append_to_the_required_key_list():
+def test_a_caller_cannot_append_a_required_key():
     """The TYPE and the HAZARD are two claims. scitex-writer measured the
     difference on the JS list; this asserts the one anybody actually cares
-    about — that mutation fails."""
+    about — that mutation FAILS.
+
+    An earlier version checked `getattr(x, "append", None) is None`, which is
+    still a claim about the object's SHAPE rather than about what a caller can
+    do to it. Attempting the mutation is the only form that tests the hazard."""
     # Arrange
     from scitex_app.validator import MANIFEST_REQUIRED_FIELDS
     # Act
-    attempt = getattr(MANIFEST_REQUIRED_FIELDS, "append", None)
     # Assert
-    assert attempt is None
+    with pytest.raises(AttributeError):
+        MANIFEST_REQUIRED_FIELDS.append("evil")
+
+
+def test_a_caller_cannot_replace_a_required_key():
+    """The other mutation path, for the same reason as the JS list."""
+    # Arrange
+    from scitex_app.validator import MANIFEST_REQUIRED_FIELDS
+    # Act
+    # Assert
+    with pytest.raises(TypeError):
+        MANIFEST_REQUIRED_FIELDS[0] = "evil"
 
 
 def test_appvalidator_now_requires_license(tmp_path):
