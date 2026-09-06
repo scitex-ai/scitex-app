@@ -41,9 +41,14 @@ into every self-hosted install.
 
 from __future__ import annotations
 
+import logging
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 #: The five answers. `kind` is always exactly one of these.
 ALLOWED = "allowed"
@@ -329,8 +334,125 @@ class ResolveState(Enum):
     RESOLVED = "resolved"
 
 
+# ---------------------------------------------------------------------------
+# HUB CONFIGURATION. Decomposition item 3, and the DEFAULT IS THE DECISION.
+# ---------------------------------------------------------------------------
+
+#: The one environment variable that names this deployment's hub.
+HUB_URL_ENV = "SCITEX_APP_HUB_URL"
+
+#: Emitted at most once per process. `warnings`/logging are per-CALL surfaces
+#: and `can()` is called per render, so an unconditional warning would fire
+#: hundreds of times on one page and be scrolled past — noise that reads as
+#: silence. Once, loudly, is what "うるさく失敗する" buys.
+_hub_hint_emitted = False
+
+
+def hub_url(env: Mapping[str, str] | None = None) -> str | None:
+    """This deployment's hub, or None meaning THERE IS NO HUB.
+
+    NONE IS THE DEFAULT, AND THAT IS A RULING RATHER THAN A CONVENIENCE.
+    Operator, 2026-09-06, via scitex-hub:
+
+        「ハブなしを規定にしてもらってで、うるさく失敗するヒントは出すでいいと思います」
+        — make no-hub the default, and it is fine to fail noisily with hints.
+
+    WHY NOT DEFAULT TO THE HOSTED HUB. A default of `https://scitex.ai` makes
+    "no hub" UNEXPRESSIBLE BY OMISSION: a self-hosted install that configures
+    nothing would contact our service at its first authorization check, chosen
+    by nobody. The two failure modes are not symmetric in DETECTABILITY, which
+    is the argument that decided it:
+
+        default no-hub, but a hub was wanted
+            every hub-dependent action returns `denied`. The operator SEES the
+            missing features and goes looking for configuration. Wrong, loud,
+            self-correcting.
+
+        default scitex.ai, but isolation was wanted
+            it silently contacts us and everything WORKS. The only symptom is
+            in a log the install's own operator cannot read. Invisible to
+            exactly the person who would care.
+
+    One failure announces itself to whoever can fix it; the other does not.
+
+    AND THE STRUCTURAL REASON, which is this module's whole subject: a non-empty
+    default COLLAPSES A THREE-VALUED STATE INTO TWO. "no hub configured", "hub
+    configured but unreachable" and "hub configured and answering" must stay
+    distinguishable — see `ResolveState` and the `denied` / `unresolved` split.
+    Defaulting to a URL makes UNCONFIGURED indistinguishable from CONFIGURED, so
+    the honest state stops being representable rather than merely being unusual.
+
+    AN EMPTY OR BLANK VALUE READS AS NO HUB, not as a malformed URL. Setting the
+    variable to "" is how an operator says "explicitly none" in a shell profile
+    or a compose file where deleting the line is awkward, and treating that as a
+    configuration error would punish the person who was being explicit.
+
+    Takes `env` so the resolution is testable without mutating the process —
+    a module that reads `os.environ` directly can only be tested by a fixture
+    that leaks into every other test in the file.
+    """
+    source = os.environ if env is None else env
+    raw = source.get(HUB_URL_ENV, "")
+    stripped = raw.strip()
+    return stripped or None
+
+
+def denied_no_hub(*, action: str | None = None) -> Verdict:
+    """The verdict for a hub-dependent action on an install with NO HUB — and
+    the noisy hint, on the developer channel only.
+
+    TWO SURFACES, DELIBERATELY SEPARATE, and this function is where the
+    separation is enforced rather than described:
+
+        the VERDICT   plain `denied`. Payload-free BY CONSTRUCTION — the
+                      dataclass validator refuses one. It crosses into page
+                      source as `data-stx-gate` and is read by someone who is
+                      not authenticated to this deployment.
+
+        the HINT      a WARNING on this package's logger, naming the variable
+                      to set. Never reaches the DOM.
+
+    WHY THE HINT IS NOT IN THE VERDICT, given the ruling asked for hints. The
+    audiences differ. The person who installed this and configured nothing can
+    act on "set SCITEX_APP_HUB_URL"; a VISITOR to someone else's deployment cannot,
+    and putting the reason in the page re-opens the disclosure question settled
+    with scitex-ui on 2026-09-05 — a failure reason in page source tells an
+    unauthenticated reader something about a service they cannot see.
+
+    The ruling's wording (「ヒントは出す」) does not name an audience. This is my
+    reading, recorded so it can be overturned rather than discovered: if the
+    intent was that the PAGE VISITOR sees the hint, the payload rule reopens and
+    scitex-ui must be in that conversation, because theirs is the component that
+    renders the verdict.
+    """
+    global _hub_hint_emitted
+    if not _hub_hint_emitted:
+        _hub_hint_emitted = True
+        logger.warning(
+            "no hub is configured, so every hub-dependent action is denied. "
+            "This is the DEFAULT: an unconfigured install contacts nothing. "
+            "Set %s=<your hub> to enable them, or ignore this if this "
+            "deployment is meant to run standalone.%s",
+            HUB_URL_ENV,
+            f" (first denied action: {action})" if action else "",
+        )
+    return denied()
+
+
+def _reset_hub_hint_for_testing() -> None:
+    """Clear the once-per-process latch.
+
+    EXISTS ONLY FOR TESTS, and named so that is unmistakable at the call site.
+    Without it the second test to assert the hint fires would pass or fail
+    depending on which test ran first — an order-dependent suite, which is a
+    gate whose result depends on something other than the code under test.
+    """
+    global _hub_hint_emitted
+    _hub_hint_emitted = False
+
 __all__ = [
     "ALLOWED",
+    "HUB_URL_ENV",
     "DENIED",
     "DENIED_NOT_ENTITLED",
     "DENIED_NOT_SIGNED_IN",
@@ -341,8 +463,10 @@ __all__ = [
     "VerdictError",
     "allowed",
     "denied",
+    "denied_no_hub",
     "denied_not_entitled",
     "denied_not_signed_in",
+    "hub_url",
     "unresolved",
 ]
 
