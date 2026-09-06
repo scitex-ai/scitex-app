@@ -72,6 +72,7 @@ __all__ = [
     "APP_CONTAINERS",
     "BODY_STATE_CLASSES",
     "CssScanReport",
+    "NotAnAppDirectoryError",
     "SHARED_COMPONENT_CLASSES",
     "SHELL_INSTANCE_NAMES",
     "SHELL_TOKEN_PREFIXES",
@@ -118,7 +119,6 @@ class CssScanReport:
     checked: tuple[str, ...] = _CHECKED
     not_checked: tuple[str, ...] = _NOT_CHECKED
     details: tuple[CssFinding, ...] = ()
-    root_looks_like_an_app: bool = True
 
     def __post_init__(self) -> None:
         if self.files_scanned < 0:
@@ -152,35 +152,51 @@ class CssScanReport:
             if self.scanned_nothing
             else f"{len(self.findings)} finding(s) across {self.files_scanned} stylesheet(s)"
         )
-        # THE ROOT WARNING GOES FIRST, because it changes what every number
-        # below it means. scitex-hub scanned their repo ROOT through a
-        # parameter named `app_dir` and got 604 files / 346 findings where the
-        # right population was 28 app dirs / 250 files / 15 findings — 333 of
-        # them were not app code. Their enumeration control was sound and
-        # agreed exactly with an independent walk; two instruments, same
-        # number, same wrong tree.
+        # THIS USED TO CARRY A `root_looks_like_an_app` CAVEAT, AND THE CAVEAT
+        # DID NOT WORK. Preserved rather than deleted, because the reasoning
+        # error is the lesson. It read:
         #
-        # NOT a refusal. Scanning a tree deliberately is legitimate, and this
-        # rule cannot know the caller's intent. What it can do is say that the
-        # root does not look like the thing the parameter is named after — the
-        # same way `files_scanned == 0` reads NOT SCANNED rather than clean.
-        prefix = (
-            ""
-            if self.root_looks_like_an_app
-            else (
-                "ROOT DOES NOT LOOK LIKE AN APP DIRECTORY (no manifest.json) — "
-                "this rule scopes to ONE app; a repo root pools shell and "
-                "infrastructure CSS this rule was never written for. The "
-                "count below is real, but it may not be about app code.\n"
-            )
-        )
-        return prefix + head + "\n  checked: " + "; ".join(self.checked) + "\n  NOT checked: " + "; ".join(
+        #     NOT a refusal. Scanning a tree deliberately is legitimate, and
+        #     this rule cannot know the caller's intent. What it can do is say
+        #     that the root does not look like the thing the parameter is named
+        #     after — the same way `files_scanned == 0` reads NOT SCANNED.
+        #
+        # The analogy is what broke it. `scanned_nothing` changes the NUMBER
+        # (there is none); the root caveat left `346` sitting there, printable.
+        # On 2026-09-06 scitex-hub ran this on their repo root, got 604 files /
+        # 346 findings against a right answer of 15, and carried the 346 into
+        # two messages as a 12.8x regression in this detector — with the caveat
+        # in the report the whole time. They had asserted a >=300-file floor AND
+        # fired a positive control; both passed, because one asked whether the
+        # walk found files and the other whether the rule could fire, and
+        # neither could ask whether the TREE was in scope.
+        #
+        # A NUMBER PRINTED NEXT TO A CAVEAT STILL GETS PRINTED — their words,
+        # asking for this refusal. So the wrong population no longer produces a
+        # number at all; see `validate_css_canonical`.
+        return head + "\n  checked: " + "; ".join(self.checked) + "\n  NOT checked: " + "; ".join(
             self.not_checked
         )
 
 
+class NotAnAppDirectoryError(ValueError):
+    """Raised when the scan root is not one app, so no count would be about
+    app code.
+
+    A distinct type rather than a bare ValueError because a caller sweeping
+    many directories has a legitimate reason to catch exactly this one and
+    skip, without also swallowing the malformed-report errors this module
+    raises for its own bugs.
+    """
+
+
 def css_files(app_dir: str | Path) -> list[Path]:
     """The stylesheets this rule reads — the denominator of a result.
+
+    Takes any directory: this is the walk, and a caller sweeping a tree of
+    apps is expected to use it per app. Unlike `validate_css_canonical` it
+    does NOT require a manifest, because counting files in a tree is a
+    question with an honest answer.
 
     Exported so a caller never writes a second walk. Skip names are matched
     RELATIVE to the scan root, so a scan rooted inside `.worktrees/` or
@@ -209,9 +225,26 @@ def css_files(app_dir: str | Path) -> list[Path]:
 
 def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
     """Tiers 1 and 2 of the workspace CSS rule. UNARMED; `validate()` does not
-    call this. See the module docstring for what it does not check."""
-    files = css_files(app_dir)
+    call this. See the module docstring for what it does not check.
+
+    Scopes to ONE app and REFUSES anything else — see
+    `NotAnAppDirectoryError`. To sweep a tree, loop over its app directories
+    and call this per app; `css_files()` is exported for the walk.
+    """
     root = Path(app_dir)
+    # AN APP DIRECTORY HAS A manifest.json; A REPO ROOT DOES NOT. Checked
+    # BEFORE the walk, so the expensive part never runs for a root whose
+    # answer would not have been about app code anyway.
+    if not (root / "manifest.json").is_file():
+        raise NotAnAppDirectoryError(
+            f"{root} is not an app directory (no manifest.json). This rule "
+            f"scopes to ONE app: a repo root pools shell and infrastructure "
+            f"CSS it was never written for, so a count taken here would be "
+            f"real and not about app code. Pass an app directory, or loop "
+            f"over your app dirs and call this per app — css_files() is "
+            f"exported if you need the walk itself."
+        )
+    files = css_files(app_dir)
     found: list[CssFinding] = []
 
     def add(rule, tier, rel, line, selector, message, subject=""):
@@ -341,15 +374,12 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
                             subject=state,
                         )
 
-    # AN APP DIRECTORY HAS A manifest.json; A REPO ROOT DOES NOT. This is the
-    # cheapest predicate that separates the two, and it is the one that would
-    # have caught both wrong denominators of 2026-09-06 — hub's 604-file repo
-    # root, and my own 37 manifests pooled from three unrelated populations.
+    # Every report that reaches here is about ONE app: the manifest check at
+    # the top refused anything else, so there is no in-scope flag to carry.
     return CssScanReport(
         findings=tuple(str(f) for f in found),
         files_scanned=len(files),
         details=tuple(found),
-        root_looks_like_an_app=(root / "manifest.json").is_file(),
     )
 
 
