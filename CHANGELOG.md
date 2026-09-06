@@ -64,6 +64,36 @@ Not restated here as a corrected total: that is hub's number to produce from
 their own ref, and predicting it is the thing this changelog keeps saying not
 to do.
 
+### Added — every finding now carries `file:line:` and the selector it matched
+
+scitex-hub named the mechanism of their own mistake precisely enough to remove
+it:
+
+> "The rule I have been quoting at myself all evening is 'a finding is a claim
+> about a string, so open the match'. I opened the FILE. Opening the match
+> means reading the string the tool actually emitted and checking it appears
+> where the tool says it does. I did not do the last step, and it is the step."
+
+They went to the file, found a class that looked like the reported one, and
+wrote a correct paragraph about the wrong object — **arriving at the right
+verdict from the wrong evidence, which is worse than being wrong, because a
+wrong verdict gets challenged and a right one does not.**
+
+That step was hard for a reason in this code, not in their method: four of the
+message forms named a class without quoting the selector, and none carried a
+position. So the finding now reads
+
+    static/a.css:177: !important on the shared component '.panel-resizer' in
+    'div[class*="editor"]:not(.panel-resizer)' — …
+
+and "does the named thing actually appear in what was matched?" is answerable
+from the finding text alone. Put side by side, the substring bug above is
+visible on sight. A warning would not have helped; this is the mechanical
+form of the rule.
+
+The `display:none` and body-state checks moved inside the rule loop to get a
+line, joining the footer check that moved there in 0.15.1.
+
 ### What is NOT fixed, and stays declared
 
 Ten of hub's 27 were rules confined by an ancestor to the app's own subtree

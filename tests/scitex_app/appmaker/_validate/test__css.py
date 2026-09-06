@@ -728,3 +728,83 @@ def test_two_genuinely_different_names_still_report_twice(tmp_path):
     report = validate_css_canonical(app)
     # Assert
     assert len(report.findings) == 2
+
+
+# --------------------------------------------------------------------------
+# A FINDING MUST CARRY WHAT IT TAKES TO CHECK IT
+#
+# scitex-hub described their own failure precisely enough to remove it:
+#
+#   "The rule I have been quoting at myself all evening is 'a finding is a
+#    claim about a string, so open the match'. I opened the FILE. Opening the
+#    match means reading the string the tool actually emitted and checking it
+#    appears where the tool says it does. I did not do the last step, and it
+#    is the step."
+#
+# They went to the file, found a class that LOOKED like the reported one, and
+# wrote a correct paragraph about the wrong object. Their verdict happened to
+# be right, which is worse than wrong — a wrong verdict gets challenged.
+#
+# That step was hard because four of the eight messages named a class without
+# quoting the selector, and none carried a line. A warning would not have
+# helped; the finding now carries both, so "does the named thing appear where
+# it says?" is answerable from the finding text alone.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "css",
+    [
+        "#workspace-layout { color: red }\n",
+        ".wft-node { color: red }\n",
+        "#main-content { color: red !important }\n",
+        ".panel-resizer { color: red !important }\n",
+        "footer { padding: 0 !important }\n",
+        "footer { display: none }\n",
+        ":root { --color-fg: red }\n",
+        "body { zen-mode: 1 }\n",
+    ],
+    ids=["tier1", "prefix", "container", "shared", "footer", "hide", "token", "state"],
+)
+def test_every_finding_names_a_position(tmp_path, css):
+    """`file:line:` on every one, so nobody has to search a file for a class
+    name that may occur in several places. hub landed on a nearby rule doing
+    exactly that."""
+    # Arrange
+    app = _app(tmp_path, css)
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert all(f.startswith("static/a.css:1:") for f in report.findings)
+
+
+@pytest.mark.parametrize(
+    "css",
+    [
+        "#workspace-layout { color: red }\n",
+        "#main-content { color: red !important }\n",
+        ".panel-resizer { color: red !important }\n",
+        "footer { padding: 0 !important }\n",
+        ":root { --color-fg: red }\n",
+    ],
+    ids=["tier1", "container", "shared", "footer", "token"],
+)
+def test_every_finding_quotes_the_selector_it_came_from(tmp_path, css):
+    """THE MECHANICAL FORM OF "OPEN THE MATCH". With the selector in the
+    message, checking a finding no longer requires opening the file at all —
+    the reader can see whether the named thing is actually in the selector the
+    tool matched.
+
+    This is the check that would have caught the substring bug on sight: the
+    finding said `.stx-shell-sidebar__header` and the selector was
+    `.stx-shell-sidebar__header-compact`, and putting the two side by side is
+    all it takes. Four of the message forms did not quote the selector, which
+    is why nobody could put them side by side.
+    """
+    # Arrange — the selector is the whole line up to the brace.
+    selector = css.split("{")[0].strip()
+    app = _app(tmp_path, css)
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert all(repr(selector) in f for f in report.findings)

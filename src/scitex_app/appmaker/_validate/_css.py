@@ -405,11 +405,16 @@ def _matched_names(selector: str, names: tuple[str, ...]) -> list[str]:
 
 
 def _rule_blocks(content: str):
-    """(selector, body) for each top-level rule. Not a parser — see the module
-    docstring. Enough to attribute a declaration to the selector it sits under,
-    which is all tiers 1 and 2 need."""
+    """(selector, body, line) for each top-level rule. Not a parser — see the
+    module docstring. Enough to attribute a declaration to the selector it sits
+    under, which is all tiers 1 and 2 need.
+
+    `line` is 1-based and points at the selector, so a reader can go straight
+    to the rule instead of searching the file for a class name that may occur
+    in several. scitex-hub had to hunt for one and landed on a nearby rule that
+    merely looked like the reported one."""
     for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", content, re.DOTALL):
-        yield m.group(1).strip(), m.group(2)
+        yield m.group(1).strip(), m.group(2), content.count("\n", 0, m.start(1)) + 1
 
 
 def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
@@ -428,7 +433,7 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
             continue
         rel = css_file.relative_to(root)
 
-        for selector, body in _rule_blocks(content):
+        for selector, body, line in _rule_blocks(content):
             # TWO strippers, for two different questions — see
             # `_strip_excluded`. `targets` is what this rule STYLES;
             # `bare` is the selector list with every internal comma removed.
@@ -437,13 +442,13 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
             # TIER 1 — any mention.
             for name in _matched_names(targets, SHELL_INSTANCE_NAMES):
                 findings.append(
-                    f"{rel}: selector {selector!r} names {name!r}, which the "
+                    f"{rel}:{line}: selector {selector!r} names {name!r}, which the "
                     f"shell renders and owns — style your own nodes instead"
                 )
             for prefix in SHELL_INSTANCE_PREFIXES:
                 if prefix in targets:
                     findings.append(
-                        f"{rel}: selector {selector!r} names the shell-owned "
+                        f"{rel}:{line}: selector {selector!r} names the shell-owned "
                         f"{prefix}* family — style your own nodes instead"
                     )
 
@@ -451,21 +456,21 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
             if "!important" in body:
                 for name in _matched_names(targets, APP_CONTAINERS):
                     findings.append(
-                        f"{rel}: !important on {name!r} — the app renders "
-                        f"INSIDE it; style your children, never the box"
+                        f"{rel}:{line}: !important on {name!r} in {selector!r} — the app "
+                        f"renders INSIDE it; style your children, never the box"
                     )
                 for name in _matched_names(targets, SHARED_COMPONENT_CLASSES):
                     findings.append(
-                        f"{rel}: !important on the shared component {name!r} "
-                        f"— your own instance is yours to style, but "
-                        f"!important reaches the shell's instances too"
+                        f"{rel}:{line}: !important on the shared component {name!r} in "
+                        f"{selector!r} — your own instance is yours to style, "
+                        f"but !important reaches the shell's instances too"
                     )
 
                 if _FOOTER_ELEMENT.search(bare):
                     findings.append(
-                        f"{rel}: !important on the shell's footer element — "
-                        f"an app may render its own <footer>, but a bare "
-                        f"`footer` rule reaches the shell's too"
+                        f"{rel}:{line}: !important on the shell's footer element in "
+                        f"{selector!r} — an app may render its own <footer>, "
+                        f"but a bare `footer` rule reaches the shell's too"
                     )
 
             # TIER 2b — tokens: read freely, never redefine at :root.
@@ -473,7 +478,7 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
                 for prefix in SHELL_TOKEN_PREFIXES:
                     if re.search(rf"^\s*{re.escape(prefix)}", body, re.MULTILINE):
                         findings.append(
-                            f"{rel}: redefines {prefix}* tokens at {selector!r} "
+                            f"{rel}:{line}: redefines {prefix}* tokens at {selector!r} "
                             f"— read them with var(), never redefine them for "
                             f"the whole shell"
                         )
@@ -492,16 +497,26 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
             if _FOOTER_ELEMENT.search(bare) and re.search(
                 r"display\s*:\s*none", body
             ):
-                findings.append(f"{rel}: must not hide the shell's footer")
-
-        # TIER 2c — setting shell state. Reading it (`body.zen-mode .mine`) is
-        # fine; a rule whose SUBJECT is the body state class is not.
-        for state in BODY_STATE_CLASSES:
-            if re.search(rf"body\s*\{{[^}}]*{re.escape(state)}", content, re.DOTALL):
                 findings.append(
-                    f"{rel}: sets the shell state class {state!r} — the shell "
-                    f"owns this state; react to it, do not drive it"
+                    f"{rel}:{line}: must not hide the shell's footer, and "
+                    f"{selector!r} is not scoped to the app's own"
                 )
+
+            # TIER 2c — setting shell state. Reading it (`body.zen-mode .mine`)
+            # is fine; a rule whose SUBJECT is the body state class is not.
+            #
+            # ALSO MOVED INSIDE the loop, for the line number. It ran per FILE
+            # against `body\s*\{[^}]*<state>`, which is the same rule this
+            # expresses per block — `body` as the whole selector, the state
+            # named in the declarations — but could report no position.
+            if selector.strip() == "body":
+                for state in BODY_STATE_CLASSES:
+                    if state in body:
+                        findings.append(
+                            f"{rel}:{line}: sets the shell state class "
+                            f"{state!r} — the shell owns this state; react to "
+                            f"it, do not drive it"
+                        )
 
     return CssScanReport(findings=tuple(findings), files_scanned=len(files))
 
