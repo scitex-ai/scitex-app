@@ -7,6 +7,49 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-06
+
+Minor. The second of the two duplicated lists, found by looking for the first
+one's shape rather than by anyone hitting it.
+
+### Fixed — one required-key list, imported, immutable
+
+    appmaker/_validate/_manifest.py   6 keys, a list, includes `license`
+    validator.py                      5 keys, a set,   no `license`
+
+So `license` was required by `scitex-app app validate` and NOT by
+`AppValidator`, and the coverage table this package ships compared the two
+entry points check-by-check for weeks without saying so. Identical in shape to
+the JS pattern list fixed in 0.16.2 — one decision, two implementations, the
+divergence silent and in the direction that disagrees about a peer's app.
+
+`validator.py` now **imports** `MANIFEST_REQUIRED_KEYS`, and the list is a
+**tuple**: it is imported by two modules, so a list would be mutable shared
+state any importer could `.append()` to.
+
+Verified the way the bug would recur: re-declaring an **equal but separate**
+tuple in `validator.py` fails the identity test and nothing else. An equality
+assertion would have passed that — and equal-but-separate is exactly the state
+this repo was in.
+
+### Changed — `AppValidator` now requires `license`
+
+Converged **upward**, not down: `license` is a real field and removing the
+requirement to make the two agree would have weakened a check to fix a
+bookkeeping defect. Measured before choosing — every app manifest in every
+source tree on this machine already declares it, so no app that passes today
+starts failing.
+
+`version` is still **forbidden**, and a test asserts that explicitly: converging
+upward must not quietly adopt a key the other implementation rejects.
+
+### Fixed — the test suite encoded the same divergence
+
+The shared "valid manifest" fixture declared five keys. The tests agreed with
+the implementation because both were wrong in the same direction, which is why
+four of them failed the moment the lists were joined — the right failure, in
+the right place.
+
 ## [0.17.0] - 2026-09-06
 
 Minor. Both defects scitex-hub found in 0.16.1's report, neither in the rule.
