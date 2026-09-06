@@ -8,6 +8,12 @@ from pathlib import Path
 
 from ._app_layout import _get_app_name
 
+# A PROTECTED NAME ENDS WHERE THE NAME ENDS. `.stx-shell-sidebar` must not
+# match `.stx-shell-sidebar__header-compact`, which is an app's own BEM element.
+# The canonical rule (validate_css_canonical) has carried this since 0.15.2;
+# this one did not, and it is the function scitex-hub re-exports publicly.
+_NAME_END = r"(?![\w-])"
+
 # Frame selectors that app CSS must not style
 PROTECTED_SELECTORS = [
     ".stx-shell-sidebar",
@@ -95,14 +101,31 @@ def validate_css(app_dir: str | Path) -> list[str]:
         # The deprecated --color-* finding is ADVISORY and lives in
         # validate_css_advisory(), not here. See that function for why.
 
-        # Check for !important on protected selectors
+        # Check for !important on protected selectors.
+        #
+        # `_NAME_END` IS THE WHOLE FIX. Without it `re.escape(selector)` matches
+        # any name that merely STARTS with a protected one, so an app styling
+        # its OWN `.stx-shell-sidebar__header-compact` fired on
+        # `.stx-shell-sidebar`, and `.myapp-footer` fired on the bare `footer`
+        # entry. Both are names an app is entitled to. Measured 2026-09-06 with
+        # scitex-hub, who had already measured that apps carry 42 legitimate
+        # `stx-shell-sidebar__*` selector lines across nine apps.
+        #
+        # A LEADING boundary is needed too, and only for the bare element
+        # entries: `footer` must not match inside `.myapp-footer`. Class and id
+        # entries carry their own `.`/`#`, which already anchors them.
         for selector in PROTECTED_SELECTORS:
-            pattern = re.escape(selector) + r"[^{]*\{[^}]*!important"
+            head = "" if selector[0] in ".#" else r"(?<![\w.#-])"
+            pattern = head + re.escape(selector) + _NAME_END + r"[^{]*\{[^}]*!important"
             if re.search(pattern, content, re.DOTALL):
                 errors.append(f"{relpath}: must not use !important on '{selector}'")
 
-        # Check for footer hiding
-        if re.search(r"footer\s*\{[^}]*display\s*:\s*none", content, re.DOTALL):
+        # Check for footer hiding — same boundary, same reason.
+        if re.search(
+            r"(?<![\w.#-])footer" + _NAME_END + r"\s*\{[^}]*display\s*:\s*none",
+            content,
+            re.DOTALL,
+        ):
             errors.append(f"{relpath}: must not hide the footer")
 
     return errors

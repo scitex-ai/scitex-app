@@ -7,6 +7,55 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-09-06
+
+Patch. Two CSS checks flagged app CSS an app is entitled to write. Found by
+pattern-hunting, confirmed against scitex-hub's measurement of their own tree.
+
+### Fixed — a protected name now ends where the name ends (`_frame.py`)
+
+    pattern = re.escape(selector) + r"[^{]*\{[^}]*!important"
+
+No name boundary, so any selector merely STARTING with a protected one matched:
+
+| CSS | before | after |
+|---|---|---|
+| `.stx-shell-sidebar__header-compact {…!important}` | **1** | 0 |
+| `.myapp-footer {…!important}` | **1** | 0 |
+| `.myapp-footer { display: none }` | **1** | 0 |
+| `.stx-shell-sidebar {…!important}` | 1 | 1 |
+| `footer {…!important}` | 1 | 1 |
+| `footer { display: none }` | 1 | 1 |
+
+scitex-hub measured that their apps carry **42 legitimate
+`stx-shell-sidebar__*` selector lines across nine apps** — every one fired this
+rule. `.myapp-footer` is likewise a name an app owns, claimed by the bare
+`footer` table entry.
+
+Two boundaries, and they are independently load-bearing: a trailing
+`(?![\w-])` for every entry, and a leading `(?<![\w.#-])` for the bare *element*
+entries only (class and id entries carry their own `.`/`#`). Verified
+separately — emptying the trailing one fails exactly the BEM test; emptying the
+leading one fails exactly the two footer tests.
+
+**This function is on scitex-hub's public surface** (`scitex_hub.appmaker.validate_css`
+re-exports it), which is why it was fixed rather than left to the canonical
+rule's arming.
+
+### Fixed — the bare `.stx-shell-` prefix is gone from `SHELL_SELECTORS`
+
+`AppValidator.validate_css` matches its table by raw substring over whole file
+contents, and one entry was a **prefix**, not a name. It flagged an app's own
+`.stx-shell-sidebar__*` element, and the same name inside a comment.
+`.stx-shell-*` is not blanket no-touch — ownership is by NODE, not by name
+prefix, which the shipped skill has said since 0.15.0 while this entry
+contradicted it.
+
+The rest of that check is still a substring scan and still wrong in ways this
+release does not fix; `validate_css_canonical` gets all of these right and
+remains deliberately UNARMED. Tracked in
+`app-appvalidator-css-check-is-a-substring-scan-20260906`.
+
 ## [0.18.0] - 2026-09-06
 
 Minor. The second of the two duplicated lists, found by looking for the first
