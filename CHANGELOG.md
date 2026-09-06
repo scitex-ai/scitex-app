@@ -7,6 +7,74 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-09-06
+
+Patch. A BEM modifier is the same component in a state — 0.15.2's boundary
+stopped matching them, and a shell class an app `!important`ed was silently
+permitted for two releases.
+
+### Fixed — the boundary excluded modifiers the shell really renders
+
+    .stx-shell-sidebar--collapsed         was 0 findings, now 1   <- shell renders it
+    .stx-shell-sidebar__header-compact    still 0                 <- writer-minted
+    .panel-resizer-custom                 still 0                 <- different name
+
+0.15.2 added `(?![\w-])` to stop an exact name matching every name that extends
+it. That was right for `__header-compact` and wrong for `--collapsed`, because
+the boundary cannot separate them: **the difference is not in the string** — it
+is whether the shell renders that class, a fact about scitex-hub's tree.
+
+So the grammar handles only the half a string can decide:
+
+    ELEMENTS    named and enumerable  -> TABLE ENTRIES. Widening the grammar to
+                `__[\w-]+` would cover ui's `__segment--current` and
+                simultaneously re-admit writer's `__header-compact`.
+    MODIFIERS   open-ended state      -> GRAMMAR. Any table entry may carry
+                `--anything`.
+
+Found by scitex-ui and measured in their TypeScript — `_Sidebar.ts:85, :103`,
+`_Resizer.ts:41/42/172/231`, `_Dim.ts:43` — not proposed from either side's
+reasoning.
+
+**Their near-miss is why the answer is trustworthy.** Their first scan returned
+ZERO rendered modifiers against 11 styled in CSS, and they did not report it
+because the asymmetry looked implausible: the classes are built with template
+literals (`${CLS}--collapsed`), invisible to a literal-string search. Had that
+zero been reported, it would have read as "modifiers are CSS-only decoration",
+the boundary would have looked confirmed by a clean measurement with a passing
+control, and the hole would have shipped a third time.
+
+### Added — `not_checked` declares the tables a LOWER BOUND
+
+scitex-ui measured five sites where the shell adds a **caller-supplied** class
+name (`ClipboardHandler.ts:234`, `TreeInitHandler.ts:57`,
+`ContextMenuHandler.ts:122/:140/:165`), so no static list over their tree can
+ever be complete. They asked for the rule to be built sound-but-incomplete and
+for that to live in the payload rather than only in a doc — a table presented as
+complete is the gate that cannot fail wearing a list.
+
+A known gap named in that entry: `.stx-shell-resizer--*` is shell-rendered and
+absent from the tables **pending its tier**. It is not added on my own reading:
+`.panel-resizer` looked shell-only too, and hub's re-count showed apps render it
+41 times across nine apps. Asking rather than guessing is what that table costs.
+
+### Refactored — `_css.py` split into three modules
+
+528 lines against a 512 limit, and the repo's own hook refused the one-line
+matcher change until it was split. The seam is the one the defects picked out:
+
+    _css_tables.py   WHAT THE SHELL OWNS — pure data, wrong when hub's tree
+                     changes
+    _css_match.py    WHETHER A SELECTOR TARGETS ONE — where every defect of
+                     2026-09-05/06 lived, and wrong when I reason about strings
+                     badly
+    _css.py          the rule, the report, the walk; re-exports the tables so
+                     existing imports are unchanged
+
+Two comments were re-attached to the constants they describe after the first
+cut separated them — a rationale sitting above an unrelated constant is worse
+than no comment, and no test would have caught it.
+
 ## [0.16.0] - 2026-09-06
 
 Minor. `can()`'s hub configuration — and the DEFAULT IS THE DECISION.

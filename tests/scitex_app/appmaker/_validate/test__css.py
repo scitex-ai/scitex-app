@@ -808,3 +808,86 @@ def test_every_finding_quotes_the_selector_it_came_from(tmp_path, css):
     report = validate_css_canonical(app)
     # Assert
     assert all(repr(selector) in f for f in report.findings)
+
+
+# --------------------------------------------------------------------------
+# BEM MODIFIERS — a state of the same component, not a different name
+#
+# 0.15.2's `(?![\w-])` boundary fixed one false positive and introduced a
+# false NEGATIVE: it stopped matching `--modifier` forms the shell really
+# renders. scitex-ui found it, and their fixtures below are MEASURED render
+# sites in their TypeScript, not names either of us reasoned about.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "css",
+    [
+        ".stx-shell-sidebar--collapsed { color: red !important }\n",
+        ".panel-resizer--dragging { width: 4px !important }\n",
+        ".stx-shell-sidebar__header--compact { color: red !important }\n",
+    ],
+    ids=["ui-measured", "modifier", "element-then-modifier"],
+)
+def test_a_bem_modifier_is_the_same_component_in_a_state(tmp_path, css):
+    """`.stx-shell-sidebar--collapsed` IS rendered by the shell
+    (`_Sidebar.ts:85, :103`), so an app `!important`ing it reaches a real shell
+    node. 0.15.2's boundary silently permitted exactly that for two releases.
+
+    The first case is scitex-ui's, measured in their TS rather than proposed.
+    Their first scan for it returned ZERO — the classes are built with template
+    literals, invisible to a literal-string search — and they declined to report
+    that zero because the asymmetry looked implausible. Had they reported it I
+    would have kept the boundary and shipped the hole a third time.
+    """
+    # Arrange
+    app = _app(tmp_path, css)
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert len(report.findings) == 1
+
+
+@pytest.mark.parametrize(
+    "css",
+    [
+        ".stx-shell-sidebar__header-compact { color: red !important }\n",
+        ".panel-resizer-custom { width: 4px !important }\n",
+        ".h-resizer-x { color: red !important }\n",
+    ],
+    ids=["writer-minted", "resizer", "h-resizer"],
+)
+def test_a_trailing_word_is_still_a_different_name(tmp_path, css):
+    """THE HALF THE GRAMMAR MUST NOT SWALLOW. `--compact` is a modifier of a
+    component; `-compact` is part of a different component's name.
+
+    Extending the grammar to `__[\\w-]+` would cover ui's `__segment--current`
+    and simultaneously re-admit writer's `__header-compact`, which the shell
+    renders none of. A grammar cannot separate those: the difference is whether
+    the shell renders that element, which is a fact about hub's tree. So
+    ELEMENTS stay table entries and only MODIFIERS get grammar.
+    """
+    # Arrange
+    app = _app(tmp_path, css)
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert not report.findings
+
+
+def test_the_tables_declare_themselves_a_lower_bound(tmp_path):
+    """scitex-ui measured FIVE sites where the shell adds a caller-supplied
+    class name, so no static list over their tree can ever be complete.
+
+    They asked for the rule to be built sound-but-incomplete rather than
+    assumed exhaustive, and for that to live in the PAYLOAD rather than only in
+    a doc — because a table presented as complete is the gate that cannot fail
+    wearing a list. `.stx-shell-resizer--*` is the known example today: shell
+    -rendered, and absent from the tables pending its tier.
+    """
+    # Arrange
+    app = _app(tmp_path, ".mine { color: red }\n")
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert "LOWER BOUND" in " ".join(report.not_checked)
