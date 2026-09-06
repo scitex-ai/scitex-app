@@ -26,6 +26,17 @@ from ._app_layout import (
     validate_structure,
 )
 from ._bundle import DEFAULT_MAX_BUNDLE_SIZE, validate_bundle_size
+from ._css import (
+    APP_CONTAINERS,
+    BODY_STATE_CLASSES,
+    SHARED_COMPONENT_CLASSES,
+    SHELL_INSTANCE_NAMES,
+    SHELL_INSTANCE_PREFIXES,
+    SHELL_TOKEN_PREFIXES,
+    CssScanReport,
+    css_files,
+    validate_css_canonical,
+)
 from ._dependencies import validate_dependencies
 from ._frame import (
     FORBIDDEN_BLOCK_OVERRIDES,
@@ -63,6 +74,9 @@ from ._security import FORBIDDEN_PATTERNS, validate_security
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "APP_CONTAINERS",
+    "BODY_STATE_CLASSES",
+    "CssScanReport",
     "DANGEROUS_JS_PATTERNS",
     "DEFAULT_MAX_BUNDLE_SIZE",
     "FORBIDDEN_BLOCK_OVERRIDES",
@@ -78,14 +92,20 @@ __all__ = [
     "PREFIX_URL_BINDING",
     "PROTECTED_SELECTORS",
     "REQUIRED_FILES",
+    "SHARED_COMPONENT_CLASSES",
+    "SHELL_INSTANCE_NAMES",
+    "SHELL_INSTANCE_PREFIXES",
+    "SHELL_TOKEN_PREFIXES",
     "VALID_API_SCOPES",
     "VALID_FILESYSTEM_SCOPES",
     "VALID_NETWORK_SCOPES",
     "VALID_PRIVILEGE_TYPES",
+    "css_files",
     "validate",
     "validate_bundle_size",
     "validate_css",
     "validate_css_advisory",
+    "validate_css_canonical",
     "validate_dependencies",
     "validate_js",
     "validate_manifest",
@@ -106,6 +126,7 @@ def validate(
     check_js_safety: bool = False,
     check_bundle_size: bool = False,
     check_privileges: bool = False,
+    check_css_canonical: bool = False,
 ) -> list[str]:
     """Run all validations on a local app directory.
 
@@ -123,6 +144,7 @@ def validate(
         check_js_safety=check_js_safety,
         check_bundle_size=check_bundle_size,
         check_privileges=check_privileges,
+        check_css_canonical=check_css_canonical,
     )
     return errors
 
@@ -134,6 +156,7 @@ def validate_with_warnings(
     check_js_safety: bool = False,
     check_bundle_size: bool = False,
     check_privileges: bool = False,
+    check_css_canonical: bool = False,
 ) -> tuple[list[str], list[str]]:
     """Run all validations, separating FAILURES from ADVICE.
 
@@ -161,6 +184,16 @@ def validate_with_warnings(
         check_js_safety       dangerous patterns in the app's JS      not armed
         check_bundle_size     total shipped size against a threshold  not armed
         check_privileges      shape of the privilege declaration      not armed
+        check_css_canonical   the canonical workspace-CSS rule        not armed
+
+    `check_css_canonical` is the ONE that supersedes rather than adds: it is
+    the same spec `validate_css` enforces, measured properly. It is off, and it
+    does not turn `validate_css` off, so today the two coexist and only the old
+    one runs. That is deliberate and temporary — arming it means replacing the
+    call above, not adding to it, and the replacement waits on scitex-hub
+    re-measuring their five findings against THIS implementation. Whoever arms
+    it must delete the `validate_css` call in the same change; leaving both
+    would report one CSS defect twice under two wordings.
 
     This paragraph read "EVERY `check_*` KEYWORD IS OFF BY DEFAULT" until the
     day one was not. It is listed per-rule now because a sentence quantified
@@ -244,6 +277,21 @@ def validate_with_warnings(
         errors.extend(validate_bundle_size(app_dir))
     if check_privileges:
         errors.extend(validate_privileges(app_dir))
+    if check_css_canonical:
+        # GUARDED like the prefix rule, and for the same reason: `css_files()`
+        # REFUSES a path that is not there rather than answering "clean" about
+        # it, which is right for a peer running the rule by hand and wrong for
+        # a gate that already reports a missing app directory as findings.
+        #
+        # The DENOMINATOR is dropped here on purpose. `validate()` returns a
+        # flat list of error strings and cannot carry `files_scanned` or
+        # `not_checked` without changing that contract — so a caller who needs
+        # to know WHAT WAS SCANNED must call `validate_css_canonical()` and read
+        # the report. This is exactly the loss that made "0 findings" mean two
+        # different things twice in one evening, and it is accepted here only
+        # because this path's zero is not published as a measurement.
+        if Path(app_dir).is_dir():
+            errors.extend(validate_css_canonical(app_dir).findings)
     return errors, warnings
 
 
