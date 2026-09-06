@@ -364,6 +364,46 @@ def css_files(app_dir: str | Path) -> list[Path]:
     return out
 
 
+def _matched_names(selector: str, names: tuple[str, ...]) -> list[str]:
+    """Which of `names` this selector actually SELECTS — not which it contains.
+
+    TWO CORRECTIONS TO `name in selector`, both found by scitex-hub's second
+    step-2 run against their own tree (0.15.1, `develop@4ec9c4066`), and both
+    of which they attributed to their own code rather than to this rule.
+
+    ONE — A LONGER CLASS NAME IS A DIFFERENT CLASS. `.stx-shell-sidebar__header`
+    and `.stx-shell-sidebar__header-compact` are unrelated selectors; a rule on
+    the second cannot touch the first. `in` said otherwise, so writer's eight
+    `__header-compact` rules were reported as styling `__header`. hub read that
+    as "writer minted a class inside the shell's BEM namespace" — true, and a
+    fair thing to raise with writer, but NOT what the finding said. The finding
+    named a class the selector does not contain.
+
+        `-` is a legal class-name character, so the trailing guard is
+        `(?![\\w-])` — the same boundary the footer rule already used and this
+        one did not. The LEADING side needs no guard: `.foo` cannot occur
+        inside `.my-foo`, because the `.` is part of the token.
+
+        SHELL_INSTANCE_PREFIXES are exempt and stay substring matches. Those
+        are prefix FAMILIES by construction — `.wft-` is meant to match
+        `.wft-node` — which is exactly the distinction `in` erased.
+
+    TWO — ONE RULE, ONE FINDING. `.stx-shell-sidebar` and
+    `.stx-shell-sidebar__header` are BOTH in `SHARED_COMPONENT_CLASSES`, and
+    both substring-matched the same selector, so a single declaration produced
+    two findings under two names. That inflates any count taken from this rule
+    — hub's eight were four rules — and a count that inflates is worse than one
+    that is merely incomplete, because it reads as MORE evidence.
+
+        A name that is a proper substring of another matched name is dropped:
+        the most specific match is the one that describes the selector. Two
+        genuinely different names (`.panel-resizer, .h-resizer`) still report
+        twice, because neither contains the other.
+    """
+    hits = [n for n in names if re.search(rf"{re.escape(n)}(?![\w-])", selector)]
+    return [n for n in hits if not any(n != m and n in m for m in hits)]
+
+
 def _rule_blocks(content: str):
     """(selector, body) for each top-level rule. Not a parser — see the module
     docstring. Enough to attribute a declaration to the selector it sits under,
@@ -395,12 +435,11 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
             targets = _strip_excluded(selector)
             bare = _strip_pseudo_args(targets)
             # TIER 1 — any mention.
-            for name in SHELL_INSTANCE_NAMES:
-                if name in targets:
-                    findings.append(
-                        f"{rel}: selector {selector!r} names {name!r}, which the "
-                        f"shell renders and owns — style your own nodes instead"
-                    )
+            for name in _matched_names(targets, SHELL_INSTANCE_NAMES):
+                findings.append(
+                    f"{rel}: selector {selector!r} names {name!r}, which the "
+                    f"shell renders and owns — style your own nodes instead"
+                )
             for prefix in SHELL_INSTANCE_PREFIXES:
                 if prefix in targets:
                     findings.append(
@@ -410,19 +449,17 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
 
             # TIER 2a — containers and shared components: !important only.
             if "!important" in body:
-                for name in APP_CONTAINERS:
-                    if name in targets:
-                        findings.append(
-                            f"{rel}: !important on {name!r} — the app renders "
-                            f"INSIDE it; style your children, never the box"
-                        )
-                for name in SHARED_COMPONENT_CLASSES:
-                    if name in targets:
-                        findings.append(
-                            f"{rel}: !important on the shared component {name!r} "
-                            f"— your own instance is yours to style, but "
-                            f"!important reaches the shell's instances too"
-                        )
+                for name in _matched_names(targets, APP_CONTAINERS):
+                    findings.append(
+                        f"{rel}: !important on {name!r} — the app renders "
+                        f"INSIDE it; style your children, never the box"
+                    )
+                for name in _matched_names(targets, SHARED_COMPONENT_CLASSES):
+                    findings.append(
+                        f"{rel}: !important on the shared component {name!r} "
+                        f"— your own instance is yours to style, but "
+                        f"!important reaches the shell's instances too"
+                    )
 
                 if _FOOTER_ELEMENT.search(bare):
                     findings.append(

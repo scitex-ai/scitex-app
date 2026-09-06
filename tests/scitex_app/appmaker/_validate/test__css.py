@@ -614,3 +614,117 @@ def test_the_subject_residual_is_named_in_the_report(tmp_path):
     report = validate_css_canonical(app)
     # Assert
     assert "SUBJECT" in " ".join(report.not_checked)
+
+
+# --------------------------------------------------------------------------
+# A LONGER NAME IS A DIFFERENT NAME — and one rule is one finding
+#
+# Both found inside scitex-hub's second step-2 run (0.15.1, 428 files), and
+# both attributed by them to their own code rather than to this rule. The
+# report said "writer minted a class inside the shell's BEM namespace", which
+# is true and worth raising with writer — but it is not what the finding said.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "css",
+    [
+        ".stx-shell-sidebar__header-compact { color: red !important }\n",
+        ".panel-resizer-custom { width: 4px !important }\n",
+        ".h-resizer-x { color: red !important }\n",
+        "#main-content-2 { color: red !important }\n",
+        "#workspace-layout-old { color: red }\n",
+        ".workspace-pane-mine { color: red }\n",
+    ],
+    ids=["hub-real", "resizer", "h-resizer", "container", "tier1-id", "tier1-class"],
+)
+def test_a_name_that_merely_extends_a_protected_one_is_a_different_name(tmp_path, css):
+    """`.stx-shell-sidebar__header` and `.stx-shell-sidebar__header-compact` are
+    unrelated selectors; a rule on the second cannot touch the first. `in` said
+    otherwise, and the finding it produced NAMED A CLASS THE SELECTOR DOES NOT
+    CONTAIN.
+
+    `-` is a legal class-name character, so the guard is `(?![\\w-])` — the same
+    boundary the footer rule already carried and this one did not. The leading
+    side needs none: `.foo` cannot occur inside `.my-foo`, because the `.` is
+    part of the token.
+    """
+    # Arrange
+    app = _app(tmp_path, css)
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert not report.findings
+
+
+@pytest.mark.parametrize(
+    "css",
+    [
+        ".stx-shell-sidebar__header:hover { color: red !important }\n",
+        ".stx-shell-sidebar__header::before { color: red !important }\n",
+        ".stx-shell-sidebar__header.mine { color: red !important }\n",
+        ".stx-shell-sidebar__header .x { color: red !important }\n",
+        ".mine, .panel-resizer { color: red !important }\n",
+        "#main-content > .x { color: red !important }\n",
+    ],
+    ids=["pseudo-class", "pseudo-elem", "compound", "descendant", "list", "child"],
+)
+def test_a_separator_that_is_not_a_name_character_still_selects_it(tmp_path, css):
+    """THE OTHER DIRECTION, which is the half a boundary fix usually breaks.
+    `:`, `.`, ` `, `,` and `>` all end a class name, so every one of these
+    really does select the protected node and must still report — exactly once.
+    """
+    # Arrange
+    app = _app(tmp_path, css)
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert len(report.findings) == 1
+
+
+@pytest.mark.parametrize(
+    "css", [".wft-node { color: red }\n", ".editor-split-pane { color: red }\n"],
+    ids=["wft", "editor-split"],
+)
+def test_a_prefix_family_is_still_matched_by_prefix(tmp_path, css):
+    """`SHELL_INSTANCE_PREFIXES` are prefix FAMILIES on purpose — `.wft-` is
+    meant to match `.wft-node`, and the boundary rule above must not reach them.
+    That distinction is precisely what `in` erased: it made every exact name
+    behave like a prefix."""
+    # Arrange
+    app = _app(tmp_path, css)
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert len(report.findings) == 1
+
+
+def test_one_rule_produces_one_finding_even_when_two_names_nest(tmp_path):
+    """`.stx-shell-sidebar` and `.stx-shell-sidebar__header` are BOTH in
+    `SHARED_COMPONENT_CLASSES` and both substring-matched the same selector, so
+    ONE declaration produced TWO findings under two names.
+
+    That inflates any count taken from this rule — hub's eight `__header-compact`
+    findings were four rules — and a count that inflates is worse than one that
+    is merely incomplete, because it reads as MORE evidence than exists. The
+    most specific match is the one that describes the selector.
+    """
+    # Arrange
+    app = _app(tmp_path, ".stx-shell-sidebar__header { color: red !important }\n")
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert len(report.findings) == 1
+
+
+def test_two_genuinely_different_names_still_report_twice(tmp_path):
+    """The de-duplication drops a name CONTAINED IN another matched name, not
+    any second finding. `.panel-resizer` and `.h-resizer` are distinct targets
+    and neither contains the other, so both are reported — otherwise the fix
+    for an inflated count would quietly become an undercount."""
+    # Arrange
+    app = _app(tmp_path, ".panel-resizer, .h-resizer { color: red !important }\n")
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert len(report.findings) == 2
