@@ -7,6 +7,32 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-09-06
+
+Patch. The pattern list 0.16.2 made singular was still mutable.
+
+### Fixed — `DANGEROUS_JS_PATTERNS` is a tuple, not a list
+
+0.16.2 made `validator.py` **import** the list instead of declaring a second
+one, so both validators now share a single object. That closed the drift and
+opened a smaller hole in its place: a module-level **list** is mutable shared
+state. Anything that imports it can `.append()` a pattern and change validation
+for every caller in that interpreter — including a test that forgets to undo it.
+Sharing one object makes a mutation reach further than two copies ever could.
+
+Raised by scitex-writer, who had asked to check the one-list guarantee from
+outside and found the type while doing it. It is the one part of their answer
+that is a live bug rather than a design preference.
+
+A tuple makes the mutation unrepresentable and costs nothing: the module is
+rebuilt, not the object. Verified in both directions — reverting the declaration
+to a list fails the new test and nothing else.
+
+### Fixed — a `SyntaxWarning` shipped with the 0.16.2 tests
+
+`test_validator.py` carried a docstring containing `\s`, which Python reports as
+an invalid escape sequence on collection. Made raw. Mine, from yesterday.
+
 ## [0.16.2] - 2026-09-06
 
 Patch. A measured narrowing had landed in one of the two validators, and the
