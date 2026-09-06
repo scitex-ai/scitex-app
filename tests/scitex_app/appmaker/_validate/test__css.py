@@ -10,12 +10,20 @@ import pytest
 from scitex_app.appmaker._validate import validate
 from scitex_app.appmaker._validate._css import (
     CssScanReport,
+    NotAnAppDirectoryError,
     css_files,
     validate_css_canonical,
 )
 
 
 def _app(tmp_path, css, name="a.css"):
+    """A fixture that is actually an APP — manifest and all.
+
+    It did not write a manifest until 0.20.0, which meant every test in this
+    file ran against a directory the rule considers out of scope. The suite
+    was green and the in-scope path was the one nobody exercised.
+    """
+    (tmp_path / "manifest.json").write_text("{}", encoding="utf-8")
     static = tmp_path / "static"
     static.mkdir()
     (static / name).write_text(css, encoding="utf-8")
@@ -182,11 +190,98 @@ def test_an_empty_scope_reads_NOT_SCANNED_rather_than_clean(tmp_path):
     That cost a peer a whole measurement on 2026-09-05: 1,116 files reported
     beside 0 findings, having in fact read nothing."""
     # Arrange
+    (tmp_path / "manifest.json").write_text("{}", encoding="utf-8")
     (tmp_path / "static").mkdir()
     # Act
     report = validate_css_canonical(tmp_path)
     # Assert
     assert (report.files_scanned, report.scanned_nothing) == (0, True)
+
+
+# --------------------------------------------------------------------------
+# THE POPULATION — refusing a root this rule is not about.
+# --------------------------------------------------------------------------
+
+
+def test_a_root_without_a_manifest_is_refused_not_counted(tmp_path):
+    """A repo root pools shell and infrastructure CSS this rule never covered,
+    so a count taken there is real and not about app code.
+
+    This used to return the count beside a `root_looks_like_an_app: False`
+    caveat. On 2026-09-06 scitex-hub ran it on their repo root, got 604 files
+    / 346 findings against a right answer of 15, and carried the 346 forward
+    as a 12.8x regression in this detector — with the caveat present, a
+    >=300-file floor asserted, and a positive control firing. Both controls
+    passed: one asked whether the walk found files, the other whether the rule
+    could fire, and neither could ask whether the tree was in scope.
+    """
+    # Arrange
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "a.css").write_text("#workspace-layout { color: red }\n", encoding="utf-8")
+    # Act
+    raised = pytest.raises(NotAnAppDirectoryError)
+    # Assert
+    with raised:
+        validate_css_canonical(tmp_path)
+
+
+def _refusal_message(tmp_path):
+    """The refusal's text, for tests that assert on what it tells the caller."""
+    (tmp_path / "static").mkdir()
+    with pytest.raises(NotAnAppDirectoryError) as excinfo:
+        validate_css_canonical(tmp_path)
+    return str(excinfo.value)
+
+
+def test_the_refusal_names_the_missing_manifest(tmp_path):
+    """An error that only states what broke is half-written — name the file
+    whose absence decided it, so the caller can check it themselves."""
+    # Arrange
+    message = _refusal_message(tmp_path)
+    # Act
+    names_it = "manifest.json" in message
+    # Assert
+    assert names_it
+
+
+def test_the_refusal_says_to_call_it_per_app(tmp_path):
+    """The caller who hits this is pointing at a repo root, and the next move
+    — loop the app dirs — is not guessable from 'not an app directory'."""
+    # Arrange
+    message = _refusal_message(tmp_path)
+    # Act
+    advises_next_step = "per app" in message
+    # Assert
+    assert advises_next_step
+
+
+def test_css_files_still_walks_a_non_app_tree(tmp_path):
+    """The refusal belongs to the RULE, not to the walk. Counting stylesheets
+    in a tree is a question with an honest answer, and a caller sweeping app
+    dirs needs it — so gating both would remove the escape hatch the refusal
+    tells them to use."""
+    # Arrange
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "a.css").write_text("body { color: red }\n", encoding="utf-8")
+    # Act
+    found = css_files(tmp_path)
+    # Assert
+    assert len(found) == 1
+
+
+def test_the_report_carries_no_in_scope_flag(tmp_path):
+    """`root_looks_like_an_app` is gone rather than pinned True. A field that
+    cannot vary is not information, and leaving it would advertise a state the
+    refusal makes unreachable — the menu listing a dish the kitchen stopped
+    serving."""
+    # Arrange
+    app = _app(tmp_path, "body { color: red }\n")
+    # Act
+    report = validate_css_canonical(app)
+    # Assert
+    assert not hasattr(report, "root_looks_like_an_app")
 
 
 def test_a_report_cannot_claim_findings_against_zero_files():
@@ -912,7 +1007,38 @@ def _app(tmp_path, css, *, manifest=True):
     return d
 
 
-def test_a_root_with_a_manifest_looks_like_an_app():
+def test_a_root_without_a_manifest_yields_no_number_at_all():
+    """THE 604-FILE TRAP, now closed by refusing instead of caveating.
+
+    scitex-hub scanned their repo ROOT through a parameter named `app_dir` and
+    got 604 files / 346 findings where the app population had 15. Their
+    enumeration control agreed exactly with an independent walk — two
+    instruments, same number, same wrong tree.
+
+    Until 0.20.0 this returned the 346 beside `root_looks_like_an_app: False`,
+    and the three tests here asserted that the caveat was present, correct, and
+    not always-on. Every one of them passed while hub carried the 346 forward
+    as a 12.8x regression. THE CAVEAT WAS NEVER THE FAILING PART — it was
+    there, it was right, and a number beside it still gets read. So the
+    assertion changed from "is the doubt reported" to "is a number produced",
+    because only the second is what burned a caller.
+    """
+    # Arrange
+    import tempfile
+    from pathlib import Path as _P
+    d = _app(_P(tempfile.mkdtemp()), ".mine { color: red }\n", manifest=False)
+    # Act
+    raised = pytest.raises(NotAnAppDirectoryError)
+    # Assert
+    with raised:
+        validate_css_canonical(d)
+
+
+def test_a_real_app_still_gets_its_report():
+    """THE CONTROL. Without it, the refusal above is equally consistent with
+    'refuses the wrong population' and 'refuses everything' — and a rule that
+    refuses everything would also have passed every test in this file that
+    only checks for raising."""
     # Arrange
     import tempfile
     from pathlib import Path as _P
@@ -920,48 +1046,7 @@ def test_a_root_with_a_manifest_looks_like_an_app():
     # Act
     report = validate_css_canonical(d)
     # Assert
-    assert report.root_looks_like_an_app
-
-
-def test_a_root_without_a_manifest_does_not():
-    """THE 604-FILE TRAP. scitex-hub scanned their repo ROOT through a
-    parameter named `app_dir` and got 346 findings where the app population
-    had 15. Their enumeration control agreed exactly with an independent
-    walk — two instruments, same number, same wrong tree."""
-    # Arrange
-    import tempfile
-    from pathlib import Path as _P
-    d = _app(_P(tempfile.mkdtemp()), ".mine { color: red }\n", manifest=False)
-    # Act
-    report = validate_css_canonical(d)
-    # Assert
-    assert not report.root_looks_like_an_app
-
-
-def test_the_summary_carries_the_doubt_when_the_root_is_not_an_app():
-    """The warning has to be IN THE PAYLOAD. A caller who renders `summary()`
-    must not be able to show a confident count without the caveat."""
-    # Arrange
-    import tempfile
-    from pathlib import Path as _P
-    d = _app(_P(tempfile.mkdtemp()), ".mine { color: red }\n", manifest=False)
-    # Act
-    text = validate_css_canonical(d).summary()
-    # Assert
-    assert "DOES NOT LOOK LIKE AN APP DIRECTORY" in text
-
-
-def test_the_summary_stays_quiet_for_a_real_app():
-    """THE CONTROL. Without it, the assertion above is equally consistent with
-    'the warning is correct' and 'the warning is always printed'."""
-    # Arrange
-    import tempfile
-    from pathlib import Path as _P
-    d = _app(_P(tempfile.mkdtemp()), ".mine { color: red }\n")
-    # Act
-    text = validate_css_canonical(d).summary()
-    # Assert
-    assert "DOES NOT LOOK LIKE AN APP DIRECTORY" not in text
+    assert report.files_scanned == 1
 
 
 def test_every_finding_has_a_record_beside_it():

@@ -7,6 +7,64 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-06
+
+Minor, and a BREAKING change to a rule nobody has armed. The caveat that was
+supposed to stop a wrong population did not stop it, so the wrong population
+no longer produces a number.
+
+### Changed — `validate_css_canonical` REFUSES a root that is not one app
+
+    before   report.findings == 346, root_looks_like_an_app == False
+    after    NotAnAppDirectoryError
+
+`NotAnAppDirectoryError` (a `ValueError`, exported) names the missing
+`manifest.json` and says what to do instead: loop your app dirs and call this
+per app. The check runs BEFORE the walk, so the expensive part never runs for
+a root whose answer would not have been about app code.
+
+`css_files()` is deliberately NOT gated — the refusal belongs to the rule, not
+the walk. Counting stylesheets in a tree is a question with an honest answer,
+and it is the escape hatch the refusal points at.
+
+### Removed — `CssScanReport.root_looks_like_an_app`
+
+A field that can no longer vary is not information. Every report that now
+exists is about one app, so pinning it True would advertise a state the
+refusal makes unreachable.
+
+### WHY THE CAVEAT WAS NOT ENOUGH, WHICH IS THE WHOLE POINT
+
+0.17.0 added the flag and made `summary()` lead with it, for exactly this
+hazard. On 2026-09-06 **scitex-hub ran the rule on their repo root and got
+604 files / 346 findings where the right answer was 15** — 315 of the 346
+being shell-instance rules firing on the shell's own stylesheets, which is
+those files' job. They carried the 346 into two messages as a 12.8x
+regression in this detector, and set their real work aside to chase it.
+
+They were not careless. They had asserted a **>=300-file floor** and fired a
+**positive control** (`#workspace-layout` -> 1 finding). Both passed. One asks
+whether the walk found files; the other whether the rule can fire; **neither
+can ask whether the tree is in scope.** The caveat was present, correct, and
+adjacent — and hub's own conclusion is the rule now: *"a number printed next
+to a caveat still gets printed."* This ships their request.
+
+The old reasoning is preserved in place in `summary()` rather than deleted,
+because the error in it is the lesson: it justified the caveat by analogy to
+`files_scanned == 0`, missing that `scanned_nothing` changes the NUMBER while
+the root caveat left the number sitting there, printable.
+
+### Fixed — the test fixture was never an app
+
+`_app()` did not write a `manifest.json`, so **every test in `test__css.py`
+ran against a directory this rule considers out of scope.** The suite was
+green and the in-scope path was the one nobody exercised. It writes one now.
+
+Three tests asserted the caveat was present, correct, and not always-on. All
+three passed throughout, which is the sharpest evidence available that they
+were testing the wrong property: they are replaced by one asserting that no
+number is produced, plus a control that a real app still gets its report.
+
 ## [0.19.1] - 2026-09-06
 
 Patch. A third list declared twice, and a correction to 0.19.0's own changelog.
