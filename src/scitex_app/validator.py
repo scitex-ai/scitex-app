@@ -53,17 +53,31 @@ SHELL_SELECTORS = {
 }
 
 # Dangerous JS patterns
-DANGEROUS_JS_PATTERNS = [
-    r"\beval\s*\(",
-    r"\bFunction\s*\(",
-    r"\bdocument\.cookie\b",
-    r"\bwindow\.parent\b",
-    r"\bwindow\.top\b",
-    r"\b__import__\b",
-    r"\bos\.system\b",
-    r"\bsubprocess\b",
-    r"\bexec\s*\(",
-]
+# ONE DECLARATION, IMPORTED — not a second copy kept in step by hand.
+#
+# This list used to be nine patterns here and five in `_validate/_js.py`, and
+# the difference was not a disagreement: it was a MEASURED NARROWING that
+# landed in one implementation only. Four of the original nine —
+# `__import__`, `os.system`, `subprocess`, `exec\s*\(` — are the PYTHON
+# forbidden list copy-pasted into a JS scanner, and they were removed there
+# after measuring the fleet.
+#
+# scitex-writer hit the survivor on 2026-09-06, through THIS module:
+#
+#     static/writer/js/editor.js:812
+#     while ((match = re.exec(line)) !== null)
+#         -> "dangerous pattern matching '\bexec\s*\('"
+#
+# `RegExp.prototype.exec` in a tokenizer loop. Not code execution, and
+# `\bexec\s*\(` cannot tell a member call from the eval-family builtin.
+#
+# They reported it rather than renaming the variable to dodge the checker,
+# which is why it is fixed here instead of hidden in their tree.
+#
+# The import is the point. Syncing two lists is a promise; importing one is a
+# guarantee — and the promise had already been broken once, silently, in the
+# direction that failed a peer's correct code.
+from scitex_app.appmaker._validate._js import DANGEROUS_JS_PATTERNS
 
 # Default max bundle size (50MB)
 DEFAULT_MAX_BUNDLE_SIZE = 50 * 1024 * 1024

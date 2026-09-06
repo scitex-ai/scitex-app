@@ -7,6 +7,51 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-09-06
+
+Patch. A measured narrowing had landed in one of the two validators, and the
+one it missed is the one a peer used.
+
+### Fixed — `AppValidator` still carried the un-narrowed JS pattern list
+
+    _validate/_js.py    5 patterns   narrowed on measurement, 0.11.0
+    validator.py        9 patterns   the original, untouched
+
+The four extra — `__import__`, `os.system`, `subprocess`, `exec\s*\(` — are the
+**Python** forbidden list copy-pasted into a JS scanner. They were removed from
+the CLI path after measuring the fleet and left standing in `AppValidator`.
+
+scitex-writer hit the survivor on 2026-09-06:
+
+    static/writer/js/editor.js:812
+    while ((match = re.exec(line)) !== null)
+        -> "dangerous pattern matching '\bexec\s*\('"
+
+`RegExp.prototype.exec` in a tokenizer loop. Not code execution, and
+`\bexec\s*\(` cannot tell a member call from the eval-family builtin. **They
+reported it rather than renaming the variable to dodge the checker**, which is
+why it is fixed here instead of hidden in their tree.
+
+`validator.py` now **imports** the list rather than declaring a second one.
+Syncing two lists is a promise; importing one is a guarantee — and the promise
+had already been broken once, silently, in the direction that fails a peer's
+correct code. A test asserts the two are the *same object*, not merely equal:
+two lists that happen to agree today is exactly the state this repo was in
+yesterday.
+
+### Inverted — a test that asserted the defect
+
+`test_subprocess_in_js_adds_error` fixed `const subprocess = require('child_process')`
+and asserted it fails. It passed for the wrong reason twice over:
+
+- `\bsubprocess\b` matched the **variable name**, not anything dangerous;
+- the genuinely hazardous part of that line, `require('child_process')`, is
+  matched by **no pattern in either list**.
+
+Now asserts the identifier is not a hazard, and records the unmatched call as a
+known gap rather than widening the rule — that is a separate decision, and the
+JS check is still unarmed.
+
 ## [0.16.1] - 2026-09-06
 
 Patch. A BEM modifier is the same component in a state — 0.15.2's boundary
