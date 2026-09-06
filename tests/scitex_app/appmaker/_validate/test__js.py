@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from scitex_app.appmaker._validate import (
     DANGEROUS_JS_PATTERNS,
     validate_js,
@@ -138,3 +140,51 @@ def test_a_live_call_after_a_comment_is_still_reported(tmp_path):
     reported = validate_js(tmp_path)
     # Assert
     assert reported
+
+
+def test_appvalidator_and_the_cli_share_one_pattern_list():
+    """ONE DECLARATION, NOT TWO KEPT IN STEP BY HAND.
+
+    These were nine patterns in `validator.py` and five here, and the gap was
+    not a disagreement — it was a MEASURED NARROWING that landed in one
+    implementation only. Four of the original nine (`__import__`, `os.system`,
+    `subprocess`, `exec\\s*\\(`) are the Python forbidden list copy-pasted into
+    a JS scanner, removed here after measuring the fleet and left standing
+    there.
+
+    scitex-writer hit the survivor on 2026-09-06 through `AppValidator`:
+    `while ((match = re.exec(line)) !== null)` — `RegExp.prototype.exec` in a
+    tokenizer loop — reported as a dangerous pattern. They raised it instead of
+    renaming the variable to dodge the checker.
+
+    Asserted as IDENTITY rather than equality on purpose: two lists that happen
+    to be equal today is exactly the state this repo was in yesterday.
+    """
+    # Arrange
+    from scitex_app.validator import DANGEROUS_JS_PATTERNS as from_validator
+    # Act
+    shared = from_validator is DANGEROUS_JS_PATTERNS
+    # Assert
+    assert shared
+
+
+def test_a_regexp_exec_call_is_not_a_dangerous_pattern():
+    """writer's actual line, kept as a fixture so the narrowing cannot be
+    undone by someone re-adding the Python patterns."""
+    # Arrange
+    line = "while ((match = re.exec(line)) !== null) {"
+    # Act
+    hits = [p for p in DANGEROUS_JS_PATTERNS if re.search(p, line)]
+    # Assert
+    assert hits == []
+
+
+def test_the_narrowed_list_still_catches_real_browser_hazards():
+    """THE CONTROL. Without it, "no match" above is equally consistent with
+    "the list is correct" and "the list is empty"."""
+    # Arrange
+    hazardous = "eval(userInput); document.cookie = stolen;"
+    # Act
+    hits = [p for p in DANGEROUS_JS_PATTERNS if re.search(p, hazardous)]
+    # Assert
+    assert len(hits) == 2
