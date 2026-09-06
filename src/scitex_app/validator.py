@@ -55,7 +55,12 @@ SHELL_SELECTORS = {
     ".ws-module-pane",
     ".workspace-header",
     ".workspace-sidebar",
-    ".stx-shell-",
+    # `.stx-shell-` REMOVED 2026-09-06. It was a bare PREFIX in a table matched
+    # by raw substring, so it flagged every app that styled its own
+    # `.stx-shell-sidebar__*` element — scitex-hub measured 42 such legitimate
+    # lines across nine apps. `.stx-shell-*` is not blanket no-touch; ownership
+    # is by NODE, not by name prefix. The shipped skill has said so since
+    # 0.15.0 while this entry kept contradicting it.
     "#workspace-container",
     ".ws-app-sidebar",
 }
