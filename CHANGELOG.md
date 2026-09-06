@@ -7,6 +7,103 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-09-06
+
+Patch. The reference example failed the validator this package ships, and the
+two entry points do not take the same `app_dir`.
+
+### Fixed — `examples/hello_world_app` failed `scitex-app app validate`, 8 errors
+
+    Missing required file: LICENSE
+    Missing required file: README.md
+    Missing template: templates/hello_world/index_partial.html
+    Missing agents config: .agents/agents.json or .agents/README.md
+    manifest.json missing required key: 'pip_package'
+    manifest.json missing required key: 'license'
+    manifest.json must NOT declare 'version' — ...
+    manifest.json missing 'dependencies' field
+
+**This is the file developers copy.** The `version` error's own remediation
+text cites the incident where every hub app tile displayed a wrong version —
+and the example shipped with `version: "0.1.0"` in it. So the reference
+implementation prescribed the defect the validator exists to catch, which is
+the same shape as the skill doc that told developers to add a `version` key
+(corrected in PR #98) — and worse, because a reference implementation is
+believed rather than read.
+
+Nothing noticed for as long as the example had existed, because nothing ever
+ran one against the other. **A gate whose own example cannot pass it is not a
+gate anyone will run.**
+
+The substantive part of the fix is not the paperwork. `page.html` is the
+STANDALONE shape and owns the document; the new `index_partial.html` is the
+WORKSPACE shape, where the shell owns the document and the app renders into a
+container — so it has no `<head>` and therefore cannot emit the mount marker,
+it must read the shell's. The example demonstrated only the first, so **the
+shape with the harder rules was the one it did not teach.**
+
+Guarded by `tests/examples/test_example_app_validates.py`, which runs the real
+`validate_with_warnings` against the shipped example. Written as a test rather
+than a note because a note is a request and a test is a barrier. Verified it
+can FAIL: reintroducing `version` turns 8 passed into 2 failed, and both the
+blanket "zero errors" assertion and the specific `version` assertion fire —
+they are separate tests so that relaxing the rule later cannot silently let the
+key back in.
+
+One ADVISORY is left deliberately: the manifest `name` is `hello_world`, not
+`hello_world_app`. The convention exists so registry entries do not collide;
+here the name must match the Django app module so `templates/hello_world/`
+reads as the ordinary Django convention. An advisory is advice, and this one
+has a stated reason to decline — which is the exemption the advisory tier was
+introduced for.
+
+### Documented — the two entry points do not take the same `app_dir`
+
+Measured as a matrix, both roots against both validators:
+
+    app             root             CLI    AppValidator
+    scitex_scholar  <pkg>            15E     3E
+    scitex_scholar  <pkg>/_django     0E     0E
+    scitex_writer   <pkg>            39E     6E
+    scitex_writer   <pkg>/_django     7E     3E
+
+The CLI wants the directory holding `manifest.json`; `AppValidator` resolves
+`_django/manifest.json` from the package root. Hand the CLI a package root and
+it reports `manifest.json not found` while `AppValidator` reads it fine.
+
+The coverage table shipped in PR #98 compares the two check-by-check and never
+said this. **Scholar is 0 vs 0 once each gets the path it wants — perfect
+agreement at the right roots is exactly what hides it.**
+
+### Measured — the `license` divergence affects one file
+
+`_manifest.py` requires `license`; `validator.py` does not. Across the 7 apps
+`validate()` actually serves (6 embedded `_django` packages plus this example),
+**6 already declare it**, and the only one that did not was the example. The
+divergence carried on
+`app-two-validators-docs-describe-the-uncalled-one-20260822` as a live
+disagreement was one file, and it was mine.
+
+DENOMINATOR CORRECTION, recorded because the first number was wrong: the first
+pass measured 37 manifests and produced "only 12/37 declare `pip_package`,
+which BOTH validators require". That pooled three unrelated kinds of file —
+PWA web-app manifests, hub's and cloud's 28 workspace app-registry entries
+(which `validate()` never runs on, measured by hub 2026-09-04), and the real
+embedded apps. The correct population is 7. Checking what the enumeration
+EXCLUDED changed the headline completely.
+
+Also caught before recording: the first CLI run pointed at `<pkg>` and produced
+45 errors including `Missing required file: views.py`. That was the invocation,
+not a defect — the same class as the worktree scan that reported 1,116 files
+and 0 findings.
+
+### Not changed
+
+Neither validator's rules. The example was wrong, not the rule. The
+`pip_package` and `version` findings in figrecipe, scitex-cards, scitex-todo
+and scitex-writer are those packages' own and are reported to them, not edited
+here.
+
 ## [0.15.2] - 2026-09-06
 
 Patch. A longer name is a different name, and one rule is one finding. Both
