@@ -1231,3 +1231,97 @@ def test_version_is_still_not_required(tmp_path):
     required = set(MANIFEST_REQUIRED_FIELDS)
     # Assert
     assert "version" not in required
+
+
+# ---------------------------------------------------------------------------
+# THE PUBLIC SURFACE — added 2026-09-06 from scitex-writer's design.
+#
+# Their conclusion: do NOT publish the `a is b` identity guarantee. Making it
+# checkable from outside means exporting the canonical side, which lives two
+# underscore modules deep, and publishing a private path to prove a property
+# about the mechanism makes the private path load-bearing.
+#
+# What a consumer CAN use is SINGULARITY OF THE PUBLIC NAME. That was already
+# true, and true only by accident of module layout. These assert it.
+# ---------------------------------------------------------------------------
+
+
+def test_the_public_surface_is_declared_not_inherited():
+    """Without __all__, `scitex_app.validator.X` reached json, logging, re,
+    Path, List, Optional, dataclass, field and logger. Anything importable is a
+    promise someone can depend on, and one made by accident is still a promise.
+    """
+    # Arrange
+    import scitex_app.validator as module
+    # Act
+    declared = getattr(module, "__all__", None)
+    # Assert
+    assert declared is not None
+
+
+def test_every_declared_name_exists():
+    """An __all__ naming something absent breaks `import *` at runtime and is
+    invisible to any test that only imports the names it happens to use."""
+    # Arrange
+    import scitex_app.validator as module
+    # Act
+    absent = [n for n in module.__all__ if not hasattr(module, n)]
+    # Assert
+    assert absent == []
+
+
+def test_the_module_does_not_publish_its_own_imports():
+    """The leak this closes. `re` and `Path` are implementation, not surface."""
+    # Arrange
+    import scitex_app.validator as module
+    incidental = {"json", "logging", "re", "Path", "List", "Optional",
+                  "dataclass", "field", "logger", "annotations"}
+    # Act
+    published = incidental & set(module.__all__)
+    # Assert
+    assert published == set()
+
+
+def test_exactly_one_public_name_reaches_the_js_pattern_list():
+    """SINGULARITY, which is what does outside what `is` does inside.
+
+    If two public names reached this object, a consumer could hold both and
+    they could disagree — which is the exact state that produced the 9-vs-5
+    divergence. One public name means there is nothing to disagree with, and it
+    needs no private export to state.
+    """
+    # Arrange
+    import scitex_app.appmaker as appmaker
+    import scitex_app.validator as validator
+    from scitex_app.appmaker._validate._js import DANGEROUS_JS_PATTERNS as canonical
+    # Act
+    public_routes = [
+        name for module, name in (
+            (validator, "scitex_app.validator"),
+            (appmaker, "scitex_app.appmaker"),
+        )
+        if getattr(module, "DANGEROUS_JS_PATTERNS", None) is canonical
+    ]
+    # Assert
+    assert public_routes == ["scitex_app.validator"]
+
+
+def test_exactly_one_public_name_reaches_the_manifest_key_list():
+    """Same property for the second shared list."""
+    # Arrange
+    import scitex_app.appmaker as appmaker
+    import scitex_app.validator as validator
+    from scitex_app.appmaker._validate._manifest import (
+        MANIFEST_REQUIRED_KEYS as canonical,
+    )
+    # Act
+    public_routes = [
+        name for module, name in (
+            (validator, "scitex_app.validator"),
+            (appmaker, "scitex_app.appmaker"),
+        )
+        if getattr(module, "MANIFEST_REQUIRED_FIELDS", None) is canonical
+        or getattr(module, "MANIFEST_REQUIRED_KEYS", None) is canonical
+    ]
+    # Assert
+    assert public_routes == ["scitex_app.validator"]

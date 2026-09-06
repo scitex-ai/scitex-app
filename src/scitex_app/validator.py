@@ -42,6 +42,40 @@ from scitex_app.appmaker._validate._manifest import (  # noqa: E402
     MANIFEST_REQUIRED_KEYS as MANIFEST_REQUIRED_FIELDS,
 )
 
+# THE PUBLIC SURFACE, DECLARED RATHER THAN INHERITED FROM MODULE LAYOUT.
+#
+# Without this, `scitex_app.validator.X` reached ten names nobody meant to
+# publish — json, logging, re, Path, List, Optional, dataclass, field, logger.
+# Anything importable is a promise somebody can depend on, and a promise made by
+# accident is still a promise.
+#
+# The reason it matters HERE specifically is scitex-writer's, 2026-09-06. They
+# asked whether the "one pattern list" guarantee was checkable from outside, and
+# their answer was: do NOT publish the identity. `a is b` is the right INTERNAL
+# test — it is what stops a re-declaration going green — but making it checkable
+# from outside means exporting both sides, and the canonical side lives two
+# underscore modules deep. Publishing a private path to prove a property about
+# the mechanism makes the private path load-bearing, and then it is not private.
+#
+# What a consumer can use instead is SINGULARITY OF THE PUBLIC NAME: there is
+# exactly one public route to each shared object, so there is nothing for their
+# code to disagree with. That was already TRUE before this block, and true only
+# BY ACCIDENT OF LAYOUT. Declaring `__all__` turns it into a property a test can
+# assert — see tests asserting exactly one public path reaches each.
+__all__ = [
+    "AppValidator",
+    "ValidationResult",
+    "DANGEROUS_JS_PATTERNS",
+    "MANIFEST_REQUIRED_FIELDS",
+    "DEFAULT_MAX_BUNDLE_SIZE",
+    "SHELL_SELECTORS",
+    "SKIP_DIRS",
+    "VALID_PRIVILEGE_TYPES",
+    "VALID_FILESYSTEM_SCOPES",
+    "VALID_NETWORK_SCOPES",
+    "VALID_API_SCOPES",
+]
+
 # Valid privilege types
 VALID_PRIVILEGE_TYPES = {"filesystem", "network", "api"}
 VALID_FILESYSTEM_SCOPES = {"project", "readonly", "none"}

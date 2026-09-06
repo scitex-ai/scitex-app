@@ -7,6 +7,51 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-06
+
+Minor. `scitex_app.validator` now declares its public surface. No behaviour
+changes; ten names stop being importable-by-accident.
+
+### Added — `__all__`, and singularity becomes assertable
+
+Before this, `scitex_app.validator.X` reached ten names nobody meant to
+publish: `json`, `logging`, `re`, `Path`, `List`, `Optional`, `dataclass`,
+`field`, `logger`, `annotations`. **Anything importable is a promise someone can
+depend on, and a promise made by accident is still a promise.**
+
+The reason it matters here is **scitex-writer's**, who asked whether the
+"one pattern list" guarantee was checkable from outside and answered: *do not
+publish the identity*. `a is b` is the right INTERNAL test — it is what stops a
+re-declaration going green — but making it checkable externally means exporting
+the canonical side, which lives two underscore modules deep. Publishing a
+private path to prove a property about the mechanism makes that path
+load-bearing, and then it is not private.
+
+What a consumer can use instead is **singularity of the public name**: exactly
+one public route to each shared object, so there is nothing for their code to
+disagree with. That was already true — and true only by accident of module
+layout. Declaring `__all__` makes it a property a test can assert.
+
+Five assertions, each demonstrated load-bearing by the failure it and only it
+produces:
+
+| removed | fails |
+|---|---|
+| `__all__` entirely | declared / names-exist / no-leak (3) |
+| a leaked name re-added | no-leak only |
+| an absent name declared | names-exist only |
+| a 2nd public route to the JS list | js singularity only |
+| a 2nd public route to the manifest list | manifest singularity only |
+
+The last two exist because the first three controls left both singularity tests
+passing — one control proves the whole is not broken, never that each part
+carries weight.
+
+**Not changed:** `SKIP_DIRS` is still a separate object equal to
+`_js.JS_SKIP_DIRS` — a third duplicated list, tracked in
+`app-appvalidator-css-check-is-a-substring-scan-20260906` and deliberately not
+folded in here.
+
 ## [0.18.2] - 2026-09-06
 
 Patch. Tests only — the two shared lists asserted how they were WRITTEN, not
