@@ -7,6 +7,58 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-06
+
+Minor. Both defects scitex-hub found in 0.16.1's report, neither in the rule.
+
+### Added — `CssFinding`, so a consumer never substring-matches a finding
+
+hub, the only consumer of `validate_css_canonical`, reported:
+
+> "To act on one programmatically a consumer must parse `path:line: message`
+> and then keyword-match the message — which is how I ended up mis-bucketing
+> 316 findings into 'other' on my first pass, using exactly the substring
+> reasoning this rule exists to discourage."
+
+A rule whose entire subject is *do not decide what a selector means from a
+substring* was handing its output as prose and forcing its only consumer to
+decide from a substring. The defect was not the prose; it was prose as the
+interface.
+
+`CssScanReport.details` is now a tuple of frozen `CssFinding` records carrying
+`rule`, `tier`, `path`, `line`, `selector`, `message` and `subject`. **`rule`
+is a stable slug and the field to branch on** — the message text stays free to
+be reworded, which is the point of separating them.
+
+Nothing is taken away: `findings` is unchanged, `str(finding)` reproduces the
+exact line emitted since 0.15.2, and a `__post_init__` check refuses any report
+whose two forms disagree — the string and record views describe the same
+findings, so drift between them is a bug here, not a caller error.
+
+### Added — the report says when its root does not look like an app
+
+hub scanned their repo **root** through a parameter named `app_dir`:
+
+    hub repo root    604 files   346 findings
+    28 app dirs      250 files    15 findings
+
+333 of 346 were not app code. **Their enumeration control was sound and proved
+the wrong thing** — `css_files(root)` said 604 and an independent `rg --files`
+said 604, exact agreement. Two instruments, same number, same wrong tree. An
+enumeration control establishes completeness, never population.
+
+Nothing in this package stopped it: `css_files()` refuses a path that does not
+exist but walks a repo root happily, and the parameter name was the only thing
+saying "one app".
+
+`CssScanReport.root_looks_like_an_app` is now computed from the cheapest
+predicate that separates the two — **an app directory has a `manifest.json`; a
+repo root does not** — and `summary()` leads with the caveat when it is false.
+Deliberately **not** a refusal: scanning a tree on purpose is legitimate, and
+this rule cannot know the caller's intent. It can say that the root is not the
+thing the parameter is named after, the way `files_scanned == 0` already reads
+NOT SCANNED rather than clean.
+
 ## [0.16.3] - 2026-09-06
 
 Patch. The pattern list 0.16.2 made singular was still mutable.

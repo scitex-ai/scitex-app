@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import functools
+
 import pytest
 
 from scitex_app.appmaker._validate import validate
@@ -891,3 +893,179 @@ def test_the_tables_declare_themselves_a_lower_bound(tmp_path):
     report = validate_css_canonical(app)
     # Assert
     assert "LOWER BOUND" in " ".join(report.not_checked)
+
+
+# ---------------------------------------------------------------------------
+# THE REPORT'S SHAPE — added 2026-09-06 from scitex-hub's two findings against
+# 0.16.1: the rule could not tell an app dir from a repo root, and its findings
+# were prose their consumer had to substring-match.
+# ---------------------------------------------------------------------------
+
+
+def _app(tmp_path, css, *, manifest=True):
+    """An app directory: a manifest.json and one stylesheet."""
+    d = tmp_path / "app"
+    (d / "static").mkdir(parents=True)
+    (d / "static" / "a.css").write_text(css, encoding="utf-8")
+    if manifest:
+        (d / "manifest.json").write_text("{}", encoding="utf-8")
+    return d
+
+
+def test_a_root_with_a_manifest_looks_like_an_app():
+    # Arrange
+    import tempfile
+    from pathlib import Path as _P
+    d = _app(_P(tempfile.mkdtemp()), ".mine { color: red }\n")
+    # Act
+    report = validate_css_canonical(d)
+    # Assert
+    assert report.root_looks_like_an_app
+
+
+def test_a_root_without_a_manifest_does_not():
+    """THE 604-FILE TRAP. scitex-hub scanned their repo ROOT through a
+    parameter named `app_dir` and got 346 findings where the app population
+    had 15. Their enumeration control agreed exactly with an independent
+    walk — two instruments, same number, same wrong tree."""
+    # Arrange
+    import tempfile
+    from pathlib import Path as _P
+    d = _app(_P(tempfile.mkdtemp()), ".mine { color: red }\n", manifest=False)
+    # Act
+    report = validate_css_canonical(d)
+    # Assert
+    assert not report.root_looks_like_an_app
+
+
+def test_the_summary_carries_the_doubt_when_the_root_is_not_an_app():
+    """The warning has to be IN THE PAYLOAD. A caller who renders `summary()`
+    must not be able to show a confident count without the caveat."""
+    # Arrange
+    import tempfile
+    from pathlib import Path as _P
+    d = _app(_P(tempfile.mkdtemp()), ".mine { color: red }\n", manifest=False)
+    # Act
+    text = validate_css_canonical(d).summary()
+    # Assert
+    assert "DOES NOT LOOK LIKE AN APP DIRECTORY" in text
+
+
+def test_the_summary_stays_quiet_for_a_real_app():
+    """THE CONTROL. Without it, the assertion above is equally consistent with
+    'the warning is correct' and 'the warning is always printed'."""
+    # Arrange
+    import tempfile
+    from pathlib import Path as _P
+    d = _app(_P(tempfile.mkdtemp()), ".mine { color: red }\n")
+    # Act
+    text = validate_css_canonical(d).summary()
+    # Assert
+    assert "DOES NOT LOOK LIKE AN APP DIRECTORY" not in text
+
+
+def test_every_finding_has_a_record_beside_it():
+    # Arrange
+    import tempfile
+    from pathlib import Path as _P
+    d = _app(_P(tempfile.mkdtemp()), "#workspace-shell { color: red }\n")
+    # Act
+    report = validate_css_canonical(d)
+    # Assert
+    assert len(report.details) == len(report.findings) == 1
+
+
+def test_a_record_stringifies_to_the_line_it_replaces():
+    """The prose form is KEPT, not replaced. A consumer that formats findings
+    for a human keeps working unchanged."""
+    # Arrange
+    import tempfile
+    from pathlib import Path as _P
+    d = _app(
+        _P(tempfile.mkdtemp()),
+        "#workspace-shell { color: red }\n"
+        ".stx-shell-sidebar { color: red !important }\n",
+    )
+    # Act
+    report = validate_css_canonical(d)
+    # Assert
+    assert report.findings and tuple(str(x) for x in report.details) == report.findings
+
+
+def test_a_consumer_can_branch_on_rule_without_reading_the_message():
+    """THE WHOLE POINT. hub mis-bucketed 316 findings into 'other' by keyword
+    -matching the message — 'using exactly the substring reasoning this rule
+    exists to discourage'."""
+    # Arrange
+    import tempfile
+    from pathlib import Path as _P
+    d = _app(_P(tempfile.mkdtemp()), "#workspace-shell { color: red }\n")
+    # Act
+    rules = [x.rule for x in validate_css_canonical(d).details]
+    # Assert
+    assert rules == ["shell-instance-name"]
+
+
+def test_a_record_carries_the_protected_name_it_matched():
+    # Arrange
+    import tempfile
+    from pathlib import Path as _P
+    d = _app(_P(tempfile.mkdtemp()), "#workspace-shell { color: red }\n")
+    # Act
+    subjects = [x.subject for x in validate_css_canonical(d).details]
+    # Assert
+    assert subjects == ["#workspace-shell"]
+
+
+def test_a_report_whose_two_forms_disagree_is_refused():
+    """The string form and the record form describe the same findings. A
+    report where they diverge is a bug in this module, so it fails where it is
+    built rather than three layers downstream in hub's bucketing."""
+    # Arrange
+    from scitex_app.appmaker._validate import CssFinding
+    detail = CssFinding(
+        rule="shell-instance-name",
+        tier="1",
+        path="a.css",
+        line=1,
+        selector=".x",
+        message="something",
+    )
+    # Act
+    build = functools.partial(
+        CssScanReport,
+        findings=("a.css:1: SOMETHING ELSE",),
+        files_scanned=1,
+        details=(detail,),
+    )
+    # Assert
+    with pytest.raises(ValueError, match="disagree"):
+        build()
+
+
+def test_a_finding_without_a_position_is_refused():
+    # Arrange
+    from scitex_app.appmaker._validate import CssFinding
+    # Act
+    build = functools.partial(
+        CssFinding,
+        rule="r", tier="1", path="a.css", line=0, selector=".x", message="m",
+    )
+    # Assert
+    with pytest.raises(ValueError, match="1-based"):
+        build()
+
+
+def test_a_finding_without_a_rule_is_refused():
+    """An empty `rule` forces a consumer back to matching the message text,
+    which is the defect this record exists to remove."""
+    # Arrange
+    from scitex_app.appmaker._validate import CssFinding
+    # Act
+    build = functools.partial(
+        CssFinding,
+        rule="", tier="1", path="a.css", line=1, selector=".x", message="m",
+    )
+    # Assert
+    with pytest.raises(ValueError, match="branch on"):
+        build()
