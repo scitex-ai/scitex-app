@@ -7,6 +7,39 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.18.2] - 2026-09-06
+
+Patch. Tests only — the two shared lists asserted how they were WRITTEN, not
+that a caller cannot mutate them.
+
+### Fixed — the immutability tests asserted the declaration, not the hazard
+
+    type(x) is tuple      how the object was written
+    x.append(...) raises  what anybody actually cares about
+
+Two claims. In CPython they coincide, but coinciding is not being the same
+claim, and the suite only ever asserted the first — for both
+`DANGEROUS_JS_PATTERNS` and `MANIFEST_REQUIRED_KEYS`.
+
+Raised by **scitex-writer**, who verified 0.16.3 from the wheel and ran the
+probe I had not: `.append('x')` → `AttributeError`. Their words: *"those are two
+claims and I had only been shown one."*
+
+The uncomfortable part is that the old docstring argued FOR the weaker check —
+that asserting the type beats catching `AttributeError` "because a caller that
+reaches for `.append()` on a tuple is already a bug the reader should see". That
+is an argument about which failure is legible to a maintainer, presented as if
+it settled whether the hazard was closed. Corrected in place rather than
+deleted, so the reasoning error stays visible.
+
+Each list now carries three assertions: the type (fails at the DECLARATION,
+which is the earlier and more legible place), `.append` raising, and item
+assignment raising. The third exists so the pair is a test about MUTABILITY
+rather than about the method name `append`.
+
+Verified by reverting both declarations to lists: all six fail, and nothing
+else does.
+
 ## [0.18.1] - 2026-09-06
 
 Patch. Two CSS checks flagged app CSS an app is entitled to write. Found by
