@@ -1,0 +1,54 @@
+{# THE WORKSPACE SHAPE. `page.html` beside this file is the STANDALONE shape.
+   An app that ships to the app store provides both, and they are not the same
+   template with a different wrapper:
+
+     page.html            extends scitex_ui/standalone_shell.html.
+                          It owns the whole document, and the shell it extends
+                          is the one that includes the mount marker.
+
+     index_partial.html   THIS file. The workspace shell owns the document; the
+                          app is handed a container and renders INTO it. There
+                          is no <html>, no <head>, and therefore nowhere to put
+                          a marker of its own.
+
+   The example carried only the standalone half until 2026-09-06, which is why
+   `scitex-app app validate` reported it missing — and the missing half is the
+   one with the harder rules, so its absence removed the part worth teaching.
+#}
+
+<section class="stx-hello">
+  <h1>Hello, world</h1>
+  <p>
+    The same app, rendered inside the workspace shell instead of owning the
+    page. Nothing below assumes a URL.
+  </p>
+  <button id="greet-partial" type="button">Greet me</button>
+  <pre id="out-partial" aria-live="polite"></pre>
+</section>
+
+<script>
+  // THE MARKER IS THE SHELL'S, AND IT IS STILL THE ONLY SOURCE OF THE PREFIX.
+  //
+  // In the workspace the app does not render <head>, so it cannot emit the
+  // marker — the shell already did. Read it exactly as the standalone page
+  // does. The read is identical in both shapes precisely BECAUSE neither
+  // guesses: whoever owns the document emits it, everyone else reads it.
+  const el = document.querySelector('meta[name="stx-mount"]');
+  if (!el) throw new Error("stx-mount marker missing — the shell did not declare a mount");
+  const base = el.content;   // "/apps/u/hello_world" in the workspace
+
+  // Same join, same reason. `base + "/api/greet"` — the slash belongs to the
+  // endpoint. Writing "/api/greet" against a base that already ends in "/"
+  // yields "//api/greet", which the browser treats as protocol-relative and
+  // sends to a DIFFERENT HOST.
+  document.getElementById("greet-partial").addEventListener("click", async () => {
+    const res = await fetch(base + "/api/greet");
+    document.getElementById("out-partial").textContent =
+      JSON.stringify(await res.json(), null, 2);
+  });
+
+  // SCOPE YOUR CSS UNDER YOUR OWN ROOT. In the workspace this markup is a
+  // sibling of the shell's own nodes, so a bare `footer {}` or `[data-pane]{}`
+  // selector reaches the shell's frame rather than yours. `.stx-hello` above
+  // is what makes every rule in this app addressable without touching it.
+</script>
