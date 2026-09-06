@@ -236,13 +236,41 @@ def validate_css_canonical(app_dir: str | Path) -> CssScanReport:
     # BEFORE the walk, so the expensive part never runs for a root whose
     # answer would not have been about app code anyway.
     if not (root / "manifest.json").is_file():
+        # TWO CAUSES REACH THIS LINE AND THEY NEED DIFFERENT FIXES. Until
+        # 0.20.1 the message said only the first, which sent the second
+        # somewhere useless: "loop over your app dirs" tells a caller to do
+        # the thing they already did — the directory WAS in their loop and
+        # this call is why it got skipped.
+        #
+        #   no manifest at all      -> not an app. Wrong target. Their fix.
+        #   a manifest in another   -> an app this rule cannot read. The
+        #   format                     manifest is the problem, not the aim.
+        #
+        # Raised by scitex-hub against 0.20.0: apps/legacy/notebook_app
+        # carries a manifest.yaml (name/label/version/icon/...) and ships
+        # CSS, so "not an app directory" is simply false about it.
+        other = sorted(
+            p.name
+            for p in root.glob("manifest.*")
+            if p.is_file() and p.name != "manifest.json"
+        )
+        if other:
+            raise NotAnAppDirectoryError(
+                f"{root} has no manifest.json, but it does have "
+                f"{', '.join(other)} — so this looks like an app whose "
+                f"manifest this rule cannot read, NOT the wrong directory. "
+                f"Only manifest.json is read: the fix is in that app, not in "
+                f"how you called this. If it is genuinely current, give it a "
+                f"manifest.json; if it predates that format, it is out of "
+                f"scope for this rule and skipping it is correct."
+            )
         raise NotAnAppDirectoryError(
-            f"{root} is not an app directory (no manifest.json). This rule "
-            f"scopes to ONE app: a repo root pools shell and infrastructure "
-            f"CSS it was never written for, so a count taken here would be "
-            f"real and not about app code. Pass an app directory, or loop "
-            f"over your app dirs and call this per app — css_files() is "
-            f"exported if you need the walk itself."
+            f"{root} is not an app directory (no manifest.json, and nothing "
+            f"else manifest-shaped). This rule scopes to ONE app: a repo root "
+            f"pools shell and infrastructure CSS it was never written for, so "
+            f"a count taken here would be real and not about app code. Pass "
+            f"an app directory, or loop over your app dirs and call this per "
+            f"app — css_files() is exported if you need the walk itself."
         )
     files = css_files(app_dir)
     found: list[CssFinding] = []

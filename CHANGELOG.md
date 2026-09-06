@@ -7,6 +7,46 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-09-06
+
+Patch. 0.20.0's refusal was right to fire and wrong about why, for one of the
+two cases that reach it.
+
+### Fixed — the refusal names what it FOUND, not only what was missing
+
+Two causes reach the same line and they need different fixes:
+
+    no manifest at all        -> not an app. Wrong target. The caller's fix.
+    a manifest in another     -> an app this rule cannot read. The manifest is
+    format                       the problem, not the aim.
+
+0.20.0 said only the first, which sends the second somewhere useless: *"loop
+over your app dirs and call this per app"* tells a caller to do the thing they
+already did — the directory WAS in their loop, and this call is why it got
+skipped.
+
+The refusal now globs `manifest.*` and, when something else manifest-shaped is
+present, says so and points at the app rather than at the call site. The bare
+case gains "and nothing else manifest-shaped", so the two messages are
+distinguishable rather than one being the other's default.
+
+**Raised by scitex-hub against 0.20.0**, with the case that makes it concrete:
+`apps/legacy/notebook_app` carries a `manifest.yaml`
+(`name`/`label`/`version`/`icon`/…) and ships CSS, so "not an app directory" is
+simply false about it.
+
+### NOT changed — `manifest.json` is still the only manifest read
+
+Deliberate, and the reason is in that file: it carries `version` and lacks
+`pip_package`/`slug` — the format 0.18.0 converged away from. Reading two
+manifest formats is the menu "one dish" forbids. Refusing it is right;
+refusing it while calling it *the wrong directory* was not.
+
+So the scope of this release is the MESSAGE. No predicate changed, and hub's
+measurement stands: of their 15 no-manifest directories, 13 are `apps/infra/`
+(correctly refused) and the two edge cases produce zero findings, so nothing is
+hidden by the refusal today.
+
 ## [0.20.0] - 2026-09-06
 
 Minor, and a BREAKING change to a rule nobody has armed. The caveat that was
