@@ -70,6 +70,33 @@ files = get_files(backend="s3", bucket="my-bucket")
 
 ## 3. Django Integration
 
+### Application shell
+
+Django-template applications extend the environment-neutral adapter and fill
+its application-content block:
+
+```django
+{% extends "scitex_app/app_shell.html" %}
+
+{% block scitex_app_content %}
+  <main id="my-app">...</main>
+{% endblock %}
+```
+
+The adapter is a delegate, not a shell: it has no content of its own, it
+re-opens `scitex_ui/standalone_shell.html`'s `app_content` block as
+`scitex_app_content`. The workspace shell (sidebar, three-column layout, file
+tree, AI/console panel) is supplied by **scitex-ui**. A host such as SciTeX
+Hub may shadow only the adapter template and map `scitex_app_content` into
+its own shell. Application templates must not name `global_base.html` or
+another host-specific template, and must not extend the standalone shell
+directly.
+
+`run_standalone()` requires scitex-ui to be installed and fails loudly at
+startup (`ScitexUiRequiredError`) if it is missing, rather than crashing at
+template render time with `TemplateDoesNotExist: scitex_ui/standalone_shell.html`.
+Install it alongside: `pip install scitex-app scitex-ui`.
+
 ### AppConfig
 
 ```python

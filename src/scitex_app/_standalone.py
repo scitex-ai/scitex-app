@@ -18,6 +18,59 @@ from pathlib import Path
 from typing import Optional
 
 
+class ScitexUiRequiredError(RuntimeError):
+    """A standalone workspace cannot render without the scitex-ui shell.
+
+    THE CASE THIS NAMED: a bare ``pip install scitex-app`` (no scitex-ui) where
+    the app's template ``{% extends "scitex_app/app_shell.html" %}`` — the
+    documented contract — then fails at RENDER time with
+    ``TemplateDoesNotExist: scitex_ui/standalone_shell.html``. That error names
+    a template path, not the cause, so an operator chasing it has to discover
+    on their own that the whole workspace shell (sidebar, three-column layout,
+    file tree, AI panel) is supplied by scitex-ui and that package is simply
+    not installed. This guard moves that failure to STARTUP, at the only point
+    the process can still say what is actually missing.
+
+    ``scitex_app/app_shell.html`` has no content of its own: it re-opens
+    ``scitex_ui/standalone_shell.html``'s ``app_content`` block as
+    ``scitex_app_content`` and delegates everything else. So "the package
+    running by itself" does not mean "without scitex-ui" — it means the
+    scitex-app launcher is the entry point, not a host. scitex-ui is the shell.
+    """
+
+
+_SCITEX_UI_REQUIRED = (
+    "run_standalone() needs the scitex-ui package installed, and it is not "
+    "importable in this process.\n"
+    "\n"
+    "The standalone workspace shell — sidebar, three-column layout, file tree, "
+    "AI/console panel, and the `scitex_app/app_shell.html` adapter your app "
+    "extends — all live in scitex-ui. scitex-app ships the LAUNCHER; it does "
+    "not ship a shell of its own, so a bare `pip install scitex-app` cannot "
+    "render a standalone workspace by itself. Without scitex-ui the launcher "
+    "would only fail later, at template render time, with "
+    "`TemplateDoesNotExist: scitex_ui/standalone_shell.html`.\n"
+    "\n"
+    "Fix: install scitex-ui alongside scitex-app.\n"
+    "  pip install scitex-app scitex-ui\n"
+    "For a single-app install where scitex-app is imported but you do not use "
+    "run_standalone() (e.g. you mount the app into your own host's shell), "
+    "this guard does not fire — it is on the standalone launcher path only."
+)
+
+
+def _scitex_ui_present() -> bool:
+    """Can the scitex-ui shell package be imported in this process?
+
+    Asked of the import rather than a version, so the check cannot drift from
+    "is the shell actually there to render", and so it is exercisable in both
+    directions in a test.
+    """
+    import importlib.util
+
+    return importlib.util.find_spec("scitex_ui") is not None
+
+
 def run_standalone(
     app_module: str,
     port: int = 8050,
@@ -54,7 +107,20 @@ def run_standalone(
         Additional static file directories.
     extra_env : dict[str, str], optional
         Additional environment variables.
+
+    Raises
+    ------
+    ScitexUiRequiredError
+        If the scitex-ui shell package is not importable. The standalone
+        workspace shell is supplied by scitex-ui; see its docstring for why
+        scitex-app alone cannot render one.
     """
+    # Fail loud at startup, not at render time. A missing shell is the one
+    # failure a bare install cannot recover from, so name it before Django
+    # configures anything and the user is left chasing a template path.
+    if not _scitex_ui_present():
+        raise ScitexUiRequiredError(_SCITEX_UI_REQUIRED)
+
     # Set env vars before Django setup
     if working_dir:
         os.environ["SCITEX_WORKING_DIR"] = str(Path(working_dir).resolve())
@@ -375,6 +441,7 @@ def _configure_django(
 
     installed_apps = [
         "django.contrib.staticfiles",
+        "scitex_app",
         app_module,
     ]
 

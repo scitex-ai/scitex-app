@@ -111,7 +111,7 @@ print(django.conf.settings.ALLOWED_HOSTS)   # whose list did you actually get?
 If Django is unconfigured at call time, `run_standalone()` calls
 `django.conf.settings.configure()` with:
 
-- `INSTALLED_APPS`: `django.contrib.staticfiles`, `<app_module>`, `scitex_ui` (if installed)
+- `INSTALLED_APPS`: `django.contrib.staticfiles`, `scitex_app`, `<app_module>`, `scitex_ui` (the shell — `run_standalone()` requires scitex-ui installed and raises `ScitexUiRequiredError` at startup if it is missing)
 - `ROOT_URLCONF`: `<app_module>.urls`
 - `STATIC_URL`: `/static/`
 - `STATICFILES_DIRS`: app's own `static/` + `_standalone_static/` shell assets
