@@ -32,7 +32,7 @@ def scitex_app_version(request) -> dict:
     every request, so a page can always render ``{{ scitex_app_version }}``
     without the view having to pass it.
     """
-    from ._django import package_version
+    from ._version_display_contract import package_version
 
     return {"scitex_app_version": package_version()}
 

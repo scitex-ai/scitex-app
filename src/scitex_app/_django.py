@@ -111,37 +111,13 @@ class ScitexAppConfig(AppConfig):
 #: Client code reads this to build API URLs that work under any mount.
 MOUNT_META_NAME = "stx-mount"
 
-#: Fallback version label when the installed dist cannot be read — an editable
-#: checkout, a stripped env, or a `pip_package` that is not installed. Labelled
-#: (not silent) so it is never mistaken for a real release number.
-_LOCAL_VERSION_FALLBACK = "0.0.0+local"
-
-
-def package_version(package: Optional[str] = None) -> str:
-    """Read a package's installed version via importlib.metadata (the honest
-    source), never a hardcoded or manifest string.
-
-    This is the shared leaf-app version contract: a leaf app calls it with its
-    own dist name (its manifest's `pip_package`) to display what is ACTUALLY
-    installed, so it can never show a stale number (2026-07 incident: manifests
-    pinned at 0.14.0 while packages shipped 2.25.0 / 0.29.9 / 1.4.2).
-
-    ``package`` defaults to ``"scitex-app"`` so scitex-app itself has a working
-    version accessor. The fallback is EXPLICIT and labelled:
-      - no ``package`` given, or
-      - the dist is not installed (PackageNotFoundError), or
-      - reading it fails for any reason
-    returns ``_LOCAL_VERSION_FALLBACK`` (``"0.0.0+local"``) rather than raising
-    or returning a hardcoded release number. A development install must degrade
-    to an honest "local" label, not pretend to be a shipped version.
-    """
-    dist_name = package or "scitex-app"
-    try:
-        from importlib.metadata import version
-
-        return version(dist_name)
-    except Exception:
-        return _LOCAL_VERSION_FALLBACK
+# The shared version-display accessor lives in its own module (the source of
+# truth), so the test mirrors it 1:1 (repo convention PS-204). Re-exported here
+# so the per-app accessor below and existing importers keep one stable name.
+from ._version_display_contract import (  # noqa: E402
+    _LOCAL_VERSION_FALLBACK,
+    package_version,
+)
 
 
 class MountPrefixMismatch(ValueError):

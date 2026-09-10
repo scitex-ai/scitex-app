@@ -43,8 +43,8 @@ if not settings.configured:
     django.setup()
 
 from scitex_app import context_processors  # noqa: E402
-from scitex_app._django import (  # noqa: E402
-    ScitexAppConfig,
+from scitex_app._django import ScitexAppConfig  # noqa: E402
+from scitex_app._version_display_contract import (  # noqa: E402
     _LOCAL_VERSION_FALLBACK,
     package_version,
 )
