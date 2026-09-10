@@ -75,7 +75,16 @@ class ScitexAppConfig(AppConfig):
 
     @property
     def app_version(self) -> str:
-        return self.manifest.get("version", "0.0.0")
+        """The app's installed version, read from its `pip_package` dist via
+        importlib.metadata — the SINGLE SOURCE OF TRUTH. Never a hand-written
+        manifest `version` (forbidden by the validator; it drifts: 2026-07
+        incident where manifests were pinned at 0.14.0 while the packages
+        shipped 2.25.0 / 0.29.9 / 1.4.2, so every app tile showed a wrong
+        version). Degrades to the labelled local fallback for editable
+        checkouts / a missing dist, via the shared package_version().
+        """
+        pip_package = self.manifest.get("pip_package")
+        return package_version(pip_package)
 
     @property
     def app_icon(self) -> str:
@@ -101,6 +110,38 @@ class ScitexAppConfig(AppConfig):
 #: Name of the <meta> tag carrying the app's mount prefix to the browser.
 #: Client code reads this to build API URLs that work under any mount.
 MOUNT_META_NAME = "stx-mount"
+
+#: Fallback version label when the installed dist cannot be read — an editable
+#: checkout, a stripped env, or a `pip_package` that is not installed. Labelled
+#: (not silent) so it is never mistaken for a real release number.
+_LOCAL_VERSION_FALLBACK = "0.0.0+local"
+
+
+def package_version(package: Optional[str] = None) -> str:
+    """Read a package's installed version via importlib.metadata (the honest
+    source), never a hardcoded or manifest string.
+
+    This is the shared leaf-app version contract: a leaf app calls it with its
+    own dist name (its manifest's `pip_package`) to display what is ACTUALLY
+    installed, so it can never show a stale number (2026-07 incident: manifests
+    pinned at 0.14.0 while packages shipped 2.25.0 / 0.29.9 / 1.4.2).
+
+    ``package`` defaults to ``"scitex-app"`` so scitex-app itself has a working
+    version accessor. The fallback is EXPLICIT and labelled:
+      - no ``package`` given, or
+      - the dist is not installed (PackageNotFoundError), or
+      - reading it fails for any reason
+    returns ``_LOCAL_VERSION_FALLBACK`` (``"0.0.0+local"``) rather than raising
+    or returning a hardcoded release number. A development install must degrade
+    to an honest "local" label, not pretend to be a shipped version.
+    """
+    dist_name = package or "scitex-app"
+    try:
+        from importlib.metadata import version
+
+        return version(dist_name)
+    except Exception:
+        return _LOCAL_VERSION_FALLBACK
 
 
 class MountPrefixMismatch(ValueError):
