@@ -75,7 +75,16 @@ class ScitexAppConfig(AppConfig):
 
     @property
     def app_version(self) -> str:
-        return self.manifest.get("version", "0.0.0")
+        """The app's installed version, read from its `pip_package` dist via
+        importlib.metadata — the SINGLE SOURCE OF TRUTH. Never a hand-written
+        manifest `version` (forbidden by the validator; it drifts: 2026-07
+        incident where manifests were pinned at 0.14.0 while the packages
+        shipped 2.25.0 / 0.29.9 / 1.4.2, so every app tile showed a wrong
+        version). Degrades to the labelled local fallback for editable
+        checkouts / a missing dist, via the shared package_version().
+        """
+        pip_package = self.manifest.get("pip_package")
+        return package_version(pip_package)
 
     @property
     def app_icon(self) -> str:
@@ -101,6 +110,14 @@ class ScitexAppConfig(AppConfig):
 #: Name of the <meta> tag carrying the app's mount prefix to the browser.
 #: Client code reads this to build API URLs that work under any mount.
 MOUNT_META_NAME = "stx-mount"
+
+# The shared version-display accessor lives in its own module (the source of
+# truth), so the test mirrors it 1:1 (repo convention PS-204). Re-exported here
+# so the per-app accessor below and existing importers keep one stable name.
+from ._version_display_contract import (  # noqa: E402
+    _LOCAL_VERSION_FALLBACK,
+    package_version,
+)
 
 
 class MountPrefixMismatch(ValueError):

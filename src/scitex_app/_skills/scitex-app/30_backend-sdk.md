@@ -84,12 +84,28 @@ class MyAppConfig(ScitexAppConfig):
 # Properties available after loading manifest.json:
 # config.manifest        -> dict (raw manifest)
 # config.app_slug        -> str  (manifest["slug"])
-# config.app_version     -> str  (manifest["version"])
+# config.app_version     -> str  (INSTALLED version of manifest["pip_package"],
+#                                 read via importlib.metadata — NEVER a
+#                                 hand-written manifest["version"], which is
+#                                 forbidden and drifts)
 # config.app_icon        -> str  (manifest["icon"])
 # config.is_standalone   -> bool (manifest["standalone"], default False)
 # config.frontend_type   -> str  (manifest["frontend_type"], default "django")
 # config.validate_manifest() -> List[str]  (empty = valid)
 ```
+
+### Version display (shared contract)
+
+Every leaf app shows its OWN installed version, continuously, never hardcoded
+(`importlib.metadata` via the shared accessor; editable checkout / missing dist → labelled `"0.0.0+local"`). Do NOT add a `version` key to `manifest.json` (the validator rejects it — it drifts); `pip_package` is the whole story.
+
+```python
+# Continuous: add "scitex_app.context_processors.app_version" (the mounted leaf) or
+# ".scitex_app_version" (the SDK) to TEMPLATES OPTIONS context_processors; render
+# {{ app_version }} on any page with no view change. Python: package_version("<pip_package>").
+```
+
+**Adoption (Hub / Scholar / Writer / FigRecipe / Stats / Cards / SAC):** each package shows its OWN `pip_package` — never scitex-app's number (the SDK is `package_version()`, no arg). Render in the host / scitex-ui footer or badge slot; if scitex-ui adds a version-badge token, consume it, don't fork it.
 
 ### View factories
 
