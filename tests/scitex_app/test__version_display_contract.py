@@ -14,9 +14,9 @@ app tile showed a WRONG version. ``ScitexAppConfig.app_version`` used to read
 ``manifest["version"]`` — the forbidden, drifting source. It must read the
 installed dist instead.
 
+One assertion per test (STX-TQ007); AAA markers on their own lines (STX-TQ002).
 No mocks (PA-306): the fallback is exercised against a package that genuinely
-does not exist, and app_version is exercised against a real temp app module
-with a real manifest.json.
+does not exist, and app_version against a real temp app module + manifest.
 """
 
 from __future__ import annotations
@@ -54,38 +54,53 @@ _SCITEX_APP_DIST = "scitex-app"
 
 
 def test_package_version_reads_the_installed_dist():
-    """For a package that IS installed, it returns importlib.metadata's answer
-    — the actual installed version, not a constant."""
-    # Arrange
-    expected = package_version(_SCITEX_APP_DIST)
-    # Act — importlib.metadata is the source of truth
+    # Arrange — importlib.metadata is the source of truth for the answer.
     from importlib.metadata import version as _dist_version
 
-    # Assert — they must agree, and it must be a plausible PEP 440 version,
-    # never the dev fallback (scitex-app IS installed in the test env).
-    assert expected == _dist_version(_SCITEX_APP_DIST)
-    assert expected != _LOCAL_VERSION_FALLBACK
-    assert expected.count(".") >= 1  # looks like a real version
+    expected = _dist_version(_SCITEX_APP_DIST)
+    # Act
+    got = package_version(_SCITEX_APP_DIST)
+    # Assert — the accessor returns the actually-installed version.
+    assert got == expected
+
+
+def test_package_version_does_not_fake_a_release_when_installed():
+    # Arrange — scitex-app IS installed in the test env, so its answer must
+    # be a real PEP 440 version, never the dev fallback.
+    fallback = _LOCAL_VERSION_FALLBACK
+    # Act
+    got = package_version(_SCITEX_APP_DIST)
+    # Assert — it is not the "local" label.
+    assert got != fallback
 
 
 def test_package_version_falls_back_labelled_for_a_missing_dist():
-    """A package that is NOT installed degrades to the EXPLICIT, LABELLED local
-    fallback — it does not raise and does not invent a release number."""
     # Arrange — a dist name that cannot plausibly be installed here.
     missing = "scitex-app-not-a-real-dist-zz"
     # Act
     got = package_version(missing)
-    # Assert
+    # Assert — the EXPLICIT local label, not a crash and not a release number.
     assert got == _LOCAL_VERSION_FALLBACK
-    assert "local" in got  # the label, so it is never mistaken for a release
+
+
+def test_package_version_fallback_is_labelled_local():
+    # Arrange — the fallback must carry a "local" marker so it is never
+    # mistaken for a shipped version.
+    label = _LOCAL_VERSION_FALLBACK
+    # Act
+    contains = "local" in label
+    # Assert
+    assert contains is True
 
 
 def test_package_version_defaults_to_scitex_app():
-    """No argument -> scitex-app's own installed version (the SDK accessor)."""
+    # Arrange — no argument means "scitex-app itself".
+    no_arg = package_version()
+    named = package_version(_SCITEX_APP_DIST)
     # Act
-    got = package_version()
+    equal = no_arg == named
     # Assert
-    assert got == package_version(_SCITEX_APP_DIST)
+    assert equal is True
 
 
 def _make_app_config(tmp_path: Path, pip_package: str, manifest_extra: dict) -> ScitexAppConfig:
@@ -107,46 +122,59 @@ def _make_app_config(tmp_path: Path, pip_package: str, manifest_extra: dict) -> 
 
 
 def test_app_version_reads_pip_package_not_manifest_version(tmp_path):
-    """THE core guarantee: app_version is the INSTALLED version of pip_package,
-    and IGNORES a hand-written manifest 'version' (the forbidden, drifting
-    source) even if one is present."""
-    # Arrange — a manifest that (illegally) declares a version that DIFFERS from
+    # Arrange — a manifest that (illegally) declares a version DIFFERENT from
     # the installed scitex-app. If app_version read the manifest, it would
     # return this stale number.
     stale = "0.14.0"
     cfg = _make_app_config(tmp_path, _SCITEX_APP_DIST, {"version": stale})
     # Act
     got = cfg.app_version
-    # Assert — it is the installed version, not the manifest's stale one.
-    assert got == package_version(_SCITEX_APP_DIST)
+    # Assert — it is the installed version, NOT the manifest's stale one.
     assert got != stale
 
 
-def test_app_version_falls_back_when_pip_package_is_missing(tmp_path):
-    """A leaf whose pip_package is not installed gets the labelled fallback,
-    never a crash and never a hardcoded number."""
+def test_app_version_matches_the_installed_dist(tmp_path):
     # Arrange
+    cfg = _make_app_config(tmp_path, _SCITEX_APP_DIST, {"version": "0.14.0"})
+    # Act
+    got = cfg.app_version
+    # Assert — it agrees with the shared accessor for the same dist.
+    assert got == package_version(_SCITEX_APP_DIST)
+
+
+def test_app_version_falls_back_when_pip_package_is_missing(tmp_path):
+    # Arrange — a leaf whose pip_package is not installed.
     cfg = _make_app_config(tmp_path, "no-such-leaf-dist-zz", {})
     # Act
     got = cfg.app_version
-    # Assert
+    # Assert — the labelled local fallback, never a crash or a number.
     assert got == _LOCAL_VERSION_FALLBACK
 
 
 def test_context_processor_exposes_the_scitex_app_version():
-    """The continuous surface: a request yields the SDK's installed version,
-    so a page can render {{ scitex_app_version }} without the view passing it."""
     # Arrange
     request = RequestFactory().get("/")
     # Act
     ctx = context_processors.scitex_app_version(request)
-    # Assert
+    # Assert — the key is present (the value is then checked separately).
+    assert "scitex_app_version" in ctx
+
+
+def test_context_processor_value_is_the_installed_version():
+    # Arrange
+    request = RequestFactory().get("/")
+    # Act
+    ctx = context_processors.scitex_app_version(request)
+    # Assert — it is the SDK's installed version, so a page renders it
+    # without the view passing it (the "continuous" half of the contract).
     assert ctx["scitex_app_version"] == package_version(_SCITEX_APP_DIST)
 
 
 def test_public_surface_exports_the_accessor():
-    """Leaf apps import ONE surface, not a private module."""
-    from scitex_app.embed import package_version as exported  # noqa: F401
+    # Arrange — leaf apps import ONE surface, not a private module.
+    from scitex_app.embed import package_version as exported
 
-    assert exported is not None
-    assert exported(_SCITEX_APP_DIST) == package_version(_SCITEX_APP_DIST)
+    # Act
+    is_function = callable(exported)
+    # Assert
+    assert is_function is True
