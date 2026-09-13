@@ -42,6 +42,7 @@ try:
         scitex_urlpatterns,
     )
     from . import context_processors  # noqa: F401  (version-display context processors)
+    from . import _app_scope  # noqa: F401  (declarative leaf-app scope contract)
 except ImportError:
     # _django requires Django; keep embed importable for consumers that
     # only need the standalone launcher (which lazy-imports Django itself).
@@ -54,6 +55,7 @@ except ImportError:
     scitex_editor_page = None  # type: ignore[assignment]
     scitex_urlpatterns = None  # type: ignore[assignment]
     context_processors = None  # type: ignore[assignment]
+    _app_scope = None  # type: ignore[assignment]
 
 
 def gui_status(package: str, state_path: Optional[Union[str, Path]] = None) -> dict:
@@ -234,6 +236,7 @@ __all__ = [
     "scitex_urlpatterns",
     "package_version",
     "context_processors",
+    "_app_scope",
     "serve_gui",
     "gui_status",
     "gui_stop",

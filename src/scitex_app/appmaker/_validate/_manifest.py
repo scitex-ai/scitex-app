@@ -53,6 +53,20 @@ def validate_manifest(app_dir: str | Path) -> list[str]:
             "'pip_package' (importlib.metadata). Remove the 'version' key."
         )
 
+    # 'scope' is OPTIONAL (absent -> "user", the safe no-selector default) but
+    # when present it is a CLOSED enum: a typo'd scope must fail loud here,
+    # not degrade to a guessed scope at render time. See _app_scope.py.
+    if "scope" in data:
+        from ..._app_scope import VALID_SCOPES
+
+        scope = data["scope"]
+        if not (isinstance(scope, str) and scope.strip().lower() in VALID_SCOPES):
+            errors.append(
+                f"manifest.json 'scope' must be one of {VALID_SCOPES} "
+                f"(got {scope!r}). 'project' opts the app into a per-app "
+                f"project selector; 'user' (or omit) renders with none."
+            )
+
     # The 'name' suffix convention is ADVISORY and lives in
     # validate_manifest_advisory(), not here. See that function for why.
 
