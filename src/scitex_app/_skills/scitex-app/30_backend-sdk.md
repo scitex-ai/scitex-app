@@ -91,6 +91,7 @@ class MyAppConfig(ScitexAppConfig):
 # config.app_icon        -> str  (manifest["icon"])
 # config.is_standalone   -> bool (manifest["standalone"], default False)
 # config.frontend_type   -> str  (manifest["frontend_type"], default "django")
+# config.app_scope       -> str  (manifest["scope"], default "user"; "project" opts in to a per-app selector, NEVER the global header)
 # config.validate_manifest() -> List[str]  (empty = valid)
 ```
 
@@ -167,6 +168,7 @@ urlpatterns = scitex_urlpatterns(views)
 
   "standalone":    false,
   "frontend_type": "react",
+  "scope":         "project",
 
   "privileges": [
     {"type": "filesystem", "scope": "project"},

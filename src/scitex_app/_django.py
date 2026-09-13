@@ -95,6 +95,28 @@ class ScitexAppConfig(AppConfig):
         return self.manifest.get("standalone", False)
 
     @property
+    def app_scope(self) -> str:
+        """The app's declared scope: ``"user"`` (default) or ``"project"``.
+
+        Read from the manifest ``scope`` field and normalized via the shared
+        contract (``_app_scope.normalize_scope``), which fails loud on a typo
+        rather than guessing. A user-scoped app renders with NO project
+        switcher; a project-scoped app emits the per-app marker the workspace
+        surface uses to offer project selection (never the global header — see
+        ``_app_scope`` for the contract). Omitted ``scope`` -> ``"user"``.
+        """
+        from ._app_scope import normalize_scope
+
+        return normalize_scope(self.manifest.get("scope"))
+
+    @property
+    def is_project_scoped(self) -> bool:
+        """True only if the app opts into per-app project selection."""
+        from ._app_scope import SCOPE_PROJECT
+
+        return self.app_scope == SCOPE_PROJECT
+
+    @property
     def frontend_type(self) -> str:
         return self.manifest.get("frontend_type", "django")
 
@@ -222,6 +244,7 @@ def scitex_editor_page(
     index_file: str = "index.html",
     fallback_message: str = "React build not found. Run: npm run build",
     view_path: str = "",
+    scope: Optional[str] = None,
 ) -> Callable:
     """Factory: create a view that serves the React SPA from static_dir.
 
@@ -252,8 +275,18 @@ def scitex_editor_page(
     def view(request):
         html_path = static_dir / index_file
         if html_path.exists():
+            html = html_path.read_text()
             prefix = mount_prefix(request, view_path=view_path)
-            return HttpResponse(_inject_mount_meta(html_path.read_text(), prefix))
+            html = _inject_mount_meta(html, prefix)
+            # The scope marker: project-scoped apps emit a per-app marker the
+            # workspace surface reads to offer project selection; user-scoped
+            # (the default) emit nothing and render with no switcher. This is
+            # the no-forced-header-selector contract — the marker never carries
+            # a "use the global header picker" signal.
+            from ._app_scope import _inject_scope_meta
+
+            html = _inject_scope_meta(html, scope)
+            return HttpResponse(html)
         return HttpResponse(
             f"<html><body><h1>{fallback_message}</h1></body></html>",
             status=503,
