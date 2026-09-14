@@ -47,39 +47,64 @@ _ENGINE = Engine(dirs=[_PKG_TEMPLATES_ROOT, _STUB_ROOT])
 
 
 def _render_leaf(extra_blocks=""):
-    return (
-        _ENGINE
-        .from_string(
-            '{% extends "scitex_app/app_shell.html" %}'
-            f"{{% block scitex_app_content %}}__LEAF_BODY__{{% endblock %}}{extra_blocks}"
-        )
-        .render(Context({}))
+    # Arrange — a leaf template that extends the shipped adapter and fills
+    # the content block, plus any extra chrome blocks under test.
+    leaf = _ENGINE.from_string(
+        '{% extends "scitex_app/app_shell.html" %}'
+        "{% block scitex_app_content %}__LEAF_BODY__{% endblock %}" + extra_blocks
     )
+    # Act — render it against the adapter -> stub shell chain.
+    # Assert — the return value is the rendered HTML string.
+    return leaf.render(Context({}))
 
 
 def test_app_shell_is_present_in_the_installed_package():
-    # The 0.23.0 wheel shipped zero Django templates; this is the line
-    # Cards' migration fell back from. Resolved via the imported package,
-    # so in CI it checks the installed build, not a checkout.
+    # Arrange — the path the shipped template must occupy. The 0.23.0 wheel
+    # shipped zero Django templates; this is the line Cards' migration fell
+    # back from. Resolved via the imported package, so in CI it checks the
+    # installed build, not a checkout.
     path = os.path.join(_PKG_TEMPLATES_ROOT, "scitex_app", "app_shell.html")
-    assert os.path.exists(path)
+    # Act
+    present = os.path.exists(path)
+    # Assert
+    assert present
 
 
 def test_leaf_body_renders_into_the_shell_content_region():
-    out = _render_leaf()
-    assert "__LEAF_BODY__" in out
+    # Arrange
+    leaf = _render_leaf()
+    # Act
+    body_present = "__LEAF_BODY__" in leaf
+    # Assert
+    assert body_present
 
 
 def test_unoverridden_shell_default_is_replaced():
-    out = _render_leaf()
-    assert "__SHELL_DEFAULT__" not in out
+    # Arrange
+    leaf = _render_leaf()
+    # Act
+    default_absent = "__SHELL_DEFAULT__" not in leaf
+    # Assert
+    assert default_absent
 
 
 def test_extra_css_passes_through_the_adapter():
-    out = _render_leaf("{% block extra_css %}__LEAF_CSS__{% endblock %}")
-    assert "__LEAF_CSS__" in out
+    # Arrange
+    leaf = _render_leaf(
+        "{% block extra_css %}__LEAF_CSS__{% endblock %}"
+    )
+    # Act
+    css_present = "__LEAF_CSS__" in leaf
+    # Assert
+    assert css_present
 
 
 def test_extra_js_passes_through_the_adapter():
-    out = _render_leaf("{% block extra_js %}__LEAF_JS__{% endblock %}")
-    assert "__LEAF_JS__" in out
+    # Arrange
+    leaf = _render_leaf(
+        "{% block extra_js %}__LEAF_JS__{% endblock %}"
+    )
+    # Act
+    js_present = "__LEAF_JS__" in leaf
+    # Assert
+    assert js_present
