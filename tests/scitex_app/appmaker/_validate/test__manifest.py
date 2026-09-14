@@ -66,6 +66,47 @@ class TestValidateManifest:
         # Assert
         assert errors == []
 
+    # --- mobile_layout (tristate: absent=no claim / false=desktop-only / true) ---
+
+    def test_mobile_layout_true_is_valid(self, tmp_path):
+        # Arrange
+        data: dict = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
+        data["mobile_layout"] = True
+        write_manifest(tmp_path, data)
+        # Act
+        errors = validate_manifest(tmp_path)
+        # Assert — a declared phone layout is valid.
+        assert errors == []
+
+    def test_mobile_layout_false_is_valid(self, tmp_path):
+        # Arrange
+        data: dict = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
+        data["mobile_layout"] = False
+        write_manifest(tmp_path, data)
+        # Act
+        errors = validate_manifest(tmp_path)
+        # Assert — an explicit desktop-only claim is valid.
+        assert errors == []
+
+    def test_omitted_mobile_layout_is_valid(self, tmp_path):
+        # Arrange — no claim; the hub falls back to its existing metadata.
+        data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
+        write_manifest(tmp_path, data)
+        # Act
+        errors = validate_manifest(tmp_path)
+        # Assert — absence is the safe default, not an error.
+        assert errors == []
+
+    def test_non_bool_mobile_layout_is_rejected(self, tmp_path):
+        # Arrange
+        data = {k: "value" for k in MANIFEST_REQUIRED_KEYS}
+        data["mobile_layout"] = "yes"
+        write_manifest(tmp_path, data)
+        # Act
+        errors = validate_manifest(tmp_path)
+        # Assert — a typo must fail loud here, naming the field.
+        assert any("mobile_layout" in e for e in errors)
+
     def test_name_without_app_suffix_is_not_an_error(self, tmp_path):
         """The suffix convention is advice; enforcing it made it unclearable."""
         # Arrange

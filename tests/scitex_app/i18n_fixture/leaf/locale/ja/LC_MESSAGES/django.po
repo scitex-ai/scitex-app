@@ -1,0 +1,7 @@
+msgid ""
+msgstr ""
+"Language: ja\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Gallery"
+msgstr "ギャラリー"

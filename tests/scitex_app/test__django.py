@@ -25,6 +25,7 @@ from django.test import RequestFactory  # noqa: E402
 from scitex_app._django import (  # noqa: E402
     MOUNT_META_NAME,
     MountPrefixMismatch,
+    ScitexAppConfig,
     _inject_mount_meta,
     mount_prefix,
     scitex_editor_page,
@@ -245,3 +246,56 @@ def test_missing_build_still_reports_503(tmp_path):
     response = view(RequestFactory().get(EMBEDDED))
     # Assert
     assert response.status_code == 503
+
+
+# --- ScitexAppConfig.mobile_layout (the tristate) ---------------------------
+# Absent = NO CLAIM (the hub falls back to its existing desktop-only
+# metadata), not False — see the mobile-layout card for the semantics.
+
+
+def _make_app_config(tmp_path, mobile_value) -> ScitexAppConfig:
+    import json
+    import types
+
+    mod = types.ModuleType("myapp._django")
+    mod.__file__ = str(tmp_path / "__init__.py")
+    cfg = ScitexAppConfig("myapp._django", mod)
+    manifest = {
+        "name": "myapp",
+        "slug": "myapp",
+        "label": "My App",
+        "pip_package": "my-app",
+        "icon": "fas fa-puzzle-piece",
+        "license": "MIT",
+    }
+    if mobile_value is not None:
+        manifest["mobile_layout"] = mobile_value
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return cfg
+
+
+def test_omitted_mobile_layout_is_no_claim_none(tmp_path):
+    # Arrange
+    cfg = _make_app_config(tmp_path, None)
+    # Act
+    got = cfg.mobile_layout
+    # Assert — absent must be None (no claim), NOT False.
+    assert got is None
+
+
+def test_mobile_layout_false_is_explicitly_desktop_only(tmp_path):
+    # Arrange
+    cfg = _make_app_config(tmp_path, False)
+    # Act
+    got = cfg.mobile_layout
+    # Assert
+    assert got is False
+
+
+def test_mobile_layout_true_declares_a_phone_layout(tmp_path):
+    # Arrange
+    cfg = _make_app_config(tmp_path, True)
+    # Act
+    got = cfg.mobile_layout
+    # Assert
+    assert got is True
