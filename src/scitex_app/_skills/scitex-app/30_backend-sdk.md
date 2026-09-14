@@ -19,20 +19,16 @@ from scitex_app.sdk import get_files
 
 # Local: pass a directory path
 files = get_files("./my_project")
-content = files.read("data/config.yaml")
 files.write("output/result.json", '{"ok": true}')
 
 # Cloud: auto-detected when SCITEX_API_TOKEN is set
 import os
 os.environ["SCITEX_API_TOKEN"] = "your-token"
 os.environ["SCITEX_API_URL"] = "https://scitex.ai"
-files = get_files()  # routes to cloud REST API
+files = get_files()
 ```
 
-Auto-detection order:
-1. Explicit `backend=` argument wins
-2. `SCITEX_API_TOKEN` env var → cloud backend
-3. Fallback → local `FileSystemBackend`
+Auto-detect: explicit `backend=` > `SCITEX_API_TOKEN` env (cloud) > local `FileSystemBackend`.
 
 ---
 
@@ -79,15 +75,21 @@ Django-template apps extend the adapter and fill its content block:
 {% block scitex_app_content %}<main id="my-app">...</main>{% endblock %}
 ```
 
-The adapter is a DELEGATE, not a shell — it has no content of its own; it
-re-opens `scitex_ui/standalone_shell.html`'s `app_content` as
-`scitex_app_content`, and the workspace shell (sidebar, three-col layout,
-file tree, AI panel) is supplied by **scitex-ui**. A host may shadow only the
-adapter and map `scitex_app_content` into its own shell; app templates must
-not name `global_base.html` or extend the standalone shell directly.
-`run_standalone()` requires scitex-ui and fails loudly at startup
-(`ScitexUiRequiredError`) if absent, not a render-time `TemplateDoesNotExist`
-— install alongside: `pip install scitex-app scitex-ui`.
+**Block contract** (inherited from `scitex_ui/standalone_shell.html`; the
+adapter re-opens `app_content` as `scitex_app_content`):
+- `scitex_app_content` — the leaf's main content (required override).
+- `extra_css` / `extra_js` — leaf-app assets, emitted in the shell head/tail.
+- `chat_config` / `console_jobs` / `worktree_title_full` / `worktree_actions`
+  / `worktree_preseed` / `repo_monitor_data_attrs` — optional shell chrome.
+
+The adapter is a DELEGATE, not a shell — it has no content of its own; the
+workspace shell (sidebar, three-col layout, file tree, AI panel) is supplied
+by **scitex-ui**. A host may shadow `scitex_app/app_shell.html` with its own
+project-dir template (project DIRS win) that maps `scitex_app_content` into
+its own chrome; app templates must not name `global_base.html` or extend the
+standalone shell directly. `run_standalone()` requires scitex-ui and fails
+loudly at startup (`ScitexUiRequiredError`) if absent — install alongside:
+`pip install scitex-app scitex-ui`.
 
 ### AppConfig
 
@@ -139,10 +141,9 @@ editor_page = scitex_editor_page(static_dir=STATIC_DIR)  # 503 if build missing
 
 def _get_editor(request): ...                            # your editor ctx or None
 
-api_dispatch = scitex_api_dispatch(
-    handlers={"load": ..., "save": ...},                  # -> JsonResponse
-    parameterized=[("file/", ...)],                       # /file/<anything>
-    no_editor_endpoints={"health"}, get_editor=_get_editor)
+api_dispatch = scitex_api_dispatch(handlers={"load": ..., "save": ...},
+    parameterized=[("file/", ...)], no_editor_endpoints={"health"},
+    get_editor=_get_editor)  # -> JsonResponse per endpoint
 
 # urls.py
 from scitex_app.embed import scitex_urlpatterns
@@ -193,7 +194,5 @@ Valid privilege combinations:
 
 ## See also
 
-- [03_paths.md](03_paths.md) — Path resolution helpers (existing leaf)
-- [07_backend-validation.md](07_backend-validation.md) — App validation
-  pipeline + minimal-app checklist (split from this file for SK401's
-  200-line budget)
+- [03_paths.md](03_paths.md) — Path resolution helpers
+- [07_backend-validation.md](07_backend-validation.md) — App validation + checklist
