@@ -19,20 +19,16 @@ from scitex_app.sdk import get_files
 
 # Local: pass a directory path
 files = get_files("./my_project")
-content = files.read("data/config.yaml")
 files.write("output/result.json", '{"ok": true}')
 
 # Cloud: auto-detected when SCITEX_API_TOKEN is set
 import os
 os.environ["SCITEX_API_TOKEN"] = "your-token"
 os.environ["SCITEX_API_URL"] = "https://scitex.ai"
-files = get_files()  # routes to cloud REST API
+files = get_files()
 ```
 
-Auto-detection order:
-1. Explicit `backend=` argument wins
-2. `SCITEX_API_TOKEN` env var → cloud backend
-3. Fallback → local `FileSystemBackend`
+Auto-detect: explicit `backend=` > `SCITEX_API_TOKEN` env (cloud) > local `FileSystemBackend`.
 
 ---
 
@@ -70,6 +66,31 @@ files = get_files(backend="s3", bucket="my-bucket")
 
 ## 3. Django Integration
 
+### Application shell
+
+Django-template apps extend the adapter and fill its content block:
+
+```django
+{% extends "scitex_app/app_shell.html" %}
+{% block scitex_app_content %}<main id="my-app">...</main>{% endblock %}
+```
+
+**Block contract** (inherited from `scitex_ui/standalone_shell.html`; the
+adapter re-opens `app_content` as `scitex_app_content`):
+- `scitex_app_content` — the leaf's main content (required override).
+- `extra_css` / `extra_js` — leaf-app assets, emitted in the shell head/tail.
+- `chat_config` / `console_jobs` / `worktree_title_full` / `worktree_actions`
+  / `worktree_preseed` / `repo_monitor_data_attrs` — optional shell chrome.
+
+The adapter is a DELEGATE, not a shell — it has no content of its own; the
+workspace shell (sidebar, three-col layout, file tree, AI panel) is supplied
+by **scitex-ui**. A host may shadow `scitex_app/app_shell.html` with its own
+project-dir template (project DIRS win) that maps `scitex_app_content` into
+its own chrome; app templates must not name `global_base.html` or extend the
+standalone shell directly. `run_standalone()` requires scitex-ui and fails
+loudly at startup (`ScitexUiRequiredError`) if absent — install alongside:
+`pip install scitex-app scitex-ui`.
+
 ### AppConfig
 
 ```python
@@ -81,18 +102,18 @@ class MyAppConfig(ScitexAppConfig):
     label = "myapp"
     verbose_name = "My App"
 
-# Properties available after loading manifest.json:
-# config.manifest        -> dict (raw manifest)
-# config.app_slug        -> str  (manifest["slug"])
-# config.app_version     -> str  (INSTALLED version of manifest["pip_package"],
-#                                 read via importlib.metadata — NEVER a
-#                                 hand-written manifest["version"], which is
-#                                 forbidden and drifts)
-# config.app_icon        -> str  (manifest["icon"])
-# config.is_standalone   -> bool (manifest["standalone"], default False)
-# config.frontend_type   -> str  (manifest["frontend_type"], default "django")
-# config.app_scope       -> str  (manifest["scope"], default "user"; "project" opts in to a per-app selector, NEVER the global header)
-# config.validate_manifest() -> List[str]  (empty = valid)
+# Properties after loading manifest.json (see the sections below for the
+# version + scope contracts in full):
+# config.manifest -> dict (raw)    config.app_slug -> manifest["slug"]
+# config.app_icon -> manifest["icon"]
+# config.is_standalone -> bool (default False)
+# config.frontend_type -> str (default "django")
+# config.app_version -> INSTALLED version of pip_package (importlib.metadata,
+#   NEVER a hand-written manifest "version" — see "Version display" below)
+# config.app_scope -> "user"|"project" (manifest "scope", default "user" —
+#   see "Application shell"; "project" opts in to a per-app selector, never the
+#   global header)
+# config.validate_manifest() -> List[str] (empty = valid)
 ```
 
 ### Version display (shared contract)
@@ -108,50 +129,26 @@ Every leaf app shows its OWN installed version, continuously, never hardcoded
 
 **Adoption (Hub / Scholar / Writer / FigRecipe / Stats / Cards / SAC):** each package shows its OWN `pip_package` — never scitex-app's number (the SDK is `package_version()`, no arg). Render in the host / scitex-ui footer or badge slot; if scitex-ui adds a version-badge token, consume it, don't fork it.
 
-### View factories
+### View factories + URLs
 
 ```python
-# myapp/_django/views.py
+# views.py
 from pathlib import Path
 from scitex_app.embed import scitex_editor_page, scitex_api_dispatch
 
 STATIC_DIR = Path(__file__).parent / "static" / "myapp"
+editor_page = scitex_editor_page(static_dir=STATIC_DIR)  # 503 if build missing
 
-# Serves React SPA index.html; returns 503 if build missing
-editor_page = scitex_editor_page(
-    static_dir=STATIC_DIR,
-    index_file="index.html",                    # default
-    fallback_message="Run: npm run build",      # default
-)
+def _get_editor(request): ...                            # your editor ctx or None
 
-def _get_editor(request):
-    """Return your app's editor/context object, or None."""
-    ...
+api_dispatch = scitex_api_dispatch(handlers={"load": ..., "save": ...},
+    parameterized=[("file/", ...)], no_editor_endpoints={"health"},
+    get_editor=_get_editor)  # -> JsonResponse per endpoint
 
-api_dispatch = scitex_api_dispatch(
-    handlers={
-        "load":   lambda req, editor: ...,      # JsonResponse
-        "save":   lambda req, editor: ...,
-    },
-    parameterized=[
-        ("file/", lambda req, editor, param: ...),  # /file/<anything>
-    ],
-    no_editor_endpoints={"health"},             # endpoints that skip editor check
-    get_editor=_get_editor,
-)
-```
-
-### URL patterns
-
-```python
-# myapp/_django/urls.py
+# urls.py
 from scitex_app.embed import scitex_urlpatterns
 from . import views
-
-urlpatterns = scitex_urlpatterns(views)
-# Generates:
-#   ""                  -> views.editor_page  (name="editor")
-#   "<path:endpoint>"   -> views.api_dispatch (name="api")
+urlpatterns = scitex_urlpatterns(views)  # "" -> editor, "<path:ep>" -> api
 ```
 
 ---
@@ -163,8 +160,9 @@ urlpatterns = scitex_urlpatterns(views)
   "name":    "My App",
   "slug":    "myapp",
   "label":   "myapp",
-  "version": "0.1.0",
+  "pip_package": "myapp",
   "icon":    "fas fa-flask",
+  "license": "MIT",
 
   "standalone":    false,
   "frontend_type": "react",
@@ -180,7 +178,9 @@ urlpatterns = scitex_urlpatterns(views)
 }
 ```
 
-Required fields: `name`, `slug`, `label`, `version`, `icon`
+Required: `name`, `slug`, `label`, `pip_package`, `icon`, `license`. A
+hand-written `version` key is FORBIDDEN (it drifts) — the version derives from
+the installed `pip_package` at runtime.
 
 Valid privilege combinations:
 
@@ -194,7 +194,5 @@ Valid privilege combinations:
 
 ## See also
 
-- [03_paths.md](03_paths.md) — Path resolution helpers (existing leaf)
-- [07_backend-validation.md](07_backend-validation.md) — App validation
-  pipeline + minimal-app checklist (split from this file for SK401's
-  200-line budget)
+- [03_paths.md](03_paths.md) — Path resolution helpers
+- [07_backend-validation.md](07_backend-validation.md) — App validation + checklist
