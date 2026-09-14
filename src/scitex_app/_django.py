@@ -75,7 +75,16 @@ class ScitexAppConfig(AppConfig):
 
     @property
     def app_version(self) -> str:
-        return self.manifest.get("version", "0.0.0")
+        """The app's installed version, read from its `pip_package` dist via
+        importlib.metadata — the SINGLE SOURCE OF TRUTH. Never a hand-written
+        manifest `version` (forbidden by the validator; it drifts: 2026-07
+        incident where manifests were pinned at 0.14.0 while the packages
+        shipped 2.25.0 / 0.29.9 / 1.4.2, so every app tile showed a wrong
+        version). Degrades to the labelled local fallback for editable
+        checkouts / a missing dist, via the shared package_version().
+        """
+        pip_package = self.manifest.get("pip_package")
+        return package_version(pip_package)
 
     @property
     def app_icon(self) -> str:
@@ -84,6 +93,28 @@ class ScitexAppConfig(AppConfig):
     @property
     def is_standalone(self) -> bool:
         return self.manifest.get("standalone", False)
+
+    @property
+    def app_scope(self) -> str:
+        """The app's declared scope: ``"user"`` (default) or ``"project"``.
+
+        Read from the manifest ``scope`` field and normalized via the shared
+        contract (``_app_scope.normalize_scope``), which fails loud on a typo
+        rather than guessing. A user-scoped app renders with NO project
+        switcher; a project-scoped app emits the per-app marker the workspace
+        surface uses to offer project selection (never the global header — see
+        ``_app_scope`` for the contract). Omitted ``scope`` -> ``"user"``.
+        """
+        from ._app_scope import normalize_scope
+
+        return normalize_scope(self.manifest.get("scope"))
+
+    @property
+    def is_project_scoped(self) -> bool:
+        """True only if the app opts into per-app project selection."""
+        from ._app_scope import SCOPE_PROJECT
+
+        return self.app_scope == SCOPE_PROJECT
 
     @property
     def frontend_type(self) -> str:
@@ -101,6 +132,14 @@ class ScitexAppConfig(AppConfig):
 #: Name of the <meta> tag carrying the app's mount prefix to the browser.
 #: Client code reads this to build API URLs that work under any mount.
 MOUNT_META_NAME = "stx-mount"
+
+# The shared version-display accessor lives in its own module (the source of
+# truth), so the test mirrors it 1:1 (repo convention PS-204). Re-exported here
+# so the per-app accessor below and existing importers keep one stable name.
+from ._version_display_contract import (  # noqa: E402
+    _LOCAL_VERSION_FALLBACK,
+    package_version,
+)
 
 
 class MountPrefixMismatch(ValueError):
@@ -205,6 +244,7 @@ def scitex_editor_page(
     index_file: str = "index.html",
     fallback_message: str = "React build not found. Run: npm run build",
     view_path: str = "",
+    scope: Optional[str] = None,
 ) -> Callable:
     """Factory: create a view that serves the React SPA from static_dir.
 
@@ -235,8 +275,18 @@ def scitex_editor_page(
     def view(request):
         html_path = static_dir / index_file
         if html_path.exists():
+            html = html_path.read_text()
             prefix = mount_prefix(request, view_path=view_path)
-            return HttpResponse(_inject_mount_meta(html_path.read_text(), prefix))
+            html = _inject_mount_meta(html, prefix)
+            # The scope marker: project-scoped apps emit a per-app marker the
+            # workspace surface reads to offer project selection; user-scoped
+            # (the default) emit nothing and render with no switcher. This is
+            # the no-forced-header-selector contract — the marker never carries
+            # a "use the global header picker" signal.
+            from ._app_scope import _inject_scope_meta
+
+            html = _inject_scope_meta(html, scope)
+            return HttpResponse(html)
         return HttpResponse(
             f"<html><body><h1>{fallback_message}</h1></body></html>",
             status=503,

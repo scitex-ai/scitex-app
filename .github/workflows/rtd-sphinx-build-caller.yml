@@ -1,0 +1,131 @@
+# Calls the org reusable `rtd-sphinx-build`, and publishes what it builds.
+#
+# Converted from the legacy `rtd-sphinx-build-on-ubuntu-latest.yml`, which
+# PS-231 flagged as re-implementing this reusable. The conversion was possible
+# only once scitex-ai/.github#41 (merged 2026-09-06) added the inputs the
+# exemption named — in particular `dependency_group`, because THIS repo declares
+# docs as a PEP 735 dependency GROUP (ADR-0005), not an extra, so the reusable's
+# default `.[docs]` install would have silently installed no sphinx.
+#
+# Direct replace, NOT the add-alongside-then-delete dance: the rtd `sphinx`
+# context is NOT a required branch-protection context on either main or develop
+# (measured 2026-09-10: both require only the three pytest-matrix legs), so
+# renaming it strands nothing. This PR's CI is the validation arm.
+#
+# THE PUBLISH HALF IS A SEPARATE JOB (vendor-and-commit), not in the callee.
+# `src/scitex_app/_sphinx_html/` is NOT a build artifact: hatch packages
+# `src/scitex_app` wholesale, so that bundle SHIPS INSIDE THE WHEEL. The reusable
+# is deliberately build-only and hands the HTML back as an artifact, so this
+# caller vendors and commits it under its OWN `contents: write`. Dropping that
+# job would freeze users' in-wheel documentation with every check green — the
+# failure mode this conversion exists not to repeat. See the scitex-scholar
+# caller (same pattern) for the three-claim verification test.
+
+name: docs
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  sphinx-via-org-reusable:
+    # Loop-breaker: skip when HEAD is the bot's own docs auto-commit.
+    # `[skip ci]` is deliberately not used — it would also suppress the
+    # tag-push and release workflows when that auto-commit happens to be the
+    # most recent commit on develop at release time.
+    if: "!contains(github.event.head_commit.message, 'docs(sphinx_html): refresh from CI build')"
+    uses: scitex-ai/.github/.github/workflows/rtd-sphinx-build.yml@main
+    with:
+      # .readthedocs.yaml pins build.tools.python 3.11; the callee defaults to
+      # 3.12, so without this CI and RTD would build the docs on different
+      # interpreters and could disagree about warnings.
+      python_version: "3.11"
+      # docs is a PEP 735 dependency GROUP in this repo (ADR-0005), not an
+      # extra. This is the input #41 added, and the reason the pre-#41
+      # conversion was measured to fail.
+      dependency_group: docs
+      # `-W` on PULL REQUESTS ONLY. A warning must block a PR; it must NOT block
+      # a push to develop, where failing the build would stop the bundle refresh.
+      fail_on_warning: ${{ github.event_name == 'pull_request' }}
+      upload_artifact: true
+      artifact_name: sphinx-html
+
+  vendor-and-commit:
+    # develop pushes only. `main` is PR-only: its bundle arrives through the
+    # develop -> main PR, so direct bot-pushes to main stay inhibited and that
+    # branch's history remains linear-via-PR.
+    needs: sphinx-via-org-reusable
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sphinx-html
+          path: .sphinx-html-artifact
+
+      - name: Refresh the vendored bundle, and ASSERT WHAT WAS DONE
+        # The commit step only commits IF THE BUNDLE CHANGED, so "no commit" has
+        # two causes and only one is good: GOOD = the rebuilt docs are
+        # byte-identical to what is vendored; BROKEN = this step never wrote
+        # where the commit step reads (an empty artifact, or a path that stopped
+        # matching). Both are SILENT, and the second freezes in-wheel docs with
+        # every check green. Counting both sides and failing loudly on zero
+        # collapses the ambiguity: after this step, "no commit" can only mean
+        # identical content, because the other causes are now red builds.
+        # (The empty-artifact vs wrong-path gap was raised by figrecipe,
+        # 2026-09-07; the count-and-fail here is the fix.)
+        run: |
+          set -euo pipefail
+          vendored=src/scitex_app/_sphinx_html
+
+          downloaded=$(find .sphinx-html-artifact -type f | wc -l)
+          echo "artifact files downloaded: ${downloaded}"
+          if [ "${downloaded}" -eq 0 ]; then
+            echo "::error::the sphinx-html artifact is empty - nothing to vendor" >&2
+            exit 1
+          fi
+
+          before=$(find "${vendored}" -type f 2>/dev/null | wc -l || true)
+          echo "vendored files before: ${before}"
+
+          rm -rf "${vendored}"
+          mkdir -p "${vendored}"
+          cp -rf .sphinx-html-artifact/. "${vendored}"/
+          rm -rf .sphinx-html-artifact
+
+          # sphinx-build writes its internal cache to <outdir>/.doctrees; a
+          # whole-directory copy drags it in. It is never served, is many
+          # megabytes of pickles, and embeds a mirror of CPython's documentation
+          # inventory. Drop it.
+          rm -rf "${vendored}"/.doctrees
+          touch "${vendored}"/.nojekyll
+
+          after=$(find "${vendored}" -type f | wc -l)
+          echo "vendored files after: ${after}"
+          if [ "${after}" -eq 0 ]; then
+            echo "::error::${vendored} is empty after the refresh - the copy wrote nowhere" >&2
+            exit 1
+          fi
+
+      - name: Commit refreshed HTML if it changed
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain src/scitex_app/_sphinx_html)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/scitex_app/_sphinx_html
+            git commit -m "docs(sphinx_html): refresh from CI build"
+            git push
+          else
+            echo "vendored bundle unchanged - nothing to commit"
+          fi
+
+# EOF
