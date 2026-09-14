@@ -67,6 +67,22 @@ def validate_manifest(app_dir: str | Path) -> list[str]:
                 f"project selector; 'user' (or omit) renders with none."
             )
 
+    # 'mobile_layout' is OPTIONAL and TRISTATE (ADR: mobile-layout card).
+    # Semantics (hub-decided 2026-09-14): absent (None) = no claim — the hub
+    # keeps its existing desktop-only metadata as the fallback; False =
+    # explicitly desktop-only (the launcher badge is shown); True = a working
+    # phone layout is declared (the badge disappears). It is a CLOSED bool
+    # enum: any other value is a typo that must fail loud here, not degrade
+    # to a guessed mobile state at render time. Making absent mean False is
+    # forbidden — it would badge every existing (already mobile-working) app.
+    if "mobile_layout" in data and not isinstance(data["mobile_layout"], bool):
+        errors.append(
+            f"manifest.json 'mobile_layout' must be true or false "
+            f"(got {data['mobile_layout']!r}). Omit the key for 'no claim' "
+            f"(the hub falls back to its existing metadata); false = "
+            f"explicitly desktop-only; true = a working phone layout."
+        )
+
     # The 'name' suffix convention is ADVISORY and lives in
     # validate_manifest_advisory(), not here. See that function for why.
 

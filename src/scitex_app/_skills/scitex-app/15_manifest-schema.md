@@ -48,6 +48,7 @@ tags: [scitex-app-manifest-schema]
   "standalone_command": "my-awesome-app gui",
   "standalone_port": 8050,
   "frontend_type": "html",
+  "mobile_layout": true,
 
   "dependencies": {
     "python": [],
@@ -79,6 +80,26 @@ hand-written version inevitably drifts from the package it ships in
 had already shipped `2.25.0` / `0.29.9` / `1.4.2`, so every app tile in
 scitex-hub showed a wrong version). The validator **rejects** any
 manifest that declares `version`; derive it from `pip_package` instead.
+
+## Mobile layout (tristate, optional)
+
+`mobile_layout` tells the hub launcher whether the app ships a phone layout.
+It is a **tristate** — the distinction between "no claim" and "explicitly
+desktop-only" is what keeps existing apps from regressing:
+
+| value     | meaning                                                            |
+|-----------|--------------------------------------------------------------------|
+| *(absent)*| **no claim** — the hub falls back to its existing desktop-only metadata |
+| `false`   | **explicitly desktop-only** — the "Mobile layout coming soon" badge is shown |
+| `true`    | a working phone layout is declared — the badge disappears         |
+
+**Absent must not mean `false`.** Every existing app that already works on a
+phone (Scholar, Docs, Storage) would otherwise gain a "coming soon" badge the
+moment this field shipped. The validator rejects any non-bool value loudly so
+a typo (`"mobile"`, `1`) fails at validation rather than degrading to a
+guessed mobile state at render time. Read it via `ScitexAppConfig.mobile_layout`
+(`None` / `False` / `True`). See the mobile-layout card for the SDK pane
+helpers, which land after scitex-ui extracts the real primitives from a pilot.
 
 ## Privilege types and valid scopes
 
