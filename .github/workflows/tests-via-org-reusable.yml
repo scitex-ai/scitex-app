@@ -1,0 +1,70 @@
+# Converted caller for the org reusable `pytest-matrix` (scitex-ai/.github).
+#
+# This is ARM 1 of the PS-231 pytest-matrix conversion (card
+# app-ps231-exemption-review-20260910): the caller sits ALONGSIDE the legacy
+# `pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml` for now. The legacy still
+# publishes the 3 required branch-protection contexts
+# (pytest-matrix-on-ubuntu-py3.11/.12/.13), so protection is untouched and
+# green while the throwaway PR reads the NEW context names
+# (pytest-matrix / pytest-matrix-on-ubuntu-py3.11/.12/.13).
+#
+# ARM 3 (protection): add the new 3 to required contexts (old 3 still
+# required+publishing).
+# ARM 4 (cutover): delete the legacy workflow + remove the old 3 from
+# protection + remove the PS-231 exemption (quality-audit goes clean).
+#
+# The reusable's job ID MUST be `pytest-matrix` (the reusable's header says so;
+# the check-name format is `<caller-job-id> / <callee-job-name>`). The caller
+# job id here is `pytest-matrix`, so the published contexts are
+# `pytest-matrix / pytest-matrix-on-ubuntu-py3.XX`.
+
+name: tests-via-org-reusable
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  # ── the matrix (required contexts after ARM 3-4) ──────────────────────────
+  pytest-matrix:
+    uses: scitex-ai/.github/.github/workflows/pytest-matrix.yml@main
+    with:
+      # This repo declares `dev` as a PEP 735 dependency GROUP (not an extra),
+      # holding pytest + pytest-cov + the test toolchain. The reusable's
+      # `dependency_group` input (added by scitex-ai/.github#41, merged 09-06)
+      # is exactly what makes this install correct: it runs
+      # `uv pip install -e ".[all]" --group dev` — the runtime extra + the
+      # toolchain group, no fallback chain.
+      dependency_group: dev
+
+  # ── the reference example (RECORD, not a gate) ────────────────────────────
+  # Kept identical to the legacy workflow's `example` job. It installs
+  # scitex-ui (which the matrix must NOT gain as a dependency) and runs the
+  # stx-mount contract example + the cross-package agreement checks. It is
+  # NOT in branch protection's required contexts — a failure here is visible
+  # on the PR but does not block merging (card
+  # app-arm-the-example-leg-once-it-has-a-track-record is the deliberate
+  # second step to promote it to a gate).
+  example:
+    name: reference-example-mounts-anywhere
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[all]" --group dev
+          pip install scitex-ui
+      - name: Run the example's own tests
+        run: pytest examples/hello_world_app/tests -q
+      - name: Run the cross-package agreement checks
+        run: |
+          pytest tests/scitex_app/test__django_marker_agreement.py \
+                 tests/scitex_app/test_authz_kinds_agreement.py -q
