@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "scitex-app"
-version = "0.24.0"
+version = "0.25.0"
 description = "SciTeX App SDK — write-once interface for local + cloud apps"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -63,6 +63,8 @@ all = [
 [dependency-groups]
 dev = [
     "anthropic>=0.25.0",
+    # babel — compiles and reads catalogs in tests/scitex_app/test_i18n.py
+    "babel>=2.12",
     "click>=8.0.0",
     # django>=4.2 — required by tests/scitex_app/_chat/migrations/test_0001_initial.py
     "django>=4.2",
