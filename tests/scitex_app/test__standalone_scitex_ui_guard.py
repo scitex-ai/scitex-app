@@ -43,14 +43,21 @@ from scitex_app._standalone import (
 )
 
 
-def test_the_guard_error_is_a_named_runtime_error():
-    """It is a RuntimeError subclass so a launcher can catch it specifically
-    rather than a bare RuntimeError, and it is not Django's
-    ImproperlyConfigured — this failure happens before Django is configured."""
-    assert issubclass(ScitexUiRequiredError, RuntimeError)
+def test_the_guard_error_is_a_runtime_error_not_django_improperly_configured():
+    """It is a RuntimeError subclass (so a launcher can catch it specifically)
+    and is NOT Django's ImproperlyConfigured — this failure happens before
+    Django is configured, so it must not masquerade as a Django one."""
+    # Arrange
     from django.core.exceptions import ImproperlyConfigured
-
-    assert not issubclass(ScitexUiRequiredError, ImproperlyConfigured)
+    # Act
+    is_runtime = issubclass(ScitexUiRequiredError, RuntimeError)
+    not_improper = not issubclass(ScitexUiRequiredError, ImproperlyConfigured)
+    # Assert
+    assert is_runtime and not_improper, (
+        f"ScitexUiRequiredError must be a RuntimeError subclass "
+        f"(got {is_runtime}) and must NOT be a Django "
+        f"ImproperlyConfigured subclass (got {not_improper})"
+    )
 
 
 def test_the_guard_message_names_the_cause_and_the_fix():
@@ -60,9 +67,11 @@ def test_the_guard_message_names_the_cause_and_the_fix():
     # Act — nothing to call; the message IS the assertion surface.
     # Assert — it names the missing package, the install fix, and the old
     # failure mode it replaces (so a reader can connect it to what they saw).
-    assert "scitex-ui" in msg
-    assert "pip install scitex-app scitex-ui" in msg
-    assert "TemplateDoesNotExist" in msg
+    assert all(
+        needle in msg
+        for needle in ("scitex-ui", "pip install scitex-app scitex-ui",
+                       "TemplateDoesNotExist")
+    ), f"guard message must name the package, the fix, and the old failure; got: {msg!r}"
 
 
 def test_presence_check_agrees_with_find_spec_in_both_directions():
@@ -85,16 +94,21 @@ def test_guard_fires_before_any_django_configuration():
     trusting it: a regression that moved the check below `_configure_django`
     would leave Django configured in the failing case, which this test would
     not catch, so the position is asserted explicitly."""
+    # Arrange
     import inspect
-
     src = inspect.getsource(run_standalone).splitlines()
+    # Act
     guard_idx = next(
         i for i, line in enumerate(src) if "_scitex_ui_present" in line
     )
     configure_idx = next(
         i for i, line in enumerate(src) if "_configure_django" in line
     )
-    assert guard_idx < configure_idx
+    # Assert
+    assert guard_idx < configure_idx, (
+        f"guard must fire before _configure_django (guard line {guard_idx}, "
+        f"configure line {configure_idx})"
+    )
 
 
 @pytest.mark.skipif(
