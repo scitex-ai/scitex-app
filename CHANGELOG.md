@@ -7,6 +7,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — gettext tooling for leaf apps
+
+- `scitex_app.i18n`: `i18n_settings()` (English default, Japanese available), `with_locale_middleware()`, `app_locale_dir()`, `make_messages()` (makemessages for `django` and `djangojs` with `.js/.ts/.tsx`), `compile_catalogs()` (babel, no msgfmt), `untranslated_msgids()`, `uncompiled_catalogs()`, `misplaced_locale_dirs()`.
+- `scitex-app translations extract|compile|validate <app package>`.
+- `ScitexAppConfig.ready()` registers a `translation` system check: `scitex_app.W001` for catalogs outside `<app path>/locale`, `scitex_app.W002` for a `.po` with no `.mo`. `ScitexAppConfig.locale_dir` names the expected directory.
+
 ## [0.22.1] - 2026-09-07
 
 Patch, docs only. The correct option is now named where the affected reader

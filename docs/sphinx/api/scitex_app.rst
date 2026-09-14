@@ -6,6 +6,12 @@ API Reference
    :undoc-members:
    :exclude-members: FilesBackend
 
+Translations
+------------
+
+.. automodule:: scitex_app.i18n
+   :members:
+
 SDK Module
 ----------
 

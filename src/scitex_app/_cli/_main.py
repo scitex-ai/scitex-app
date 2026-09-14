@@ -25,7 +25,7 @@ else:
     CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
     COMMAND_CATEGORIES = [
-        ("App Development", ["app"]),
+        ("App Development", ["app", "translations"]),
         ("Files", ["read", "write", "list", "exists", "delete", "rename", "copy"]),
         ("Integration", ["mcp", "list-python-apis"]),
         ("Documentation", ["docs", "skills"]),
@@ -436,8 +436,10 @@ else:
 
     # -- App Development ----------------------------------------------------
     from ._app import app
+    from ._i18n import translations
 
     main.add_command(app)
+    main.add_command(translations)
 
     # -- Integration ---------------------------------------------------------
     main.add_command(mcp)
