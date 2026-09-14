@@ -55,6 +55,19 @@ class ScitexAppConfig(AppConfig):
         super().__init__(*args, **kwargs)
         self._manifest: Optional[Dict[str, Any]] = None
 
+    def ready(self):
+        from django.core import checks
+
+        from .i18n import check_app_locales
+
+        # The registry is a set, so every leaf registering the same check adds it once.
+        checks.register(check_app_locales, checks.Tags.translation)
+
+    @property
+    def locale_dir(self) -> Path:
+        """Where this app's catalogs must live for Django to load them: ``<app path>/locale``."""
+        return Path(self.path) / "locale"
+
     @property
     def manifest(self) -> Dict[str, Any]:
         """Load and cache manifest.json from the app directory."""
