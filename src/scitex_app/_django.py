@@ -95,6 +95,26 @@ class ScitexAppConfig(AppConfig):
         return self.manifest.get("standalone", False)
 
     @property
+    def mobile_layout(self):
+        """The app's declared mobile-layout state (TRISTATE).
+
+        Read from the manifest ``mobile_layout`` field:
+
+        - ``None`` (key absent) — **no claim**. The hub keeps using its
+          existing desktop-only metadata as the fallback. This is the safe
+          default: it must NOT mean False, or every existing app that already
+          works on phones would suddenly gain a "Mobile layout coming soon"
+          badge.
+        - ``False`` — **explicitly desktop-only**; the launcher badge is shown.
+        - ``True`` — a working phone layout is declared; the badge disappears.
+
+        The validator (``appmaker._validate``) rejects any non-bool value
+        loudly rather than degrading to a guessed mobile state at render time.
+        See the mobile-layout card for the semantics.
+        """
+        return self.manifest.get("mobile_layout")
+
+    @property
     def app_scope(self) -> str:
         """The app's declared scope: ``"user"`` (default) or ``"project"``.
 
