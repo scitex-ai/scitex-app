@@ -7,6 +7,10 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — one-line hub plugin install
+
+- `scitex.apps` entry-point group: a package pointing it at its `ScitexAppConfig` becomes a hub app on `pip install`. Helpers in `scitex_app.plugins` (`discover_plugin_apps`, `installed_app_paths`, `loaded_plugin_configs`, `mount_route`). The hello_world example is now pip-installable with that entry point.
+
 ## [0.25.0] - 2026-09-14
 
 ### Added — gettext tooling for leaf apps
