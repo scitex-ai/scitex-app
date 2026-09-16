@@ -96,12 +96,16 @@ def _select_with_django(access_filter, fixture):
     return {row.access_ref for row in _ScopedRow.objects.scoped(access_filter)}
 
 
-def test_django_to_q_matches_check(_testing):
+def test_django_to_q_matches_check(_db, _testing):
     """THE proof: my Django translation agrees with the core's check().
 
     assert_equivalent raises AssertionError on any mismatch; returning None
     means every (principal, action, resource) in 40 random fixtures was
     decided identically by check() and by the Django queryset.
+
+    Routes through _db (hub review 3, item 2): in the full tests/scitex_app
+    run a sibling configures Django with DATABASES={} -> dummy, so this skips
+    there; in the isolated conformance job it runs non-skipped.
     """
     # Arrange
     _core, _testing = _testing
@@ -157,36 +161,41 @@ class _FailClosedRow(_ad.AccessScopedModel):
 
 
 @pytest.fixture()
-def _fc_table():
-    """Create the fail-closed table, or skip the test when the process has no
-    usable default database.
+def _db():
+    """THE single guarded DB fixture. Every database-backed test in this module
+    requests it, so a process with no usable default database (the full
+    tests/scitex_app run, where a sibling configures Django with DATABASES={}
+    and Django substitutes the DUMMY backend) SKIPS those cases cleanly instead
+    of ERRORING on the dead connection. In the isolated conformance job
+    (ci.yml access-conformance) the module-top :memory: setup provides a real
+    default, so the cases run non-skipped.
 
-    In the full pytest-matrix run the sibling ``_chat`` tests configure Django
-    with ``DATABASES={}`` (their PA-306 convention) before this module runs, so
-    the module-top ``:memory:`` setup is skipped and there is no table to
-    create. The conformance job (ci.yml access-conformance) and any DB-backed
-    run do have one, so these cases run there. A skip is the correct outcome
-    when the process genuinely has no DB; it is NOT the conformance battery's
-    skip (that one is gated on the core import, a separate condition).
+    Mirrors the repo's _chat guard convention: 'no database' is either no
+    ENGINE at all or the DUMMY sentinel — testing ``not settings.DATABASES``
+    would miss the dummy case and crash instead of skip.
     """
-    # The conformance job (ci.yml) runs this module in a clean single process
-    # with a :memory: DB, so the DB-backed cases run non-skipped there. In the
-    # full matrix run the _chat tests configure settings with DATABASES={}
-    # first, so this module's :memory: setup is skipped and connection is in a
-    # half-configured state — table creation then raises. A skip is the
-    # correct outcome in that case; the authoritative proof is the conformance
-    # job, not the matrix.
-    if "default" not in settings.DATABASES:
-        pytest.skip("no default database configured in this process")
+    default = (getattr(settings, "DATABASES", None) or {}).get("default") or {}
+    engine = default.get("ENGINE") or ""
+    if not engine or engine.endswith(".dummy"):
+        pytest.skip(
+            "no usable default database in this process (the full-suite run "
+            "configures DATABASES={} -> dummy). The conformance job runs these "
+            "cases non-skipped against a real :memory: DB."
+        )
     try:
-        if "access_django_fail_closed_row" not in connection.introspection.table_names():
-            with connection.schema_editor() as se:
-                se.create_model(_FailClosedRow)
+        for model in (_ScopedRow, _FailClosedRow, _NullableOwnerRow):
+            if model._meta.db_table not in connection.introspection.table_names():
+                with connection.schema_editor() as se:
+                    se.create_model(model)
     except Exception as exc:
-        pytest.skip(f"DB not usable in this process ({type(exc).__name__}) — the conformance job is the authoritative home for this case")
-    yield
+        pytest.skip(
+            f"DB not usable in this process ({type(exc).__name__}) — the conformance job is the authoritative home for this case"
+        )
+    yield _ScopedRow
     try:
+        _ScopedRow.objects.all().delete()
         _FailClosedRow.objects.all().delete()
+        _NullableOwnerRow.objects.all().delete()
     except Exception:
         pass
 
@@ -276,7 +285,7 @@ def test_save_refuses_non_bool_public():
     assert error is not None and "bool" in str(error)
 
 
-def test_save_accepts_canonical_row(_fc_table):
+def test_save_accepts_canonical_row(_db):
     # Arrange
     good = _FailClosedRow(access_ref="doc:/x", access_owner="user:u0", access_public=False)
     # Act
@@ -297,14 +306,15 @@ class _NullableOwnerRow(_ad.AccessScopedModel):
         db_table = "access_django_nullowner_row"
 
 
-def test_scoped_query_excludes_null_owner_row(_testing):
+def test_scoped_query_excludes_null_owner_row(_db, _testing):
     """Even a null-owner row that bypassed save() is excluded at query time
-    (the canonical conjunct in to_q), so bad data fails closed, not wide."""
+    (the canonical conjunct in to_q), so bad data fails closed, not wide.
+
+    Routes through _db (hub review 3, item 2): skips in the full run (dummy
+    DB), runs non-skipped in the conformance job.
+    """
     # Arrange
     _core, _testing = _testing
-    if "access_django_nullowner_row" not in connection.introspection.table_names():
-        with connection.schema_editor() as se:
-            se.create_model(_NullableOwnerRow)
     _NullableOwnerRow.objects.all().delete()
     # A good row (owner present) and a bad row (owner NULL), inserted at the DB
     # layer so the bad row is not caught by save() validation.
@@ -332,59 +342,93 @@ def test_scoped_query_excludes_null_owner_row(_testing):
 # --------------------------------------------------------------------------
 
 
-def _make_table(model):
-    """Create the table (no-op if present) and clear it. DB-backed; the
-    conformance job runs in a clean :memory: process so this is safe there.
-    In the matrix run the _chat tests configure DATABASES={} first, so this
-    skips (the query-level differentials are proven in the conformance job)."""
-    if "default" not in settings.DATABASES:
-        pytest.skip("no default database configured in this process")
-    try:
-        name = model._meta.db_table
-        if name not in connection.introspection.table_names():
-            with connection.schema_editor() as se:
-                se.create_model(model)
-        model.objects.all().delete()
-    except Exception as exc:
-        pytest.skip(f"DB not usable in this process ({type(exc).__name__}) — the conformance job is the authoritative home for this case")
-
-
-def _raw_insert(model, ref, owner, public=0):
+def _raw_insert(model, ref, owner, public=0, parent=None):
     """Bypass save() validation: insert directly at the DB layer, the way
     bulk_create or a legacy row would. This is the fail-closed threat model:
     the query predicate must exclude the row, not save()."""
+    parent_sql = "NULL" if parent is None else f"'{parent}'"
     connection.cursor().execute(
         f"INSERT INTO {model._meta.db_table} "
         f"(access_ref, access_parent, access_owner, access_public) "
-        f"VALUES ('{ref}', NULL, '{owner}', {int(public)})"
+        f"VALUES ('{ref}', {parent_sql}, '{owner}', {int(public)})"
     )
 
 
-def _doc_filter(owners):
+def _make_filter(owners=None, resources=None, parents=None, public=False):
+    """A core AccessFilter with only the grant dimensions the test needs."""
     from scitex_dev import access as _core
     return _core.AccessFilter(
         kind="doc", action="view", required_role="read",
-        owners=frozenset(owners), resources=frozenset(),
-        parents=frozenset(), public=False, ceiling=None,
+        owners=frozenset(owners or ()), resources=frozenset(resources or ()),
+        parents=frozenset(parents or ()), public=public, ceiling=None,
     )
 
 
-def test_scoped_excludes_bulk_bypassed_bad_rows(_testing):
-    """Hub item 1: bulk_create bypasses save(); scoped() must still exclude
-    non-absolute ref, traversal ref, anonymous owner, agent owner at QUERY level."""
+def test_scoped_excludes_bulk_bypassed_bad_rows(_db, _testing):
+    """Hub review 3, item 1: bulk_create bypasses save(); scoped() must still
+    exclude save-invalid rows at QUERY level.
+
+    The grant is a RESOURCE grant (the row's ref is in filter.resources), NOT
+    an owner grant — so the canonical owner check is NOT masked by the grant
+    and is what actually excludes the bad-owner rows. A good row (valid ref +
+    valid owner) is admitted; each bad class is excluded.
+    """
     # Arrange
-    _make_table(_NullableOwnerRow)
+    _core, _testing = _testing
+    _NullableOwnerRow.objects.all().delete()
     good = "doc:/good"
-    bad = {
-        "doc:not-absolute": "user:u1",   # right kind, non-absolute path
-        "doc:../x": "user:u1",           # traversal
-        "doc:/anon": "anonymous",        # anonymous owner
-        "doc:/ag": "agent:u1/a0",        # agent owner
-    }
     _raw_insert(_NullableOwnerRow, good, "user:u1")
+    # (ref, owner) bad rows — ref is valid & granted; owner is save-invalid.
+    bad = {
+        "doc:/e": "user:",        # empty owner id
+        "doc:/u": "USER:u1",      # uppercase owner (save grammar is case-sensitive)
+        "doc:/a": "agent:u1/a0",  # agent owner
+        "doc:/n": "anonymous",    # anonymous owner
+    }
     for ref, owner in bad.items():
         _raw_insert(_NullableOwnerRow, ref, owner)
-    f = _doc_filter(["user:u1"])
+    f = _make_filter(resources=[good] + list(bad.keys()))
+    # Act
+    got = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)}
+    # Assert
+    assert got == {good}
+
+
+def test_scoped_excludes_null_owner_via_public_grant(_db, _testing):
+    """Hub review 3, item 1: a public read grant admits public rows; a NULL
+    owner that bypassed save() must still be excluded by the canonical
+    conjunct (public=True does not imply a valid owner)."""
+    # Arrange
+    _core, _testing = _testing
+    _NullableOwnerRow.objects.all().delete()
+    _raw_insert(_NullableOwnerRow, "doc:/pub", "user:u1", public=1)
+    _raw_insert(_NullableOwnerRow, "doc:/pubnull", "x", public=1)
+    connection.cursor().execute(
+        "INSERT INTO access_django_nullowner_row"
+        "(access_ref, access_parent, access_owner, access_public) VALUES ('doc:/null', NULL, NULL, 1)"
+    )
+    f = _make_filter(public=True)  # read -> public rows, no explicit grants
+    # Act
+    got = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)}
+    # Assert
+    assert got == {"doc:/pub"}
+
+
+def test_scoped_excludes_malformed_parent_via_resource_grant(_db, _testing):
+    """Hub review 3, item 1: a malformed access_parent (doc:relative,
+    doc:/../x) that bypassed save() is excluded at QUERY level when the row
+    is admitted via a resource grant — the parent canonical check is what
+    excludes it, since ref + owner are both valid."""
+    # Arrange
+    _core, _testing = _testing
+    _NullableOwnerRow.objects.all().delete()
+    good = "doc:/child"
+    _raw_insert(_NullableOwnerRow, good, "user:u1", parent="doc:/parent")  # valid parent
+    bad_rel = "doc:/rel"
+    _raw_insert(_NullableOwnerRow, bad_rel, "user:u1", parent="doc:relative")   # non-absolute parent
+    bad_trav = "doc:/trav"
+    _raw_insert(_NullableOwnerRow, bad_trav, "user:u1", parent="doc:/../x")     # traversal parent
+    f = _make_filter(resources=[good, bad_rel, bad_trav])
     # Act
     got = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)}
     # Assert
@@ -420,13 +464,15 @@ def test_owner_traversal_refused_org():
     assert error is not None, "org:a..b should be refused (core rejects '..')"
 
 
-def test_owner_traversal_excluded_at_query(_testing):
+def test_owner_traversal_excluded_at_query(_db, _testing):
     """Hub item 2 (query side): an owner containing '..' that bypassed save()
-    is excluded by scoped() — the core would never have produced it."""
+    is excluded by scoped() — the core would never have produced it. Granted
+    via a resource grant so the canonical owner check is the gate."""
     # Arrange
-    _make_table(_NullableOwnerRow)
+    _core, _testing = _testing
+    _NullableOwnerRow.objects.all().delete()
     _raw_insert(_NullableOwnerRow, "doc:/dot", "user:a..b")
-    f = _doc_filter(["user:a..b"])
+    f = _make_filter(resources=["doc:/dot"])
     # Act
     got = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)}
     # Assert

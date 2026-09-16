@@ -182,12 +182,26 @@ jobs:
           uv pip install "scitex-dev @ git+https://github.com/scitex-ai/scitex-dev.git@72e8891584d8e3388f6a12a0122f9b1c3fb64ca5"
           # The conformance test must NOT skip: assert the core is importable.
           python -c "import scitex_dev.access as a; assert hasattr(a, 'AccessFilter')"
+      - name: Run the FULL exact-core tests/scitex_app (no cross-module errors)
+        run: |
+          source .venv/bin/activate
+          # Hub review 3, item 2: the full suite with the core installed must be
+          # green (no failures/errors/collection breaks). In the full run a
+          # sibling module (test__app_scope.py) configures Django with
+          # DATABASES={} -> dummy backend, so the DB-backed access tests SKIP
+          # cleanly (routed through the _db guarded fixture) rather than error.
+          # No strict flag here: those skips are expected and correct in the
+          # full run. The non-skipped proof is the next step.
+          python -m pytest tests/scitex_app -q --no-header -p no:cacheprovider
       - name: Run the access conformance proof (non-skipped, strict)
         env:
           SCITEX_ACCESS_STRICT: "1"
         run: |
           source .venv/bin/activate
-          # SCITEX_ACCESS_STRICT=1 activates tests/scitex_app/conftest.py's
-          # hook that turns ANY skip into a failure, so this authoritative
-          # proof cannot pass by skipping a case (core or DB missing).
+          # Isolated to THIS module so its module-top :memory: configure wins
+          # (no sibling sets DATABASES={}); every DB-backed case then runs
+          # non-skipped. SCITEX_ACCESS_STRICT=1 activates tests/scitex_app/
+          # conftest.py's hook that turns ANY skip into a failure, so this
+          # authoritative proof cannot pass by skipping a case (core or DB
+          # missing).
           python -m pytest tests/scitex_app/test_access_django.py -v --no-header -p no:cacheprovider

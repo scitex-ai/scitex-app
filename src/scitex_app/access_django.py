@@ -129,6 +129,14 @@ def _load_core() -> ModuleType:
 _KIND_NAME = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
 _OWNER = re.compile(r"^(user|org):[A-Za-z0-9][A-Za-z0-9._@+-]*$")
 _OWNER_TRAVERSAL = re.compile(r"\.\.")
+# The ref/parent query predicate, DERIVED from _KIND_NAME (the save grammar's
+# kind pattern) so the query and the write path cannot diverge (hub review 3,
+# item 1): a row admitted at query time is one the core would accept at
+# construction. _KIND_NAME is "<kind>" anchored; here the same kind fragment is
+# required to be immediately followed by ":/" — i.e. the path is absolute —
+# which is exactly check_ref's "path.startswith('/')" for the field as a whole.
+# Traversal ("..") is excluded separately, matching check_ref's ".. in path".
+_REF_QUERY = re.compile(_KIND_NAME.pattern.rstrip("$") + r":/")
 
 
 def _owner_is_canonical(value: Optional[str]) -> bool:
@@ -192,32 +200,28 @@ def _validate_dimensions(
 def _canonical_row_q() -> Q:
     """The fail-closed conjunct: a scoped query admits only CANONICAL rows.
 
-    Hub review item 1: the previous version only checked non-NULL, so a
-    row that bypassed ``save`` (``bulk_create`` does not call ``save``) with
-    a non-absolute ref, a traversal ref, an anonymous owner, or an agent
-    owner was still returned by ``scoped()``. The query predicate must
-    enforce the full canonical row, because ``save`` validation is a
-    write-time convenience, not the security boundary.
+    Hub review 3, item 1: the previous version checked owner with a
+    case-insensitive prefix (``istartswith``) and never checked ``access_parent``
+    at all, so it admitted save-invalid ``user:`` (empty id), ``USER:u1``
+    (uppercase — the save grammar's owner prefix is case-sensitive), and a
+    malformed ``access_parent`` (``doc:relative``, ``doc:/../x``) through a
+    resource/owner grant. The query predicate must be IDENTICAL to the
+    save/core grammar for owner AND parent.
 
-    A row is admitted only if:
-      * ``access_ref`` is present and contains no ``..`` traversal; and
-      * ``access_owner`` is a user:/org: principal (case-insensitive prefix,
-        so the anonymous/agent/null cases are excluded) with no ``..``.
-
-    ``access_ref``'s ``kind:path`` shape is additionally constrained by the
-    ``kind_q`` in ``to_q`` (``access_ref`` startswith ``<kind>:``), so a ref
-    without a colon or with the wrong kind never matches the filter's grant
-    sets either. Traversal in the ref/parent is rejected here.
+    It therefore re-uses the SAME compiled patterns the write path checks
+    (``_KIND_NAME``/``_REF_QUERY`` for ref+parent, ``_OWNER`` for owner) so the
+    two cannot diverge: a row admitted at query time is one the core would
+    accept at construction. SQLite's REGEX (Django 6) makes this portable on
+    the in-memory DB the conformance job uses.
     """
-    owner_q = (
-        (Q(access_owner__istartswith="user:") | Q(access_owner__istartswith="org:"))
-        & ~Q(access_owner__contains="..")
+    ref_q = Q(access_ref__regex=_REF_QUERY.pattern) & ~Q(access_ref__contains="..")
+    owner_q = Q(access_owner__regex=_OWNER.pattern) & ~Q(access_owner__contains="..")
+    # access_parent is nullable: it must be either absent OR a canonical
+    # kind:/... ref with no traversal (check_ref treats "" as non-absolute).
+    parent_q = Q(access_parent__isnull=True) | (
+        Q(access_parent__regex=_REF_QUERY.pattern) & ~Q(access_parent__contains="..")
     )
-    ref_q = (
-        Q(access_ref__isnull=False)
-        & ~Q(access_ref__contains="..")
-    )
-    return ref_q & owner_q
+    return ref_q & owner_q & parent_q
 
 
 def to_q(access_filter: AccessFilter) -> Q:
