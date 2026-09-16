@@ -24,15 +24,30 @@ four fields an ``AccessScopedModel`` must carry (``access_ref``,
 them against the concrete model at ``filter`` time. ``testing.assert_equivalent``
 proves the translation against the core's own ``check()``.
 
-DEPENDENCY GATE: the adapter imports ``scitex_dev.access``. That package is
-merged to scitex-dev develop but not yet on a PyPI release, so in scitex-app's
-own CI (which pins an older scitex-dev) the import is guarded and the test is
-skipped with a named reason — the module still imports cleanly, it just cannot
-prove itself until the release lands. The translation is unchanged either way.
+FAIL-CLOSED (hub review item 1): a Django table is a separate store from the
+core's in-memory ``Resource`` objects, so it can hold rows the core would
+*reject at construction* — a ``kind:not-absolute`` ref, a ``..`` traversal, an
+agent/anonymous/null owner, a public row with no owner. The adapter must not
+adopt such a row as a grant. It therefore (a) validates on ``save`` (raising
+:class:`InvalidAccessRowError`) and (b) ANDs a canonical-row conjunct into
+``to_q`` (``access_ref`` present + owner present + parent either absent or
+well-formed) so a row that slips past (a) is still EXCLUDED from every scoped
+query, never admitted. The core's ``matches`` only ever sees well-formed rows,
+so the conjunct is a no-op on valid data and a shield on bad data.
+
+DEPENDENCY GATE (hub review items 2 + 4): the adapter imports
+``scitex_dev.access`` ONLY inside ``AccessScopedManager.scoped`` — never at
+module load — so this file imports cleanly in scitex-app CI (which pins an
+older scitex-dev) and only the conformance test skips. The import guard is
+NARROW: a genuine absence of the submodule raises
+:class:`ScitexDevAccessMissingError` (named, with the fix); an ``ImportError``
+raised *inside* the core (a transitive/version failure) is re-raised, not
+laundered into "missing".
 """
 
 from __future__ import annotations
 
+import re
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -55,27 +70,102 @@ class ScitexDevAccessMissingError(RuntimeError):
         )
 
 
-def _load_core() -> ModuleType:
-    """Import ``scitex_dev.access`` lazily and guard the missing-release case.
+class InvalidAccessRowError(ValueError):
+    """A row the core ``Resource``/``Principal`` would reject: a malformed
+    ref/parent (not ``kind:path``, non-absolute path, or ``..`` traversal), a
+    non user/org owner, or a non-bool ``access_public``. Raising it on ``save``
+    is fail-closed: bad ACL data is refused, not widened into a grant."""
 
-    Re-read on every call (a ``find_spec``-style probe, not a cached module) so
-    the guard is correct whether the package was installed before or after this
-    module imported, and so a test can monkeypatch it in either direction.
+
+def _load_core() -> ModuleType:
+    """Import ``scitex_dev.access`` and separate "not released yet" from a real
+    internal failure (hub review item 4).
+
+    Only a genuine absence of the ``scitex_dev.access`` submodule is reported
+    as :class:`ScitexDevAccessMissingError`. An ``ImportError`` raised *inside*
+    the core module (a bad transitive import, a version skew) is re-raised
+    as-is — it must not be laundered into "the dependency is missing", which
+    would hide a real defect and read as a skip.
     """
     try:
         from scitex_dev import access as _core  # noqa: WPS433 - the guarded import
-    except ImportError as exc:  # the not-yet-released case
-        raise ScitexDevAccessMissingError() from exc
+    except ImportError as exc:
+        missing = getattr(exc, "name", None) in (None, "scitex_dev", "scitex_dev.access")
+        if missing:
+            raise ScitexDevAccessMissingError() from exc
+        raise  # an internal core failure — do not masquerade it as "absent"
     return _core
+
+
+# The core's kind-name grammar (dotted lowercase) and owner-principal grammar
+# (user:/org: with a valid segment). Mirrored here so the model can reject a
+# malformed row WITHOUT importing the core (keep module load dependency-free).
+_KIND_NAME = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
+_OWNER = re.compile(r"^(user|org):[A-Za-z0-9][A-Za-z0-9._@+-]*$")
+
+
+def _validate_dimensions(
+    access_ref: Optional[str],
+    access_parent: Optional[str],
+    access_owner: Optional[str],
+    access_public: Any,
+) -> None:
+    """Fail closed on rows the core ``Resource``/``Principal`` would reject.
+
+    Raises :class:`InvalidAccessRowError` (a ``ValueError``) so a malformed
+    write is a loud data error, not a silently-adopted grant.
+    """
+    def check_ref(value: Optional[str], field: str) -> None:
+        if value is None:
+            return
+        kind, sep, path = value.partition(":")
+        if not sep or not kind or not _KIND_NAME.match(kind):
+            raise InvalidAccessRowError(
+                f"{field} {value!r} is not a canonical kind:path ref"
+            )
+        if not path.startswith("/"):
+            raise InvalidAccessRowError(
+                f"{field} {value!r} has a non-absolute path (must start with '/')"
+            )
+        if ".." in path:
+            raise InvalidAccessRowError(
+                f"{field} {value!r} contains a path traversal ('..')"
+            )
+
+    if not isinstance(access_owner, str) or not _OWNER.match(access_owner):
+        raise InvalidAccessRowError(
+            f"access_owner {access_owner!r} must be a user:<id> or org:<id> "
+            "principal (the core rejects agent/anonymous/null owners)"
+        )
+    if not isinstance(access_public, bool):
+        raise InvalidAccessRowError(
+            f"access_public {access_public!r} must be a bool (public/private)"
+        )
+
+    check_ref(access_ref, "access_ref")
+    check_ref(access_parent, "access_parent")
+
+
+def _canonical_row_q() -> Q:
+    """The fail-closed conjunct: a scoped query admits only well-formed rows.
+
+    ``access_ref`` must be present and contain a kind separator, and
+    ``access_owner`` must be present. A row missing either (or holding a ref
+    the core would reject) is EXCLUDED from every scoped result. This is a
+    no-op on valid data and a shield on bad data, applied at QUERY time so
+    even a row that bypassed ``save`` validation can never widen access.
+    """
+    return Q(access_ref__isnull=False) & Q(access_owner__isnull=False)
 
 
 def to_q(access_filter: "AccessFilter") -> Q:
     """Translate an ``AccessFilter`` into the ``Q`` that admits its rows.
 
-    Mirrors ``AccessFilter.matches`` exactly (see the module docstring). The
-    ``ceiling`` (an agent's owner-allowance) is AND-ed onto the non-public
-    branch only, and never recurses — the core builds it with ``public=False``
-    and applies it via ``matches_grants``, which this reproduces.
+    Mirrors ``AccessFilter.matches`` exactly (see the module docstring), ANDed
+    with the canonical-row conjunct (fail-closed). The ``ceiling`` (an agent's
+    owner-allowance) is AND-ed onto the non-public branch only, and never
+    recurses — the core builds it with ``public=False`` and applies it via
+    ``matches_grants``, which this reproduces.
     """
 
     def grant_match_q(f: "AccessFilter") -> Q:
@@ -107,7 +197,7 @@ def to_q(access_filter: "AccessFilter") -> Q:
     allowed = non_public
     if access_filter.public:
         allowed = allowed | Q(access_public=True)
-    return kind_q & allowed
+    return _canonical_row_q() & kind_q & allowed
 
 
 class AccessScopedManager(models.Manager["Any"]):
@@ -132,6 +222,9 @@ class AccessScopedModel(models.Model):
     top-level); ``access_owner`` is the owner principal's ``str`` form;
     ``access_public`` is the visibility flag.
 
+    ``save`` runs the fail-closed dimension validation, so a malformed row is
+    refused at write time.
+
     No Hub ORM, no Notification, no raw filesystem path, no guest identity —
     only the value fields the core already defines.
     """
@@ -146,10 +239,17 @@ class AccessScopedModel(models.Model):
     class Meta:
         abstract = True
 
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        _validate_dimensions(
+            self.access_ref, self.access_parent, self.access_owner, self.access_public
+        )
+        super().save(*args, **kwargs)
+
 
 __all__ = [
     "AccessScopedManager",
     "AccessScopedModel",
+    "InvalidAccessRowError",
     "ScitexDevAccessMissingError",
     "_load_core",
     "to_q",

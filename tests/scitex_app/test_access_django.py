@@ -141,4 +141,125 @@ def test_public_flag_is_false_for_write_actions(_testing):
     assert f_share.public is False
 
 
+# --------------------------------------------------------------------------
+# FAIL-CLOSED (hub review item 1): rows the core Resource/Principal would
+# reject must be refused on write AND excluded from every scoped query.
+# These are deterministic SQLite cases, independent of the conformance battery.
+# --------------------------------------------------------------------------
+
+
+class _FailClosedRow(_ad.AccessScopedModel):
+    """A concrete model carrying the mixin's save() validation."""
+
+    class Meta:
+        app_label = "contenttypes"
+        db_table = "access_django_fail_closed_row"
+
+
+@pytest.fixture()
+def _fc_table():
+    if "access_django_fail_closed_row" not in connection.introspection.table_names():
+        with connection.schema_editor() as se:
+            se.create_model(_FailClosedRow)
+    yield
+    _FailClosedRow.objects.all().delete()
+
+
+def test_save_refuses_non_absolute_ref(_fc_table):
+    # Arrange
+    bad = _FailClosedRow(access_ref="doc:not-absolute", access_owner="user:u0")
+    # Act / Assert
+    with pytest.raises(_ad.InvalidAccessRowError):
+        bad.save()
+
+
+def test_save_refuses_traversal_ref(_fc_table):
+    # Arrange
+    bad = _FailClosedRow(access_ref="doc:../x", access_owner="user:u0")
+    # Act / Assert
+    with pytest.raises(_ad.InvalidAccessRowError):
+        bad.save()
+
+
+def test_save_refuses_non_canonical_kind(_fc_table):
+    # Arrange
+    bad = _FailClosedRow(access_ref="Doc:/x", access_owner="user:u0")
+    # Act / Assert
+    with pytest.raises(_ad.InvalidAccessRowError):
+        bad.save()
+
+
+def test_save_refuses_agent_owner(_fc_table):
+    """The core requires an owner to be a user or org, never an agent."""
+    # Arrange
+    bad = _FailClosedRow(access_ref="doc:/x", access_owner="agent:u0/a0")
+    # Act / Assert
+    with pytest.raises(_ad.InvalidAccessRowError):
+        bad.save()
+
+
+def test_save_refuses_anonymous_owner(_fc_table):
+    # Arrange
+    bad = _FailClosedRow(access_ref="doc:/x", access_owner="anonymous")
+    # Act / Assert
+    with pytest.raises(_ad.InvalidAccessRowError):
+        bad.save()
+
+
+def test_save_refuses_non_bool_public(_fc_table):
+    # Arrange
+    bad = _FailClosedRow(access_ref="doc:/x", access_owner="user:u0", access_public="yes")
+    # Act / Assert
+    with pytest.raises(_ad.InvalidAccessRowError):
+        bad.save()
+
+
+def test_save_accepts_canonical_row(_fc_table):
+    # Arrange
+    good = _FailClosedRow(access_ref="doc:/x", access_owner="user:u0", access_public=False)
+    # Act
+    good.save()
+    # Assert
+    assert good.pk is not None
+
+
+class _NullableOwnerRow(_ad.AccessScopedModel):
+    """A model whose owner column is nullable, so a legacy null-owner row can
+    exist at the DB layer — exactly the row the canonical conjunct must exclude
+    at query time even though it bypassed save() validation."""
+
+    access_owner = models.CharField(max_length=256, null=True, blank=True)
+
+    class Meta:
+        app_label = "contenttypes"
+        db_table = "access_django_nullowner_row"
+
+
+def test_scoped_query_excludes_null_owner_row(_testing):
+    """Even a null-owner row that bypassed save() is excluded at query time
+    (the canonical conjunct in to_q), so bad data fails closed, not wide."""
+    # Arrange
+    _core, _testing = _testing
+    if "access_django_nullowner_row" not in connection.introspection.table_names():
+        with connection.schema_editor() as se:
+            se.create_model(_NullableOwnerRow)
+    _NullableOwnerRow.objects.all().delete()
+    # A good row (owner present) and a bad row (owner NULL), inserted at the DB
+    # layer so the bad row is not caught by save() validation.
+    _NullableOwnerRow.objects.create(access_ref="doc:/good", access_owner="user:u1")
+    connection.cursor().execute(
+        "INSERT INTO access_django_nullowner_row"
+        "(access_ref, access_parent, access_owner, access_public) VALUES ('doc:/bad', NULL, NULL, 0)"
+    )
+    f = _core.AccessFilter(
+        kind="doc", action="view", required_role="read",
+        owners=frozenset(["user:u1"]), resources=frozenset(),
+        parents=frozenset(), public=False, ceiling=None,
+    )
+    # Act
+    got = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)}
+    # Assert
+    assert got == {"doc:/good"}
+
+
 # EOF
