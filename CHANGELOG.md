@@ -7,6 +7,14 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — one-line hub plugin install
+
+- `scitex.apps` entry-point group: a package pointing it at its `ScitexAppConfig` becomes a hub app on `pip install`. Helpers in `scitex_app.plugins` (`discover_plugin_apps`, `installed_app_paths`, `loaded_plugin_configs`, `mount_route`). The hello_world example is now pip-installable with that entry point.
+
+### Added — optional `mobile_layout` manifest field (#192)
+
+- `ScitexAppConfig.mobile_layout` returns `None` (no claim), `False` (explicitly desktop-only) or `True`; `validate_manifest` accepts the optional key and rejects non-bool values.
+
 ## [0.25.0] - 2026-09-14
 
 ### Added — gettext tooling for leaf apps
@@ -14,10 +22,6 @@ versions follow [Semantic Versioning](https://semver.org/).
 - `scitex_app.i18n`: `i18n_settings()` (English default, Japanese available), `with_locale_middleware()`, `app_locale_dir()`, `make_messages()` (makemessages for `django` and `djangojs` with `.js/.ts/.tsx`), `compile_catalogs()` (babel, no msgfmt), `untranslated_msgids()`, `uncompiled_catalogs()`, `misplaced_locale_dirs()`.
 - `scitex-app translations extract|compile|validate <app package>`.
 - `ScitexAppConfig.ready()` registers a `translation` system check: `scitex_app.W001` for catalogs outside `<app path>/locale`, `scitex_app.W002` for a `.po` with no `.mo`. `ScitexAppConfig.locale_dir` names the expected directory.
-
-### Added — optional `mobile_layout` manifest field (#192)
-
-- `ScitexAppConfig.mobile_layout` returns `None` (no claim), `False` (explicitly desktop-only) or `True`; `validate_manifest` accepts the optional key and rejects non-bool values.
 
 ## [0.22.1] - 2026-09-07
 

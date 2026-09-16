@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scitex-hello-world-app"
+version = "0.1.0"
+description = "Smallest SciTeX app: pip install it and a hub mounts it at /apps/hello-world/."
+license = { text = "AGPL-3.0" }
+requires-python = ">=3.10"
+dependencies = ["scitex-app", "scitex-ui", "django"]
+
+[project.entry-points."scitex.apps"]
+hello_world = "hello_world.apps:HelloWorldConfig"
+
+[tool.setuptools]
+packages = ["hello_world"]
+
+[tool.setuptools.package-data]
+hello_world = ["manifest.json", "templates/**/*"]
