@@ -97,26 +97,47 @@ def _select_with_django(access_filter, fixture):
 
 
 def test_django_to_q_matches_check(_testing):
-    """THE proof: my Django translation agrees with the core's check()."""
+    """THE proof: my Django translation agrees with the core's check().
+
+    assert_equivalent raises AssertionError on any mismatch; returning None
+    means every (principal, action, resource) in 40 random fixtures was
+    decided identically by check() and by the Django queryset.
+    """
+    # Arrange
     _core, _testing = _testing
-    _testing.assert_equivalent(_select_with_django, seeds=range(40))
+    # Act
+    result = _testing.assert_equivalent(_select_with_django, seeds=range(40))
+    # Assert
+    assert result is None
 
 
-def test_to_q_public_flag_tracks_read_actions(_testing):
-    """The core sets ``public`` true only when the required role is read; the
-    selector must respect that (public rows admitted for view, not for share)."""
+def test_public_flag_is_true_for_read_actions(_testing):
+    """The core sets ``public=True`` only when the required role is read."""
+    # Arrange
     _core, _testing = _testing
     fixture = _testing.random_fixture(0)
     doc_kind = fixture.kinds["conformance.doc"]
+    # Act
     f_view = _core.accessible(
         _core.Principal.parse("user:u0"), "view", doc_kind.name,
         grants=fixture.grants, memberships=fixture.memberships, kinds=fixture.kinds,
     )
+    # Assert
+    assert f_view.public is True
+
+
+def test_public_flag_is_false_for_write_actions(_testing):
+    """A write/admin action never admits public rows without a grant."""
+    # Arrange
+    _core, _testing = _testing
+    fixture = _testing.random_fixture(0)
+    doc_kind = fixture.kinds["conformance.doc"]
+    # Act
     f_share = _core.accessible(
         _core.Principal.parse("user:u0"), "share", doc_kind.name,
         grants=fixture.grants, memberships=fixture.memberships, kinds=fixture.kinds,
     )
-    assert f_view.public is True
+    # Assert
     assert f_share.public is False
 
 
