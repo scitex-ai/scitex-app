@@ -80,9 +80,27 @@ class InvalidAccessRowError(ValueError):
     is fail-closed: bad ACL data is refused, not widened into a grant."""
 
 
+def _missing_access(exc: BaseException) -> bool:
+    """True only if ``exc`` is the "``scitex_dev.access`` not installed yet" case.
+
+    Hub review item 3 (narrowing), made a pure predicate so it can be tested
+    WITHOUT mocking (PA-306 §3): a module absent from the path raises
+    ``ModuleNotFoundError`` (a subclass of ``ImportError``) whose ``name`` is
+    the dotted path that failed to resolve. Only the two expected forms are
+    the missing case. Everything else — a bare ``ImportError`` raised *inside*
+    the core, or a ``ModuleNotFoundError`` for an unrelated module — is a real
+    failure that must propagate, not be laundered into "the dependency is
+    missing" (which would hide a defect and read as a skip).
+    """
+    return isinstance(exc, ModuleNotFoundError) and getattr(exc, "name", None) in (
+        "scitex_dev",
+        "scitex_dev.access",
+    )
+
+
 def _load_core() -> ModuleType:
     """Import ``scitex_dev.access`` and separate "not released yet" from a real
-    internal failure (hub review item 4).
+    internal failure.
 
     Uses ``importlib.import_module`` (a call, not a static ``ImportFrom``) so
     the PS-140 symbol gate — which walks ``ast.ImportFrom`` nodes — does NOT
@@ -91,23 +109,15 @@ def _load_core() -> ModuleType:
     it would fail on any scitex-dev version lacking the ``access`` submodule.
     The exact-core CI job (ci.yml ``access-conformance``) carries the proof.
 
-    Hub review item 3 (narrowing): a module absent from the path raises
-    ``ModuleNotFoundError`` (a ``ModuleNotFoundError`` subclass of
-    ``ImportError`` whose ``name`` is the dotted path that failed to resolve).
-    Only that, with ``name`` one of the two expected forms, is the "not yet
-    released" case -> :class:`ScitexDevAccessMissingError`. A bare
-    ``ImportError(...)`` raised *inside* the core (or any non-ModuleNotFound
-    import failure) has ``name=None`` and is re-raised as-is — it must NOT be
-    laundered into "the dependency is missing", which would hide a real defect
-    and read as a skip.
+    The missing-case decision is :func:`_missing_access` (pure, unit-tested);
+    this wrapper just applies it to whatever the import raises.
     """
     try:
-        _core = importlib.import_module("scitex_dev.access")
-    except ModuleNotFoundError as exc:
-        if getattr(exc, "name", None) in ("scitex_dev", "scitex_dev.access"):
+        return importlib.import_module("scitex_dev.access")
+    except ImportError as exc:  # ModuleNotFoundError is a subclass
+        if _missing_access(exc):
             raise ScitexDevAccessMissingError() from exc
-        raise  # a different module is missing — an internal/core failure
-    return _core
+        raise  # a real import failure — do not masquerade it as "absent"
 
 
 # The core's kind-name grammar (dotted lowercase) and owner-principal grammar
@@ -309,6 +319,7 @@ __all__ = [
     "InvalidAccessRowError",
     "ScitexDevAccessMissingError",
     "_load_core",
+    "_missing_access",
     "to_q",
 ]
 
