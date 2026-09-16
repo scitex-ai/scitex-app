@@ -91,26 +91,46 @@ def _load_core() -> ModuleType:
     it would fail on any scitex-dev version lacking the ``access`` submodule.
     The exact-core CI job (ci.yml ``access-conformance``) carries the proof.
 
-    Only a genuine absence of the ``scitex_dev.access`` submodule is reported
-    as :class:`ScitexDevAccessMissingError`. An ``ImportError`` raised *inside*
-    the core module (a bad transitive import, a version skew) is re-raised
-    as-is — it must not be laundered into "the dependency is missing".
+    Hub review item 3 (narrowing): a module absent from the path raises
+    ``ModuleNotFoundError`` (a ``ModuleNotFoundError`` subclass of
+    ``ImportError`` whose ``name`` is the dotted path that failed to resolve).
+    Only that, with ``name`` one of the two expected forms, is the "not yet
+    released" case -> :class:`ScitexDevAccessMissingError`. A bare
+    ``ImportError(...)`` raised *inside* the core (or any non-ModuleNotFound
+    import failure) has ``name=None`` and is re-raised as-is — it must NOT be
+    laundered into "the dependency is missing", which would hide a real defect
+    and read as a skip.
     """
     try:
         _core = importlib.import_module("scitex_dev.access")
-    except ImportError as exc:
-        missing = getattr(exc, "name", None) in (None, "scitex_dev", "scitex_dev.access")
-        if missing:
+    except ModuleNotFoundError as exc:
+        if getattr(exc, "name", None) in ("scitex_dev", "scitex_dev.access"):
             raise ScitexDevAccessMissingError() from exc
-        raise  # an internal core failure — do not masquerade it as "absent"
+        raise  # a different module is missing — an internal/core failure
     return _core
 
 
 # The core's kind-name grammar (dotted lowercase) and owner-principal grammar
-# (user:/org: with a valid segment). Mirrored here so the model can reject a
-# malformed row WITHOUT importing the core (keep module load dependency-free).
+# (user:/org: with a valid segment, no '..'). Mirrored here so the model can
+# reject a malformed row WITHOUT importing the core (keep module load
+# dependency-free). Hub review item 2: the core's _require_segment rejects
+# '..' anywhere in the id, so _OWNER must too — the previous char-class
+# [A-Za-z0-9._@+-]* admitted user:a..b / org:a..b, which the core rejects.
 _KIND_NAME = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
 _OWNER = re.compile(r"^(user|org):[A-Za-z0-9][A-Za-z0-9._@+-]*$")
+_OWNER_TRAVERSAL = re.compile(r"\.\.")
+
+
+def _owner_is_canonical(value: Optional[str]) -> bool:
+    """True only for a user:/org: principal with a valid segment and no '..'.
+
+    Mirrors the core ``Principal`` construction for the two owner kinds the
+    core allows (agent/anonymous owners are rejected by the core's
+    ``Resource`` and therefore by this adapter).
+    """
+    if not isinstance(value, str) or not _OWNER.match(value):
+        return False
+    return _OWNER_TRAVERSAL.search(value) is None
 
 
 def _validate_dimensions(
@@ -144,10 +164,11 @@ def _validate_dimensions(
                 f"{field} {value!r} has a non-absolute path (must start with '/')"
             )
 
-    if not isinstance(access_owner, str) or not _OWNER.match(access_owner):
+    if not _owner_is_canonical(access_owner):
         raise InvalidAccessRowError(
             f"access_owner {access_owner!r} must be a user:<id> or org:<id> "
-            "principal (the core rejects agent/anonymous/null owners)"
+            "principal with no '..' (the core rejects agent/anonymous/null owners "
+            "and any '..' in the id)"
         )
     if not isinstance(access_public, bool):
         raise InvalidAccessRowError(
@@ -159,15 +180,34 @@ def _validate_dimensions(
 
 
 def _canonical_row_q() -> Q:
-    """The fail-closed conjunct: a scoped query admits only well-formed rows.
+    """The fail-closed conjunct: a scoped query admits only CANONICAL rows.
 
-    ``access_ref`` must be present and contain a kind separator, and
-    ``access_owner`` must be present. A row missing either (or holding a ref
-    the core would reject) is EXCLUDED from every scoped result. This is a
-    no-op on valid data and a shield on bad data, applied at QUERY time so
-    even a row that bypassed ``save`` validation can never widen access.
+    Hub review item 1: the previous version only checked non-NULL, so a
+    row that bypassed ``save`` (``bulk_create`` does not call ``save``) with
+    a non-absolute ref, a traversal ref, an anonymous owner, or an agent
+    owner was still returned by ``scoped()``. The query predicate must
+    enforce the full canonical row, because ``save`` validation is a
+    write-time convenience, not the security boundary.
+
+    A row is admitted only if:
+      * ``access_ref`` is present and contains no ``..`` traversal; and
+      * ``access_owner`` is a user:/org: principal (case-insensitive prefix,
+        so the anonymous/agent/null cases are excluded) with no ``..``.
+
+    ``access_ref``'s ``kind:path`` shape is additionally constrained by the
+    ``kind_q`` in ``to_q`` (``access_ref`` startswith ``<kind>:``), so a ref
+    without a colon or with the wrong kind never matches the filter's grant
+    sets either. Traversal in the ref/parent is rejected here.
     """
-    return Q(access_ref__isnull=False) & Q(access_owner__isnull=False)
+    owner_q = (
+        (Q(access_owner__istartswith="user:") | Q(access_owner__istartswith="org:"))
+        & ~Q(access_owner__contains="..")
+    )
+    ref_q = (
+        Q(access_ref__isnull=False)
+        & ~Q(access_ref__contains="..")
+    )
+    return ref_q & owner_q
 
 
 def to_q(access_filter: AccessFilter) -> Q:
@@ -199,8 +239,13 @@ def to_q(access_filter: AccessFilter) -> Q:
         return q
 
     # ``matches`` checks the kind first; a row is only admitted if its
-    # ``access_ref`` (``kind:path``) is of the filter's kind.
-    kind_q = Q(access_ref__startswith=f"{access_filter.kind}:")
+    # ``access_ref`` (``kind:path``) is of the filter's kind. A well-formed
+    # ref of this kind is ``<kind>:/...`` (the path is absolute), so this
+    # single startswith enforces BOTH the kind match AND the absolute-path
+    # requirement — rejecting ``<kind>:non-absolute`` at query level (hub
+    # review item 1). It is used instead of a bare ``<kind>:`` prefix, which
+    # would let a non-absolute ref of the right kind slip through.
+    kind_q = Q(access_ref__startswith=f"{access_filter.kind}:/")
 
     non_public = grant_match_q(access_filter)
     if access_filter.ceiling is not None:

@@ -324,4 +324,166 @@ def test_scoped_query_excludes_null_owner_row(_testing):
     assert got == {"doc:/good"}
 
 
+# --------------------------------------------------------------------------
+# HUB REVIEW DIFFERENTIALS (m_51e5890c6891): the query/DB predicate must
+# enforce the FULL canonical row, because bulk_create bypasses save(). These
+# insert bad rows at the DB layer and assert scoped() EXCLUDES them, then
+# assert the owner grammar matches the core (no '..' divergence).
+# --------------------------------------------------------------------------
+
+
+def _make_table(model):
+    """Create the table (no-op if present) and clear it. DB-backed; the
+    conformance job runs in a clean :memory: process so this is safe there."""
+    name = model._meta.db_table
+    if name not in connection.introspection.table_names():
+        with connection.schema_editor() as se:
+            se.create_model(model)
+    model.objects.all().delete()
+
+
+def _raw_insert(model, ref, owner, public=0):
+    """Bypass save() validation: insert directly at the DB layer, the way
+    bulk_create or a legacy row would. This is the fail-closed threat model:
+    the query predicate must exclude the row, not save()."""
+    connection.cursor().execute(
+        f"INSERT INTO {model._meta.db_table} "
+        f"(access_ref, access_parent, access_owner, access_public) "
+        f"VALUES ('{ref}', NULL, '{owner}', {int(public)})"
+    )
+
+
+def _doc_filter(owners):
+    from scitex_dev import access as _core
+    return _core.AccessFilter(
+        kind="doc", action="view", required_role="read",
+        owners=frozenset(owners), resources=frozenset(),
+        parents=frozenset(), public=False, ceiling=None,
+    )
+
+
+def test_scoped_excludes_bulk_bypassed_bad_rows(_testing):
+    """Hub item 1: bulk_create bypasses save(); scoped() must still exclude
+    non-absolute ref, traversal ref, anonymous owner, agent owner at QUERY level."""
+    # Arrange
+    _make_table(_NullableOwnerRow)
+    good = "doc:/good"
+    bad = {
+        "doc:not-absolute": "user:u1",   # right kind, non-absolute path
+        "doc:../x": "user:u1",           # traversal
+        "doc:/anon": "anonymous",        # anonymous owner
+        "doc:/ag": "agent:u1/a0",        # agent owner
+    }
+    _raw_insert(_NullableOwnerRow, good, "user:u1")
+    for ref, owner in bad.items():
+        _raw_insert(_NullableOwnerRow, ref, owner)
+    f = _doc_filter(["user:u1"])
+    # Act
+    got = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)}
+    # Assert
+    assert got == {good}
+
+
+def test_owner_traversal_refused_user():
+    """Hub item 2: the core rejects '..' in a user principal id; the owner
+    grammar must agree (user:a..b is not canonical)."""
+    # Arrange
+    row = _FailClosedRow(access_ref="doc:/x", access_owner="user:a..b")
+    # Act
+    error = None
+    try:
+        row.save()
+    except _ad.InvalidAccessRowError as exc:
+        error = exc
+    # Assert
+    assert error is not None, "user:a..b should be refused (core rejects '..')"
+
+
+def test_owner_traversal_refused_org():
+    """Hub item 2 (org form): org:a..b is refused, matching the core."""
+    # Arrange
+    row = _FailClosedRow(access_ref="doc:/x", access_owner="org:a..b")
+    # Act
+    error = None
+    try:
+        row.save()
+    except _ad.InvalidAccessRowError as exc:
+        error = exc
+    # Assert
+    assert error is not None, "org:a..b should be refused (core rejects '..')"
+
+
+def test_owner_traversal_excluded_at_query(_testing):
+    """Hub item 2 (query side): an owner containing '..' that bypassed save()
+    is excluded by scoped() — the core would never have produced it."""
+    # Arrange
+    _make_table(_NullableOwnerRow)
+    _raw_insert(_NullableOwnerRow, "doc:/dot", "user:a..b")
+    f = _doc_filter(["user:a..b"])
+    # Act
+    got = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)}
+    # Assert
+    assert got == set()
+
+
+def test_load_core_maps_module_not_found_to_missing(monkeypatch):
+    """Hub item 3: a missing scitex_dev.access (ModuleNotFoundError with the
+    expected name) is the not-yet-released case -> ScitexDevAccessMissingError."""
+    # Arrange
+    import importlib as _il
+
+    def fake_import(name, *a, **k):
+        raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+
+    monkeypatch.setattr(_il, "import_module", fake_import)
+    # Act
+    error = None
+    try:
+        _ad._load_core()
+    except _ad.ScitexDevAccessMissingError as exc:
+        error = exc
+    # Assert
+    assert error is not None, "missing scitex_dev.access must map to the named error"
+
+
+def test_load_core_re_raises_bare_internal_import_error(monkeypatch):
+    """Hub item 3: a bare ImportError raised INSIDE the core (name=None) must
+    propagate, NOT be laundered into ScitexDevAccessMissingError."""
+    # Arrange
+    import importlib as _il
+
+    def fake_import(name, *a, **k):
+        raise ImportError("internal core failure")  # no .name -> bare
+
+    monkeypatch.setattr(_il, "import_module", fake_import)
+    # Act
+    error = None
+    try:
+        _ad._load_core()
+    except ImportError as exc:
+        error = exc
+    # Assert
+    assert error is not None and not isinstance(error, _ad.ScitexDevAccessMissingError)
+
+
+def test_load_core_re_raises_unrelated_module_not_found(monkeypatch):
+    """Hub item 3: a ModuleNotFoundError for a DIFFERENT module (an internal
+    transitive dep of the core) is not the 'access missing' case -> re-raise."""
+    # Arrange
+    import importlib as _il
+
+    def fake_import(name, *a, **k):
+        raise ModuleNotFoundError("No module named 'some_internal'", name="some_internal")
+
+    monkeypatch.setattr(_il, "import_module", fake_import)
+    # Act
+    error = None
+    try:
+        _ad._load_core()
+    except ModuleNotFoundError as exc:
+        error = exc
+    # Assert
+    assert error is not None and not isinstance(error, _ad.ScitexDevAccessMissingError)
+
+
 # EOF

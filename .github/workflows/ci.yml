@@ -182,7 +182,12 @@ jobs:
           uv pip install "scitex-dev @ git+https://github.com/scitex-ai/scitex-dev.git@72e8891584d8e3388f6a12a0122f9b1c3fb64ca5"
           # The conformance test must NOT skip: assert the core is importable.
           python -c "import scitex_dev.access as a; assert hasattr(a, 'AccessFilter')"
-      - name: Run the access conformance proof (non-skipped)
+      - name: Run the access conformance proof (non-skipped, strict)
+        env:
+          SCITEX_ACCESS_STRICT: "1"
         run: |
           source .venv/bin/activate
+          # SCITEX_ACCESS_STRICT=1 activates tests/scitex_app/conftest.py's
+          # hook that turns ANY skip into a failure, so this authoritative
+          # proof cannot pass by skipping a case (core or DB missing).
           python -m pytest tests/scitex_app/test_access_django.py -v --no-header -p no:cacheprovider
