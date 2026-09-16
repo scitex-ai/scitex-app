@@ -158,6 +158,19 @@ class _FailClosedRow(_ad.AccessScopedModel):
 
 @pytest.fixture()
 def _fc_table():
+    """Create the fail-closed table, or skip the test when the process has no
+    usable default database.
+
+    In the full pytest-matrix run the sibling ``_chat`` tests configure Django
+    with ``DATABASES={}`` (their PA-306 convention) before this module runs, so
+    the module-top ``:memory:`` setup is skipped and there is no table to
+    create. The conformance job (ci.yml access-conformance) and any DB-backed
+    run do have one, so these cases run there. A skip is the correct outcome
+    when the process genuinely has no DB; it is NOT the conformance battery's
+    skip (that one is gated on the core import, a separate condition).
+    """
+    if "default" not in settings.DATABASES:
+        pytest.skip("no default database configured in this process")
     if "access_django_fail_closed_row" not in connection.introspection.table_names():
         with connection.schema_editor() as se:
             se.create_model(_FailClosedRow)
@@ -165,53 +178,89 @@ def _fc_table():
     _FailClosedRow.objects.all().delete()
 
 
-def test_save_refuses_non_absolute_ref(_fc_table):
+def test_save_refuses_non_absolute_ref():
+    """A non-absolute ref is refused (the core Resource rejects it too).
+    Validation raises before any DB access, so no table is required."""
     # Arrange
-    bad = _FailClosedRow(access_ref="doc:not-absolute", access_owner="user:u0")
-    # Act / Assert
-    with pytest.raises(_ad.InvalidAccessRowError):
-        bad.save()
+    row = _FailClosedRow(access_ref="doc:not-absolute", access_owner="user:u0")
+    # Act
+    error = None
+    try:
+        row.save()
+    except _ad.InvalidAccessRowError as exc:
+        error = exc
+    # Assert
+    assert error is not None and "non-absolute" in str(error)
 
 
-def test_save_refuses_traversal_ref(_fc_table):
+def test_save_refuses_traversal_ref():
+    """A ``..`` traversal in the ref is refused (fail closed, no path escape)."""
     # Arrange
-    bad = _FailClosedRow(access_ref="doc:../x", access_owner="user:u0")
-    # Act / Assert
-    with pytest.raises(_ad.InvalidAccessRowError):
-        bad.save()
+    row = _FailClosedRow(access_ref="doc:../x", access_owner="user:u0")
+    # Act
+    error = None
+    try:
+        row.save()
+    except _ad.InvalidAccessRowError as exc:
+        error = exc
+    # Assert
+    assert error is not None and "traversal" in str(error)
 
 
-def test_save_refuses_non_canonical_kind(_fc_table):
+def test_save_refuses_non_canonical_kind():
+    """A non-dotted-lowercase kind (``Doc``) is refused."""
     # Arrange
-    bad = _FailClosedRow(access_ref="Doc:/x", access_owner="user:u0")
-    # Act / Assert
-    with pytest.raises(_ad.InvalidAccessRowError):
-        bad.save()
+    row = _FailClosedRow(access_ref="Doc:/x", access_owner="user:u0")
+    # Act
+    error = None
+    try:
+        row.save()
+    except _ad.InvalidAccessRowError as exc:
+        error = exc
+    # Assert
+    assert error is not None and "canonical" in str(error)
 
 
-def test_save_refuses_agent_owner(_fc_table):
+def test_save_refuses_agent_owner():
     """The core requires an owner to be a user or org, never an agent."""
     # Arrange
-    bad = _FailClosedRow(access_ref="doc:/x", access_owner="agent:u0/a0")
-    # Act / Assert
-    with pytest.raises(_ad.InvalidAccessRowError):
-        bad.save()
+    row = _FailClosedRow(access_ref="doc:/x", access_owner="agent:u0/a0")
+    # Act
+    error = None
+    try:
+        row.save()
+    except _ad.InvalidAccessRowError as exc:
+        error = exc
+    # Assert
+    assert error is not None and "user:<id> or org:<id>" in str(error)
 
 
-def test_save_refuses_anonymous_owner(_fc_table):
+def test_save_refuses_anonymous_owner():
+    """An anonymous owner is refused (the core rejects it as an owner)."""
     # Arrange
-    bad = _FailClosedRow(access_ref="doc:/x", access_owner="anonymous")
-    # Act / Assert
-    with pytest.raises(_ad.InvalidAccessRowError):
-        bad.save()
+    row = _FailClosedRow(access_ref="doc:/x", access_owner="anonymous")
+    # Act
+    error = None
+    try:
+        row.save()
+    except _ad.InvalidAccessRowError as exc:
+        error = exc
+    # Assert
+    assert error is not None and "user:<id> or org:<id>" in str(error)
 
 
-def test_save_refuses_non_bool_public(_fc_table):
+def test_save_refuses_non_bool_public():
+    """A non-bool access_public is refused (visibility is public/private only)."""
     # Arrange
-    bad = _FailClosedRow(access_ref="doc:/x", access_owner="user:u0", access_public="yes")
-    # Act / Assert
-    with pytest.raises(_ad.InvalidAccessRowError):
-        bad.save()
+    row = _FailClosedRow(access_ref="doc:/x", access_owner="user:u0", access_public="yes")
+    # Act
+    error = None
+    try:
+        row.save()
+    except _ad.InvalidAccessRowError as exc:
+        error = exc
+    # Assert
+    assert error is not None and "bool" in str(error)
 
 
 def test_save_accepts_canonical_row(_fc_table):
