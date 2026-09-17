@@ -237,6 +237,13 @@ def _validate_path(path: object) -> str:
                 "not be able to encode traversal, a query, a fragment or a "
                 "shell token"
             )
+    if text.endswith("/"):
+        raise ApiPluginContractError(
+            f"route path {text!r} is not in NORMALIZED form: it ends in '/', so "
+            f"two declarations of one endpoint would differ by a single "
+            f"character and collide only downstream. Declare "
+            f"{text.rstrip('/')!r} instead."
+        )
     for segment in text.split("/"):
         if _PATH_SEGMENT_RE.match(segment) or _PLACEHOLDER_RE.match(segment):
             continue
@@ -540,6 +547,12 @@ class ApiRoute:
             )
         object.__setattr__(self, "methods", methods)
         _require_choice(self.transport, TRANSPORTS, f"transport of route {self.path!r}")
+        for slot, schema in (("request", self.request), ("response", self.response)):
+            if schema is not None and not isinstance(schema, ApiSchema):
+                raise ApiPluginContractError(
+                    f"{slot} of route {self.path!r} is {schema!r}, a "
+                    f"{type(schema).__name__}; expected an ApiSchema or None"
+                )
         object.__setattr__(self, "errors", _require_elements(
             self.errors, ApiError, f"errors of route {self.path!r}"
         ))
@@ -589,6 +602,23 @@ class ApiRoute:
         return tuple((self.path, method) for method in self.methods)
 
 
+def _normalize_path(path: str) -> str:
+    """The COMPARISON form of a declared path: trailing slashes stripped.
+
+    A declared path is already required to be normalized (a trailing ``/`` is
+    refused by :func:`_validate_path`), so two keys that differ here cannot both
+    exist. Normalizing anyway keeps the uniqueness rule below independent of
+    which spelling a future declaration used.
+    """
+    return path.rstrip("/")
+
+
+def _declared_schemas(route: ApiRoute) -> tuple[tuple[str, ApiSchema], ...]:
+    """``(role, schema)`` for every body ``route`` declares, absent ones dropped."""
+    pairs = (("request", route.request), ("response", route.response))
+    return tuple((role, schema) for role, schema in pairs if schema is not None)
+
+
 @dataclass(frozen=True)
 class ApiPlugin:
     """One leaf's whole API declaration, published under an entry point."""
@@ -611,23 +641,69 @@ class ApiPlugin:
                 "cannot be distinguished from one that failed to load"
             )
         self._refuse_duplicate_route_keys()
+        self._refuse_duplicate_schema_names()
 
     def _refuse_duplicate_route_keys(self) -> None:
         """Refuse two routes claiming the same path+method.
 
         The host can only compose one, so the loser would be dropped silently —
-        an endpoint the leaf believes it published and no client can reach.
+        an endpoint the leaf believes it published and no client can reach. The
+        comparison is on the NORMALIZED path, so a spelling that differs only by
+        a trailing slash cannot slip past as a "different" route.
         """
         seen: list[tuple[str, str]] = []
         for route in self.routes:
             for key in route.route_keys():
-                if key in seen:
+                normalized = (_normalize_path(key[0]), key[1])
+                if normalized in seen:
                     raise ApiPluginContractError(
-                        f"api plugin {self.id!r} declares {key[1]} {key[0]} "
+                        f"api plugin {self.id!r} declares {key[1]} {normalized[0]} "
                         "twice; the host can compose only one of them, so the "
                         "other would vanish without a trace"
                     )
-                seen.append(key)
+                seen.append(normalized)
+
+    def _refuse_duplicate_schema_names(self) -> None:
+        """One flat component namespace: a name may describe only one thing.
+
+        OpenAPI keys components by NAME, so two schemas sharing one would
+        silently overwrite each other and the survivor would ship the other's
+        shape. A schema's name and another schema's FIELD name are read from the
+        same flat namespace by a generator, so that collision is refused by this
+        same rule rather than by a weaker second one. Two schemas sharing a
+        field NAME is not a collision — fields are nested under their schema —
+        and stays legal.
+        """
+        schema_names: dict[str, str] = {}
+        field_names: dict[str, str] = {}
+        for route in self.routes:
+            for role, schema in _declared_schemas(route):
+                owner = f"{role} schema of route {route.path!r}"
+                if schema.name in schema_names:
+                    raise ApiPluginContractError(
+                        f"api plugin {self.id!r} declares schema name "
+                        f"{schema.name!r} twice ({schema_names[schema.name]} and "
+                        f"{owner}); components are keyed by name, so one of the "
+                        "two would silently overwrite the other"
+                    )
+                if schema.name in field_names:
+                    raise ApiPluginContractError(
+                        f"api plugin {self.id!r} names {owner} "
+                        f"{schema.name!r}, which is already a declared FIELD "
+                        f"({field_names[schema.name]}); a name is one thing in "
+                        "this namespace, not a schema here and a field there"
+                    )
+                for item in schema.fields:
+                    if item.name in schema_names:
+                        raise ApiPluginContractError(
+                            f"api plugin {self.id!r} declares field "
+                            f"{item.name!r} on {owner}, which is already the "
+                            f"NAME of {schema_names[item.name]}; a name is one "
+                            "thing in this namespace, not a schema here and a "
+                            "field there"
+                        )
+                    field_names.setdefault(item.name, owner)
+                schema_names[schema.name] = owner
 
     def openapi_fragment(self) -> dict[str, Any]:
         """An OpenAPI 3.1 fragment a host can merge into its own document.
@@ -750,12 +826,17 @@ class ApiPluginRef:
 
 
 def discover_api_plugins(entry_points: Optional[Iterable] = None) -> list[ApiPluginRef]:
-    """Every installed ``scitex.apis`` entry point, sorted by name, first wins.
+    """Every installed ``scitex.apis`` entry point, sorted by name.
 
     Mirrors :func:`scitex_app.plugins.discover_plugin_apps` deliberately: the
     value is kept as a STRING, so discovery never imports a leaf's code (a host
     reads this at settings time, and an import here would run every installed
     leaf inside the host's configuration phase).
+
+    A duplicate NAME is REFUSED rather than resolved. Two distributions claiming
+    one plugin name would make the loaded plugin a function of install order,
+    and "the first one wins" ships the loser silently — exactly the failure a
+    host cannot see and an operator cannot debug.
     """
     if entry_points is None:
         from importlib.metadata import entry_points as _entry_points
@@ -764,7 +845,14 @@ def discover_api_plugins(entry_points: Optional[Iterable] = None) -> list[ApiPlu
     found: dict[str, ApiPluginRef] = {}
     for ep in entry_points:
         if ep.name in found:
-            continue
+            raise ApiPluginContractError(
+                f"two installed distributions publish the "
+                f"{API_ENTRY_POINT_GROUP} entry point {ep.name!r} "
+                f"({found[ep.name].target!r} from "
+                f"{found[ep.name].distribution!r} and {ep.value!r}); whichever "
+                "one a host loads would depend on install order, so give each "
+                "plugin a distinct name"
+            )
         dist = getattr(getattr(ep, "dist", None), "name", "") or ""
         found[ep.name] = ApiPluginRef(ep.name, ep.value, dist)
     return [found[key] for key in sorted(found)]

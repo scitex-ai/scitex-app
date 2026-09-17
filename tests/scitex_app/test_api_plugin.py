@@ -543,6 +543,27 @@ def test_a_whitespace_route_path_is_refused():
         _route(path="recipes/save now")
 
 
+def test_a_trailing_slash_route_path_is_refused():
+    # Arrange — one endpoint, two spellings: the declaration must be normalized
+    # so a collision cannot hide behind a single character.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="not in NORMALIZED form"):
+        _route(path="recipes/save/")
+
+
+def test_two_routes_that_differ_only_by_a_trailing_slash_are_refused():
+    # Arrange — the second spelling never survives route construction, so the
+    # plugin can never silently keep just one of them.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="not in NORMALIZED form"):
+        _plugin(routes=[
+            _route(path="recipes/save"),
+            _route(path="recipes/save/", handler="figrecipe.api:other"),
+        ])
+
+
 def test_a_placeholder_segment_is_accepted():
     # Arrange
     # Act
@@ -725,6 +746,82 @@ def test_two_routes_on_one_path_with_different_methods_are_accepted():
     plugin = _plugin(routes=routes)
     # Assert
     assert len(plugin.routes) == 2
+
+
+def test_a_request_and_a_response_schema_sharing_a_name_are_refused():
+    # Arrange — components are keyed by name, so one would overwrite the other.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="declares schema name 'SaveRequest' twice"):
+        _plugin(routes=[
+            _route(
+                request=_schema(name="SaveRequest"),
+                response=_schema(name="SaveRequest"),
+            ),
+        ])
+
+
+def test_two_response_schemas_sharing_a_name_are_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="declares schema name 'RecipeState' twice"):
+        _plugin(routes=[
+            _route(response=_schema(name="RecipeState")),
+            _route(path="recipes/export", handler="figrecipe.api:export", response=_schema(name="RecipeState")),
+        ])
+
+
+def test_a_schema_name_colliding_with_another_schemas_field_is_refused():
+    # Arrange — the same flat namespace: a name that is a schema here and a
+    # field there resolves to one thing a generator reads twice.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="already a declared FIELD"):
+        _plugin(routes=[
+            _route(response=_schema(name="RecipeState", fields=[_field(name="recipe_path")])),
+            _route(
+                path="recipes/export",
+                handler="figrecipe.api:export",
+                response=ApiSchema(name="recipe_path", fields=[_field(name="value")]),
+            ),
+        ])
+
+
+def test_a_field_name_colliding_with_another_schemas_name_is_refused():
+    # Arrange — the same rule, arrived at from the other side: a field named
+    # after a schema that another route already published.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="already the NAME of"):
+        _plugin(routes=[
+            _route(response=_schema(name="RecipeState", fields=[_field(name="value")])),
+            _route(
+                path="recipes/export",
+                handler="figrecipe.api:export",
+                response=ApiSchema(name="ExportState", fields=[_field(name="RecipeState")]),
+            ),
+        ])
+
+
+def test_two_schemas_sharing_a_field_name_are_accepted():
+    # Arrange — fields are nested under their schema, so the same field name in
+    # two schemas is normal, not a collision.
+    # Act
+    plugin = _plugin(routes=[
+        _route(request=_schema(name="SaveRequest")),
+        _route(path="recipes/export", handler="figrecipe.api:export", response=_schema(name="ExportState")),
+    ])
+    # Assert
+    assert len(plugin.routes) == 2
+
+
+def test_a_request_that_is_not_an_api_schema_is_refused():
+    # Arrange — a string in a schema slot must not reach a name lookup.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="expected an ApiSchema or None"):
+        _route(request="SaveRequest")
 
 
 # ─── strict nested element types ───────────────────────────────────────────
@@ -963,13 +1060,14 @@ def test_discovery_sorts_by_entry_point_name():
     assert names == ["figrecipe", "writer"]
 
 
-def test_discovery_keeps_the_first_entry_point_for_a_name():
-    # Arrange
+def test_discovery_refuses_a_duplicate_entry_point_name():
+    # Arrange — "first wins" would ship the loser silently, and which one a
+    # host loads would depend on install order.
     entry_points = [_ep("figrecipe", "figrecipe.api:P"), _ep("figrecipe", "other.api:P")]
     # Act
-    target = discover_api_plugins(entry_points)[0].target
     # Assert
-    assert target == "figrecipe.api:P"
+    with pytest.raises(ApiPluginContractError, match="entry point 'figrecipe'"):
+        discover_api_plugins(entry_points)
 
 
 def test_discovery_reports_the_distribution_when_there_is_one():
