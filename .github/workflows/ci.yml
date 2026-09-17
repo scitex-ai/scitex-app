@@ -147,3 +147,61 @@ jobs:
   # Holding this file untouched pending their adversarial pass. PS-231 stays red
   # on rtd-sphinx-build-on-ubuntu-latest.yml until then, and that is correct: the
   # duplication is real, it is just not safe to remove yet.
+
+  # --------------------------------------------------------------------------
+  # access-conformance — the REQUIRED non-skipped proof for
+  # scitex_app.access_django (hub review item 2 on PR #198).
+  #
+  # The normal pinned CI (pytest-matrix) installs scitex-dev 0.60.1, which
+  # LACKS scitex_dev.access, so test_access_django.py SKIPS there (the guarded
+  # import raises ScitexDevAccessMissingError). A skip is not a proof. This job
+  # installs scitex-app PLUS the exact scitex-dev commit known to contain the
+  # access core (72e8891584d8, scitex-dev develop; access introduced by the
+  # merged PR #800), so the conformance battery runs NON-SKIPPED against the
+  # real core: assert_equivalent(selector, seeds=range(40)) over a real SQLite
+  # queryset filtered by to_q, plus the deterministic fail-closed cases.
+  #
+  # RETIRE this job when scitex-dev publishes the access release and scitex-app
+  # pins it: then the normal pinned CI has the core, the test runs non-skipped
+  # there, and this pinned-commit job is redundant.
+  # --------------------------------------------------------------------------
+  access-conformance:
+    name: access-conformance (exact core 72e8891584d8)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Install scitex-app (all + dev) and the exact access-bearing core
+        working-directory: ${{ github.workspace }}
+        run: |
+          uv venv --python 3.12
+          source .venv/bin/activate
+          uv pip install -e ".[all]" --group dev 2>/dev/null || uv pip install -e . --group dev
+          # Pin the exact scitex-dev commit that carries scitex_dev.access.
+          # (Until the access release publishes, 0.60.1 is the latest and lacks it.)
+          uv pip install "scitex-dev @ git+https://github.com/scitex-ai/scitex-dev.git@72e8891584d8e3388f6a12a0122f9b1c3fb64ca5"
+          # The conformance test must NOT skip: assert the core is importable.
+          python -c "import scitex_dev.access as a; assert hasattr(a, 'AccessFilter')"
+      - name: Run the FULL exact-core tests/scitex_app (no cross-module errors)
+        run: |
+          source .venv/bin/activate
+          # Hub review 3, item 2: the full suite with the core installed must be
+          # green (no failures/errors/collection breaks). In the full run a
+          # sibling module (test__app_scope.py) configures Django with
+          # DATABASES={} -> dummy backend, so the DB-backed access tests SKIP
+          # cleanly (routed through the _db guarded fixture) rather than error.
+          # No strict flag here: those skips are expected and correct in the
+          # full run. The non-skipped proof is the next step.
+          python -m pytest tests/scitex_app -q --no-header -p no:cacheprovider
+      - name: Run the access conformance proof (non-skipped, strict)
+        env:
+          SCITEX_ACCESS_STRICT: "1"
+        run: |
+          source .venv/bin/activate
+          # Isolated to THIS module so its module-top :memory: configure wins
+          # (no sibling sets DATABASES={}); every DB-backed case then runs
+          # non-skipped. SCITEX_ACCESS_STRICT=1 activates tests/scitex_app/
+          # conftest.py's hook that turns ANY skip into a failure, so this
+          # authoritative proof cannot pass by skipping a case (core or DB
+          # missing).
+          python -m pytest tests/scitex_app/test_access_django.py -v --no-header -p no:cacheprovider
