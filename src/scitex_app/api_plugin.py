@@ -509,17 +509,23 @@ class Deprecation:
 
 @dataclass(frozen=True)
 class ApiRoute:
-    """One declared endpoint: what it takes, returns, needs and promises."""
+    """One declared endpoint: what it takes, returns, needs and promises.
+
+    ``rate`` is REQUIRED and has no default on purpose. An omitted rate class
+    would be filled in by whoever reads the missing value — the deployment's
+    most permissive bucket, or its most expensive one — and the leaf would never
+    have agreed to it. Every route states its own class and compute cost.
+    """
 
     path: str
     methods: Sequence[str]
+    rate: RateLimit
     request: Optional[ApiSchema] = None
     response: Optional[ApiSchema] = None
     errors: Sequence[ApiError] = field(default_factory=tuple)
     auth: AuthScope = field(default_factory=AuthScope)
     idempotency: Idempotency = field(default_factory=Idempotency)
     pagination: Pagination = field(default_factory=Pagination)
-    rate: RateLimit = field(default_factory=lambda: RateLimit("standard", "standard"))
     audit: Audit = field(default_factory=Audit)
     transport: str = "json"
     handler: str = ""
@@ -527,6 +533,11 @@ class ApiRoute:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", _validate_path(self.path))
+        if not isinstance(self.rate, RateLimit):
+            raise ApiPluginContractError(
+                f"route {self.path!r} declares rate {self.rate!r}, a "
+                f"{type(self.rate).__name__}; expected a RateLimit"
+            )
         methods = _require_elements(
             self.methods, str, f"methods of route {self.path!r}"
         )

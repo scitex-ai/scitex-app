@@ -63,12 +63,19 @@ def _auth(**overrides) -> AuthScope:
     return AuthScope(**base)
 
 
+def _rate(**overrides) -> RateLimit:
+    base = {"rate_class": "standard", "compute_cost": "standard"}
+    base.update(overrides)
+    return RateLimit(**base)
+
+
 def _route(**overrides) -> ApiRoute:
     base = {
         "path": "recipes/save",
         "methods": ["GET"],
         "handler": "figrecipe.api:save_recipe",
         "auth": _auth(),
+        "rate": _rate(),
     }
     base.update(overrides)
     return ApiRoute(**base)
@@ -702,6 +709,40 @@ def test_route_keys_cover_every_declared_method():
     keys = route.route_keys()
     # Assert
     assert keys == (("recipes/save", "GET"), ("recipes/save", "POST"))
+
+
+# ─── ApiRoute: the rate declaration is never assumed ───────────────────────
+
+
+def test_a_route_that_omits_its_rate_declaration_is_refused():
+    # Arrange — there is no implicit default: 'standard' is not assumed for a
+    # route that never declared it, so construction refuses the omission.
+    # Act
+    # Assert
+    with pytest.raises(TypeError, match="rate"):
+        ApiRoute(
+            path="recipes/save",
+            methods=["GET"],
+            handler="figrecipe.api:save_recipe",
+            auth=_auth(),
+        )
+
+
+def test_a_rate_slot_that_is_not_a_rate_limit_is_refused():
+    # Arrange — a bare class name must not reach the fragment renderer.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="expected a RateLimit"):
+        _route(rate="standard")
+
+
+def test_a_route_carries_the_rate_class_it_declared():
+    # Arrange
+    route = _route(rate=_rate(rate_class="bulk", compute_cost="heavy"))
+    # Act
+    rate_class = route.rate.rate_class
+    # Assert
+    assert rate_class == "bulk"
 
 
 # ─── ApiPlugin ─────────────────────────────────────────────────────────────
