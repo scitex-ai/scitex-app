@@ -55,6 +55,7 @@ if not settings.configured:
 from scitex_app.project_context import (  # noqa: E402
     CHANGE_PROJECT_COMMAND,
     PROJECT_QUERY_PARAM,
+    STANDALONE_PROVIDER_PATH,
     STATE_DENIED,
     STATE_NONE,
     STATE_OK,
@@ -62,6 +63,7 @@ from scitex_app.project_context import (  # noqa: E402
     ActiveProject,
     ProjectDeniedError,
     ProjectResolution,
+    ProjectUnavailableError,
     change_project,
     project_context,
     resolve_active_project,
@@ -507,3 +509,128 @@ def test_project_resolution_is_frozen():
     frozen = dataclasses.is_dataclass(resolution) and resolution.__dataclass_params__.frozen
     # Assert
     assert frozen
+
+
+# ── Provider failures are 'unavailable', not 'denied' and not 'none' ─────────
+
+
+class _FailingProvider:
+    """A provider that cannot answer. Real, not a mock: it simply raises."""
+
+    def list_projects(self, request=None):
+        raise OSError("the project store is unreachable")
+
+    def last_visited(self, request=None):
+        raise OSError("the project store is unreachable")
+
+    def remember(self, request, project_id):
+        raise OSError("the project store is unreachable")
+
+
+def test_a_failing_provider_reports_unavailable():
+    # Arrange
+    provider = _FailingProvider()
+    # Act
+    state = resolve_active_project(_request(), provider).state
+    # Assert
+    assert state == STATE_UNAVAILABLE
+
+
+def test_a_failing_provider_never_reads_as_no_project():
+    """'we could not ask' must not masquerade as 'you have none'."""
+    # Arrange
+    provider = _FailingProvider()
+    # Act
+    state = resolve_active_project(_request(), provider).state
+    # Assert
+    assert state != STATE_NONE
+
+
+def test_a_failing_provider_names_itself_in_the_reason():
+    # Arrange
+    provider = _FailingProvider()
+    # Act
+    reason = resolve_active_project(_request(), provider).reason
+    # Assert
+    assert "unreachable" in reason
+
+
+def test_the_command_raised_on_a_failing_provider_is_not_a_permission_answer():
+    # Arrange
+    provider = _FailingProvider()
+    # Act
+    raised = None
+    try:
+        change_project(_request(), "neuro-paper", provider)
+    except Exception as exc:
+        raised = exc
+    # Assert
+    assert isinstance(raised, ProjectUnavailableError)
+
+
+# ── The standalone provider (the mount handoff) ──────────────────────────────
+
+
+def test_the_standalone_provider_path_names_this_module():
+    # Arrange / Act
+    module_path, _, attribute = STANDALONE_PROVIDER_PATH.rpartition(".")
+    # Assert — so settings.SCITEX_PROJECT_PROVIDER can resolve it
+    assert module_path == "scitex_app.project_context" and attribute
+
+
+def test_an_unknown_module_attribute_still_raises():
+    # Arrange / Act
+    raised = None
+    try:
+        import scitex_app.project_context as module
+
+        _ = module.no_such_attribute
+    except AttributeError as exc:
+        raised = exc
+    # Assert
+    assert raised is not None
+
+
+def test_the_standalone_provider_lists_the_working_directory(tmp_path=None):
+    # Arrange — scitex-ui supplies LocalProjectProvider; absent in scitex-app's
+    # own CI, where the assertion is SKIPPED rather than weakened.
+    import os
+    import tempfile
+
+    import pytest
+
+    pytest.importorskip("scitex_ui.project_scope")
+    root = tempfile.mkdtemp(prefix="stx-projects-")
+    os.makedirs(os.path.join(root, "alpha"))
+    os.makedirs(os.path.join(root, "beta"))
+    os.environ["SCITEX_WORKING_DIR"] = root
+    # Act
+    provider = _standalone_provider()
+    ids = {entry.id for entry in provider.list_projects(None)}
+    # Assert
+    assert ids == {"alpha", "beta"}
+
+
+def test_the_standalone_provider_selects_nothing_on_a_fresh_session():
+    """The 'no silent example selection' rule, measured at the provider."""
+    # Arrange
+    import os
+    import tempfile
+
+    import pytest
+
+    pytest.importorskip("scitex_ui.project_scope")
+    root = tempfile.mkdtemp(prefix="stx-projects-")
+    os.makedirs(os.path.join(root, "alpha"))
+    os.environ["SCITEX_WORKING_DIR"] = root
+    # Act
+    resolution = resolve_active_project(_request(), _standalone_provider())
+    # Assert — projects EXIST, so 'none' here is the fail-closed answer
+    assert resolution.state == STATE_NONE
+
+
+def _standalone_provider():
+    """Build the launcher's provider the way the host setting does."""
+    from django.utils.module_loading import import_string
+
+    return import_string(STANDALONE_PROVIDER_PATH)()

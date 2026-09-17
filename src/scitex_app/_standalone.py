@@ -446,10 +446,12 @@ def _configure_django(
     ]
 
     # Add scitex-ui for shared workspace shell components
+    scitex_ui_present = False
     try:
         import scitex_ui  # noqa: F401
 
         installed_apps.append("scitex_ui")
+        scitex_ui_present = True
     except ImportError:
         pass
 
@@ -471,6 +473,25 @@ def _configure_django(
 
     if extra_staticfiles_dirs:
         staticfiles_dirs.extend(extra_staticfiles_dirs)
+
+    # ── Project context ──────────────────────────────────────────────────────
+    # A project-scoped app launched here has no host to ask, so without a
+    # registered provider its picker can never appear: every page resolves to
+    # `unavailable`. scitex-ui documents LocalProjectProvider as the standalone
+    # answer, so register it under the host's own setting and let resolution run
+    # through the SAME code path a hosted app uses.
+    #
+    # INERT FOR A USER-SCOPED APP. The picker is gated on the app's declared
+    # scope (`_app_scope`), so a provider nothing consults cannot conjure a
+    # selector — and nothing is auto-selected either way, because the provider
+    # reports no last-visited project until a user or a command stores one.
+    from .project_context import STANDALONE_PROVIDER_PATH
+
+    project_settings = (
+        {"SCITEX_PROJECT_PROVIDER": STANDALONE_PROVIDER_PATH}
+        if scitex_ui_present
+        else {}
+    )
 
     django.conf.settings.configure(
         SECRET_KEY=os.environ.get("DJANGO_SECRET_KEY", "scitex-standalone-dev-key"),
@@ -499,6 +520,11 @@ def _configure_django(
                 "OPTIONS": {
                     "context_processors": [
                         "django.template.context_processors.request",
+                        # The mount handoff: every leaf template of a mounted
+                        # app receives `active_project` / `project_state` /
+                        # `project_command` without its view passing anything,
+                        # so one selection reaches every app in the shell.
+                        "scitex_app.project_context.project_context",
                     ],
                 },
             },
@@ -506,6 +532,7 @@ def _configure_django(
         DATABASES={},
         STATIC_URL="/static/",
         STATICFILES_DIRS=staticfiles_dirs,
+        **project_settings,
     )
 
 

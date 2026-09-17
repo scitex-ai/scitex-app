@@ -48,6 +48,7 @@ from typing import Any, Optional, Protocol, runtime_checkable
 __all__ = [
     "CHANGE_PROJECT_COMMAND",
     "PROJECT_QUERY_PARAM",
+    "STANDALONE_PROVIDER_PATH",
     "STATE_DENIED",
     "STATE_NONE",
     "STATE_OK",
@@ -56,6 +57,7 @@ __all__ = [
     "ActiveProject",
     "ProjectDeniedError",
     "ProjectResolution",
+    "ProjectUnavailableError",
     "change_project",
     "project_context",
     "resolve_active_project",
@@ -188,6 +190,25 @@ class ProjectDeniedError(PermissionError):
     """
 
 
+class ProjectUnavailableError(RuntimeError):
+    """No project context could be computed, so no command could be applied.
+
+    DISTINCT FROM :class:`ProjectDeniedError` on purpose. "You may not" and "we
+    could not ask" call for different responses — one is a permission answer,
+    the other is an outage — and collapsing them would tell a user they lack
+    access to something that was never checked.
+    """
+
+
+#: Where the standalone launcher registers its provider.
+#:
+#: A dotted path, because that is the channel scitex-ui reads
+#: (``settings.SCITEX_PROJECT_PROVIDER``), so a standalone app resolves its
+#: project through the SAME code path a hosted app does. The name is public so
+#: the launcher and any consumer can agree on it without a second constant.
+STANDALONE_PROVIDER_PATH = "scitex_app.project_context.StandaloneProjectProvider"
+
+
 def _host_provider() -> tuple[Optional[_ProjectProvider], str]:
     """The host's registered provider, or ``(None, reason)``.
 
@@ -256,7 +277,18 @@ def resolve_active_project(
     if explicit is None:
         explicit = _explicit_from_request(request)
 
-    accessible = _accessible(resolved_provider, request)
+    try:
+        accessible = _accessible(resolved_provider, request)
+    except Exception as exc:
+        # Fail CLOSED, not loudly-500. A provider that cannot answer must not
+        # make the page unrenderable, and it must never be read as "no project"
+        # (which would show an empty picker as if the user had none) or as "ok".
+        # `unavailable` is the declared state for exactly this, and the reason
+        # travels with it so the cause is readable rather than merely absent.
+        return ProjectResolution(
+            state=STATE_UNAVAILABLE,
+            reason=f"the project provider failed to list projects: {exc}",
+        )
 
     if explicit:
         if explicit not in accessible:
@@ -278,7 +310,13 @@ def resolve_active_project(
         resolved_provider.remember(request, explicit)
         return ProjectResolution(state=STATE_OK, project=accessible[explicit])
 
-    stored = resolved_provider.last_visited(request)
+    try:
+        stored = resolved_provider.last_visited(request)
+    except Exception as exc:
+        return ProjectResolution(
+            state=STATE_UNAVAILABLE,
+            reason=f"the project provider failed to report the stored project: {exc}",
+        )
     if stored and stored in accessible:
         return ProjectResolution(state=STATE_OK, project=accessible[stored])
 
@@ -351,6 +389,8 @@ def change_project(
     * an unknown or unauthorised id raises :class:`ProjectDeniedError`, and the
       previously stored project is left untouched — a refused command must not
       half-apply;
+    * a provider that cannot answer raises :class:`ProjectUnavailableError`,
+      which is NOT the same answer as "you may not";
     * an empty id raises ``ValueError``: there is no such thing as changing to
       "no project", and accepting one would clear the user's selection by
       accident.
@@ -365,9 +405,15 @@ def change_project(
     if resolved_provider is None:
         resolved_provider, reason = _host_provider()
         if resolved_provider is None:
-            raise ProjectDeniedError(f"cannot change project: {reason}")
+            raise ProjectUnavailableError(f"cannot change project: {reason}")
 
-    accessible = _accessible(resolved_provider, request)
+    try:
+        accessible = _accessible(resolved_provider, request)
+    except Exception as exc:
+        raise ProjectUnavailableError(
+            f"cannot change project: the provider failed to list projects: {exc}"
+        ) from exc
+
     if project_id not in accessible:
         raise ProjectDeniedError(
             f"project {project_id!r} is not accessible to this user; the "
@@ -376,6 +422,54 @@ def change_project(
 
     resolved_provider.remember(request, project_id)
     return accessible[project_id]
+
+
+def _standalone_provider_class():
+    """``LocalProjectProvider`` bound to the standalone working directory.
+
+    EXISTS BECAUSE THE LAUNCHER HAD NO PROVIDER TO REGISTER. scitex-ui reads a
+    provider from ``settings.SCITEX_PROJECT_PROVIDER`` as a dotted path and
+    instantiates it with NO arguments (see ``host_project_provider``), so a
+    class needing a ``root`` — ``LocalProjectProvider`` — cannot be named there
+    directly. This binds the root the launcher already resolved
+    (``SCITEX_WORKING_DIR``, which ``run_standalone`` sets) and nothing else.
+
+    Nothing is selected by construction: ``LocalProjectProvider`` lists the
+    folders under the root and reports last-visited as absent until a user or a
+    command stores one, so a fresh standalone session resolves to ``none`` and
+    shows its picker. That is the documented standalone behaviour, and it is
+    what keeps this from being an implicit example selection.
+
+    Imported lazily: subclassing scitex-ui's provider must not make importing
+    this module require scitex-ui, which scitex-app deliberately does not.
+    """
+    import os
+
+    from scitex_ui.project_scope import LocalProjectProvider
+
+    class StandaloneProjectProvider(LocalProjectProvider):
+        """Every non-hidden folder under the standalone working directory."""
+
+        def __init__(self) -> None:
+            super().__init__(
+                root=os.environ.get("SCITEX_WORKING_DIR") or os.getcwd()
+            )
+
+    return StandaloneProjectProvider
+
+
+def __getattr__(name: str):
+    """Resolve ``StandaloneProjectProvider`` on first use (PEP 562).
+
+    A module-level attribute rather than a factory call, because
+    ``import_string(STANDALONE_PROVIDER_PATH)`` has to FIND it here — the
+    dotted path is the only channel the host setting offers. Defining the class
+    eagerly at import time is what this avoids: it would make scitex-ui a hard
+    import requirement of a module that must work without it.
+    """
+    if name == "StandaloneProjectProvider":
+        return _standalone_provider_class()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # EOF
