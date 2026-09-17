@@ -216,6 +216,21 @@ def _require_text_or_empty(value: object, what: str) -> str:
     return value.strip()
 
 
+def _strip_all(values: Sequence[str], what: str) -> tuple[str, ...]:
+    """Every element of ``values``, validated AND returned stripped.
+
+    This is the fix for the defect class a review found here: a validator that
+    returns the NORMALIZED value while the dataclass keeps the DECLARED one.
+    ``_require_text`` has always returned the stripped text, but every call site
+    that discarded the return value declared one thing and STORED another, so a
+    padded value was checked and then emitted unchanged. Assigning the result
+    makes the stored element BE the validated element — there is no later
+    "strip on the way out" that could be forgotten, because there is no later
+    strip at all.
+    """
+    return tuple(_require_text(value, what) for value in values)
+
+
 def _require_component_name(value: object, what: str) -> str:
     """Return ``value`` if it is a valid OpenAPI component key, else raise.
 
@@ -379,8 +394,16 @@ class ApiField:
     enum: Sequence[str] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        _require_component_name(self.name, "field name")
-        _require_choice(self.type, FIELD_TYPES, "field type")
+        # The validated form IS the stored form, for every value below: each
+        # validator returns the normalized value and its result is assigned
+        # (see _strip_all). Storing the declared value instead is how a padded
+        # name was checked and then emitted unchanged.
+        object.__setattr__(
+            self, "name", _require_component_name(self.name, "field name")
+        )
+        object.__setattr__(
+            self, "type", _require_choice(self.type, FIELD_TYPES, "field type")
+        )
         if not isinstance(self.required, bool):
             raise ApiPluginContractError(
                 f"field {self.name!r} has a non-boolean required flag "
@@ -389,11 +412,10 @@ class ApiField:
         object.__setattr__(self, "description", _require_text_or_empty(
             self.description, f"description of field {self.name!r}"
         ))
-        object.__setattr__(self, "enum", _require_elements(
-            self.enum, str, f"enum of field {self.name!r}"
+        object.__setattr__(self, "enum", _strip_all(
+            _require_elements(self.enum, str, f"enum of field {self.name!r}"),
+            f"enum member of field {self.name!r}",
         ))
-        for member in self.enum:
-            _require_text(member, f"enum member of field {self.name!r}")
 
 
 @dataclass(frozen=True)
@@ -411,7 +433,11 @@ class ApiSchema:
     fields: Sequence[ApiField] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        _require_component_name(self.name, "schema name")
+        # The validated form IS the stored form (see _strip_all): the component
+        # key the validator approved is the one emitted, not the declared one.
+        object.__setattr__(
+            self, "name", _require_component_name(self.name, "schema name")
+        )
         object.__setattr__(self, "fields", _require_elements(
             self.fields, ApiField, f"fields of schema {self.name!r}"
         ))
@@ -444,8 +470,12 @@ class ApiError:
     retryable: bool = False
 
     def __post_init__(self) -> None:
-        _require_text(self.code, "error code")
-        _require_text(self.message, "error message")
+        # Stored stripped, not merely checked stripped: these three reach the
+        # document (the code and message under `x-scitex-errors`).
+        object.__setattr__(self, "code", _require_text(self.code, "error code"))
+        object.__setattr__(
+            self, "message", _require_text(self.message, "error message")
+        )
         if not isinstance(self.status, int) or isinstance(self.status, bool):
             raise ApiPluginContractError(
                 f"error {self.code!r} has a non-integer status ({self.status!r})"
@@ -482,12 +512,13 @@ class AuthScope:
     public: bool = False
 
     def __post_init__(self) -> None:
-        _require_choice(self.project_scope, PROJECT_SCOPES, "auth project_scope")
-        object.__setattr__(self, "scopes", _require_elements(
-            self.scopes, str, "auth scopes"
+        object.__setattr__(self, "project_scope", _require_choice(
+            self.project_scope, PROJECT_SCOPES, "auth project_scope"
         ))
-        for scope in self.scopes:
-            _require_text(scope, "auth scope")
+        object.__setattr__(self, "scopes", _strip_all(
+            _require_elements(self.scopes, str, "auth scopes"),
+            "auth scope",
+        ))
         if not isinstance(self.public, bool):
             raise ApiPluginContractError(
                 f"auth public flag must be a boolean (got {self.public!r})"
@@ -559,7 +590,9 @@ class Pagination:
     max_limit: int | None = None
 
     def __post_init__(self) -> None:
-        _require_choice(self.style, PAGINATION_STYLES, "pagination style")
+        object.__setattr__(self, "style", _require_choice(
+            self.style, PAGINATION_STYLES, "pagination style"
+        ))
         for label, value in (("default_limit", self.default_limit), ("max_limit", self.max_limit)):
             if value is None:
                 continue
@@ -607,8 +640,14 @@ class RateLimit:
     quota_note: str = ""
 
     def __post_init__(self) -> None:
-        _require_text(self.rate_class, "rate_class")
-        _require_text(self.compute_cost, "compute_cost")
+        # Both reach the document as x-scitex-rate-class / x-scitex-compute-cost,
+        # so the approved (stripped) value is the stored one.
+        object.__setattr__(
+            self, "rate_class", _require_text(self.rate_class, "rate_class")
+        )
+        object.__setattr__(
+            self, "compute_cost", _require_text(self.compute_cost, "compute_cost")
+        )
         object.__setattr__(self, "quota_note", _require_text_or_empty(
             self.quota_note, "rate quota_note"
         ))
@@ -621,7 +660,9 @@ class Audit:
     level: str = "metadata"
 
     def __post_init__(self) -> None:
-        _require_choice(self.level, AUDIT_LEVELS, "audit level")
+        object.__setattr__(
+            self, "level", _require_choice(self.level, AUDIT_LEVELS, "audit level")
+        )
 
 
 @dataclass(frozen=True)
@@ -637,9 +678,15 @@ class Deprecation:
     replacement: str | None = None
 
     def __post_init__(self) -> None:
-        _require_version(self.sunset_version, "deprecation sunset_version")
+        # Both are emitted (deprecated / x-scitex-sunset-version /
+        # x-scitex-replacement), so both are stored in validated form.
+        object.__setattr__(self, "sunset_version", _require_version(
+            self.sunset_version, "deprecation sunset_version"
+        ))
         if self.replacement is not None:
-            _require_text(self.replacement, "deprecation replacement")
+            object.__setattr__(self, "replacement", _require_text(
+                self.replacement, "deprecation replacement"
+            ))
 
 
 @dataclass(frozen=True)
@@ -695,8 +742,11 @@ class ApiRoute:
                 f"{type(self.deprecation).__name__}; expected an instance of "
                 "Deprecation or None"
             )
-        object.__setattr__(self, "path_params", _require_elements(
-            self.path_params, str, f"path_params of route {self.path!r}"
+        object.__setattr__(self, "path_params", _strip_all(
+            _require_elements(
+                self.path_params, str, f"path_params of route {self.path!r}"
+            ),
+            f"path parameter of route {self.path!r}",
         ))
         methods = _require_elements(
             self.methods, str, f"methods of route {self.path!r}"
@@ -717,7 +767,9 @@ class ApiRoute:
                 f"route {self.path!r} declares a method twice"
             )
         object.__setattr__(self, "methods", methods)
-        _require_choice(self.transport, TRANSPORTS, f"transport of route {self.path!r}")
+        object.__setattr__(self, "transport", _require_choice(
+            self.transport, TRANSPORTS, f"transport of route {self.path!r}"
+        ))
         for slot, schema in (("request", self.request), ("response", self.response)):
             if schema is not None and not isinstance(schema, ApiSchema):
                 raise ApiPluginContractError(
@@ -727,13 +779,16 @@ class ApiRoute:
         object.__setattr__(self, "errors", _require_elements(
             self.errors, ApiError, f"errors of route {self.path!r}"
         ))
-        _require_text(self.handler, f"handler of route {self.path!r}")
-        if not _HANDLER_RE.match(self.handler):
+        # Stripped FIRST and then matched, so the string the rule approved is
+        # the string stored — and the one emitted as x-scitex-handler.
+        handler = _require_text(self.handler, f"handler of route {self.path!r}")
+        if not _HANDLER_RE.match(handler):
             raise ApiPluginContractError(
                 f"route {self.path!r} declares handler {self.handler!r}; expected "
                 "an entry-point-style 'module.path:attr' — a declaration, never "
                 "a shell command, a filesystem path or argv"
             )
+        object.__setattr__(self, "handler", handler)
         self._refuse_undeclared_mutation()
         self._refuse_duplicate_errors()
         self._refuse_undeclared_path_params()
@@ -748,8 +803,9 @@ class ApiRoute:
         template the host will serve.
         """
         declared = list(self.path_params)
-        for name in declared:
-            _require_text(name, f"path parameter of route {self.path!r}")
+        # Each name was already validated and STORED stripped in __post_init__,
+        # so this method only has to compare the declaration against the path's
+        # {placeholders}.
         if len(set(declared)) != len(declared):
             raise ApiPluginContractError(
                 f"route {self.path!r} declares a path parameter twice; one "
@@ -877,6 +933,67 @@ def _declared_schemas(route: ApiRoute) -> tuple[tuple[str, ApiSchema], ...]:
     return tuple((role, schema) for role, schema in pairs if schema is not None)
 
 
+def _operation_claims(
+    routes: Sequence[ApiRoute], plugin_id: str
+) -> tuple[dict[tuple[str, str], str], dict[str, str]]:
+    """Check every route's ``(canonical path, method)`` claim; return the claims.
+
+    ONE definition of "a duplicate", called by construction
+    (:meth:`ApiPlugin._refuse_duplicate_route_keys`) AND by the renderer
+    (:meth:`ApiPlugin.openapi_fragment`), so the two cannot disagree about what
+    a collision is — they did, and that disagreement was the bug: the model
+    accepted ``GET x`` and ``POST x`` as two routes while the renderer refused
+    the second.
+
+    The unit is the OPERATION — one canonical path PLUS one method — not the
+    path. ``GET x`` and ``POST x`` are two operations on ONE OpenAPI Path Item
+    (they are one URL), so they merge; the same path AND the same method twice
+    is the genuine collision, because the host can compose only one operation
+    there and the loser would vanish without a trace.
+
+    The one thing that cannot merge is a canonical path whose declarations
+    disagree about the SPELLING of its placeholders (``things/{id}`` as GET and
+    ``things/{name}`` as POST). OpenAPI keys both as one path, so one merged
+    item would carry one template while the other route's parameters name a
+    path variable that template does not contain — an operation no validator
+    resolves. That is refused here, where both declarations can still be named.
+
+    Returns the claimed ``(canonical path, method)`` pairs mapped to their owner
+    (the collision message needs it) and the canonical path's declared spelling
+    (the Path Item key the renderer emits, so a merge has exactly one).
+    """
+    claims: dict[tuple[str, str], str] = {}
+    spellings: dict[str, str] = {}
+    for route in routes:
+        canonical = _canonical_path(route.path)
+        for method in route.methods:
+            key = (canonical, method)
+            owner = claims.get(key)
+            if owner is not None:
+                raise ApiPluginContractError(
+                    f"api plugin {plugin_id!r} declares {method} {route.path} "
+                    f"twice ({owner} and {method} {route.path}); the host can "
+                    "compose only one operation per path and method, so the "
+                    "other would vanish without a trace. Two templates that "
+                    "differ only by a placeholder's NAME are the same OpenAPI "
+                    "path, not two."
+                )
+            claims[key] = f"{method} {route.path}"
+        declared = spellings.get(canonical)
+        if declared is not None and declared != route.path:
+            raise ApiPluginContractError(
+                f"api plugin {plugin_id!r} declares {route.path!r} and "
+                f"{declared!r}, which OpenAPI keys as ONE path ({canonical!r}): "
+                "a placeholder's NAME does not distinguish two templates, so "
+                "two routes cannot be merged into one Path Item under two "
+                "spellings — the emitted template would name one of them and "
+                f"the other route's parameters would reference a path variable "
+                f"it does not contain. Declare {declared!r}."
+            )
+        spellings[canonical] = route.path
+    return claims, spellings
+
+
 @dataclass(frozen=True)
 class OAuthProvider:
     """The OAuth2 authorization server a plugin's scopes are ISSUED by.
@@ -900,6 +1017,10 @@ class OAuthProvider:
     scopes: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        # STORED, not merely checked: these URLs are emitted inside the OAuth2
+        # flow (authorizationUrl / tokenUrl). A padded URL passed the check and
+        # then reached the document unchanged — the defect this assignment
+        # closes.
         for label, url in (
             ("authorization_url", self.authorization_url),
             ("token_url", self.token_url),
@@ -918,6 +1039,7 @@ class OAuthProvider:
                     "and host, and it is declared here rather than invented by "
                     "the fragment renderer"
                 )
+            object.__setattr__(self, label, text)
         if not isinstance(self.scopes, Mapping):
             raise ApiPluginContractError(
                 "OAuth scopes must be a mapping of scope name to description "
@@ -930,10 +1052,23 @@ class OAuthProvider:
                 "OAuth scopes declares none; a scheme whose scope map is empty "
                 "defines no scope any requirement may name"
             )
+        # The map is stored in validated form too: each name and description
+        # stripped, and two spellings of ONE scope refused rather than kept as
+        # two keys (a requirement would then resolve to whichever key survived).
+        normalized: dict[str, str] = {}
         for name, description in self.scopes.items():
-            _require_text(name, "OAuth scope name")
-            _require_text(description, f"description of OAuth scope {name!r}")
-        object.__setattr__(self, "scopes", dict(self.scopes))
+            scope = _require_text(name, "OAuth scope name")
+            if scope in normalized:
+                raise ApiPluginContractError(
+                    f"OAuth scopes declares {scope!r} twice ({name!r} and "
+                    "another spelling of the same name); the scheme's scope map "
+                    "is keyed by name, so one of the two would be dropped and a "
+                    "requirement naming it would resolve to nothing"
+                )
+            normalized[scope] = _require_text(
+                description, f"description of OAuth scope {name!r}"
+            )
+        object.__setattr__(self, "scopes", normalized)
 
 
 @dataclass(frozen=True)
@@ -954,9 +1089,16 @@ class ApiPlugin:
     oauth: OAuthProvider | None = None
 
     def __post_init__(self) -> None:
-        _require_component_name(self.id, "plugin id")
-        _require_text(self.title, "plugin title")
-        _require_version(self.api_version, "api_version")
+        # Stored in validated form: the id prefixes every operationId and names
+        # the plugin in every refusal, the version is emitted as
+        # x-scitex-api-version, and the title reaches the document's `info`.
+        object.__setattr__(
+            self, "id", _require_component_name(self.id, "plugin id")
+        )
+        object.__setattr__(self, "title", _require_text(self.title, "plugin title"))
+        object.__setattr__(
+            self, "api_version", _require_version(self.api_version, "api_version")
+        )
         object.__setattr__(self, "routes", _require_elements(
             self.routes, ApiRoute, f"routes of api plugin {self.id!r}"
         ))
@@ -976,28 +1118,22 @@ class ApiPlugin:
         self._refuse_uncovered_oauth_scopes()
 
     def _refuse_duplicate_route_keys(self) -> None:
-        """Refuse two routes claiming the same path+method.
+        """Refuse two routes claiming the same canonical path AND method.
 
-        The host can only compose one, so the loser would be dropped silently —
-        an endpoint the leaf believes it published and no client can reach. The
-        comparison is on the CANONICAL path (see :func:`_canonical_path`), so
-        neither a spelling that differs only by a trailing slash nor two
-        same-hierarchy templates (``things/{id}`` and ``things/{name}``, which
-        OpenAPI keys as ONE path) can slip past as "different" routes.
+        The host can compose only one operation per path and method, so the
+        loser would be dropped silently — an endpoint the leaf believes it
+        published and no client can reach. The comparison is on the CANONICAL
+        path (see :func:`_canonical_path`), so two same-hierarchy templates
+        (``things/{id}`` and ``things/{name}``, which OpenAPI keys as ONE path)
+        cannot slip past as "different" routes.
+
+        DISJOINT methods on one canonical path are NOT a collision and are not
+        refused here: ``GET x`` and ``POST x`` are two operations on one URL, and
+        the renderer merges them into one Path Item. The whole rule lives in
+        :func:`_operation_claims`, which the renderer calls too, so construction
+        and rendering cannot disagree about what a duplicate is.
         """
-        seen: list[tuple[str, str]] = []
-        for route in self.routes:
-            for key in route.route_keys():
-                normalized = (_canonical_path(key[0]), key[1])
-                if normalized in seen:
-                    raise ApiPluginContractError(
-                        f"api plugin {self.id!r} declares {key[1]} {normalized[0]} "
-                        "twice; the host can compose only one of them, so the "
-                        "other would vanish without a trace. Two templates that "
-                        "differ only by a placeholder's NAME are the same OpenAPI "
-                        "path, not two."
-                    )
-                seen.append(normalized)
+        _operation_claims(self.routes, self.id)
 
     def _refuse_uncovered_oauth_scopes(self) -> None:
         """Every scope a route requires must be a scope the provider declares.
@@ -1092,9 +1228,15 @@ class ApiPlugin:
         Two document-level invariants are re-checked here even though
         construction already enforces them, because this is the function that
         would otherwise ship an invalid document: no two operations share an
-        ``operationId``, and no two routes share a canonical path. Both raise
-        :class:`ApiPluginContractError` rather than returning a document a
-        validator would reject with no author left to point at.
+        ``operationId``, and no two routes claim one canonical path with the same
+        method. Both raise :class:`ApiPluginContractError` rather than returning
+        a document a validator would reject with no author left to point at —
+        and both go through :func:`_operation_claims`, the same rule
+        construction applies, so the two layers agree on what a duplicate is.
+        DISJOINT methods on one canonical path are not a duplicate: ``GET x`` and
+        ``POST x``, declared as two routes, merge into ONE ``/x`` Path Item
+        carrying both operations (each built for its own method), which is what
+        the public model already accepts.
 
         Declared metadata OpenAPI has no field for (idempotency, rate/quota
         class, audit level, project scope, transport, compute cost) rides in
@@ -1104,19 +1246,13 @@ class ApiPlugin:
         paths: dict[str, Any] = {}
         schemas: dict[str, Any] = {}
         operation_ids: dict[str, str] = {}
-        canonical_paths: dict[str, str] = {}
+        # `spellings` maps a canonical path to the ONE OpenAPI path key its
+        # routes emit, which is what makes the merge a merge: two routes with
+        # disjoint methods share the key, so `setdefault` hands them the SAME
+        # Path Item and each operation lands in its own method slot.
+        _claims, spellings = _operation_claims(self.routes, self.id)
         for route in self.routes:
-            collision_key = _canonical_path(route.path)
-            if collision_key in canonical_paths:
-                raise ApiPluginContractError(
-                    f"api plugin {self.id!r} would emit two operations onto the "
-                    f"one OpenAPI path {collision_key!r} ({canonical_paths[collision_key]!r} "
-                    f"and {route.path!r}); OpenAPI keys paths by template and "
-                    "placeholder names do not distinguish them, so a merged "
-                    "document would silently keep one"
-                )
-            canonical_paths[collision_key] = route.path
-            entry = paths.setdefault(f"/{route.path}", {})
+            entry = paths.setdefault(f"/{spellings[_canonical_path(route.path)]}", {})
             for method in route.methods:
                 operation = self._operation(route, method, schemas)
                 operation_id = operation["operationId"]
