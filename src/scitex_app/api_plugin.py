@@ -113,6 +113,12 @@ _HANDLER_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_][\w.]*$")
 _PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
 _PLACEHOLDER_RE = re.compile(r"^\{[A-Za-z_][\w]*\}$")
 
+#: RFC 7230 ``tchar`` — the ONLY characters an HTTP field name may contain.
+#: A header name carrying CR, LF or any other control character lets a
+#: declaration smuggle a second header past whatever client writes it, so the
+#: whole token alphabet is enforced rather than only the obvious few.
+_HTTP_TOKEN_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
+
 #: Characters that must never appear in a declared path. A path is a
 #: DECLARATION that a host will compose into a real route, so anything that
 #: could escape the mount, reach a shell, or smuggle a scheme is refused here
@@ -146,6 +152,25 @@ def _require_choice(value: object, choices: Sequence[str], what: str) -> str:
             "outside the closed set cannot be rendered or enforced"
         )
     return str(value)
+
+
+def _require_token(value: object, what: str) -> str:
+    """Return ``value`` if it is a valid HTTP field-name token, else raise.
+
+    Refuses CR, LF, every other control character, spaces and ``:`` by refusing
+    any character outside RFC 7230 ``tchar``. Whitespace-only already fails the
+    blank check; this is the injection case, where a "header name" is really a
+    header name plus a second header.
+    """
+    text = _require_text(value, what)
+    if not _HTTP_TOKEN_RE.match(text):
+        raise ApiPluginContractError(
+            f"{what} {value!r} is not a valid HTTP field name; it must be one "
+            "or more RFC 7230 tchar and must not contain CR, LF or any other "
+            "control character (a name that can carry one can smuggle a second "
+            "header), nor a space or ':'"
+        )
+    return text
 
 
 def _require_elements(value: object, element_type: type, what: str) -> tuple:
@@ -366,7 +391,9 @@ class Idempotency:
 
     ``required=True`` means the caller MUST send a key (default header
     :data:`IDEMPOTENCY_KEY_HEADER`) and the endpoint guarantees no second
-    effect for a replayed key.
+    effect for a replayed key. ``key_header`` must be a valid HTTP field name:
+    a name carrying CR, LF or any other control character would let the
+    declaration smuggle a second header into the request the client writes.
     """
 
     required: bool = False
@@ -377,7 +404,11 @@ class Idempotency:
             raise ApiPluginContractError(
                 f"idempotency required flag must be a boolean (got {self.required!r})"
             )
-        _require_text(self.key_header, "idempotency key header")
+        object.__setattr__(
+            self,
+            "key_header",
+            _require_token(self.key_header, "idempotency key header"),
+        )
 
 
 @dataclass(frozen=True)

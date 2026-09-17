@@ -288,6 +288,70 @@ def test_a_blank_idempotency_header_is_refused():
         Idempotency(key_header="")
 
 
+def test_an_idempotency_header_with_a_carriage_return_is_refused():
+    # Arrange — "X-Key\rHost: evil" is a header name plus a second header.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="not a valid HTTP field name"):
+        Idempotency(key_header="X-Key\rHost: evil")
+
+
+def test_an_idempotency_header_with_a_line_feed_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="not a valid HTTP field name"):
+        Idempotency(key_header="X-Key\nHost: evil")
+
+
+def test_an_idempotency_header_with_a_crlf_pair_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="not a valid HTTP field name"):
+        Idempotency(key_header="X-Key\r\nX-Second: 1")
+
+
+def test_an_idempotency_header_with_a_control_character_is_refused():
+    # Arrange — a NUL is not a tchar either, even without a newline.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="not a valid HTTP field name"):
+        Idempotency(key_header="X-Key\x00")
+
+
+def test_an_idempotency_header_with_a_colon_is_refused():
+    # Arrange — ':' separates the name from the value, so it cannot be in one.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="not a valid HTTP field name"):
+        Idempotency(key_header="X-Key:")
+
+
+def test_an_idempotency_header_with_a_space_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="not a valid HTTP field name"):
+        Idempotency(key_header="Idempotency Key")
+
+
+def test_an_idempotency_header_with_an_inner_tab_is_refused():
+    # Arrange — an inner tab is not stripped away by the blank check.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="not a valid HTTP field name"):
+        Idempotency(key_header="Idempotency\tKey")
+
+
+def test_a_deployment_specific_idempotency_header_is_accepted():
+    # Arrange — a valid token the module has never heard of is still valid.
+    # Act
+    header = Idempotency(key_header="X-Idempotency-Key", required=True).key_header
+    # Assert
+    assert header == "X-Idempotency-Key"
+
+
 def test_an_unknown_pagination_style_is_refused():
     # Arrange
     # Act
