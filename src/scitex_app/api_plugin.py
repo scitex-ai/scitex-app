@@ -1,0 +1,703 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""The leaf API-plugin contract: what an approved leaf DECLARES about its API.
+
+A leaf app (FigRecipe, Writer, Scholar, ...) owns the behaviour of its own
+endpoints. What it does not own is the SHAPE a client may rely on: the routes,
+the request/response/error schemas, the auth scope, the idempotency promise,
+the pagination style, the rate/quota class, the audit level, the API version
+and the deprecation window. Those cross a package boundary — browser, agent,
+and thin native clients all read them — so they are DECLARED here as data and
+checked at construction, not discovered by reading an implementation.
+
+WHY A DECLARATION RATHER THAN THE IMPLEMENTATION. The operator's model
+(2026-09-16): the public SDK lets clients be built against approved APIs, while
+server-side leaf endpoint plugins are a HIGHER-TRUST class requiring SciTeX
+approval. A contract that must be approved is a contract that must be readable
+without executing the leaf: everything below is plain data, importable and
+comparable, and the handler is named as a string, never imported here.
+
+WHAT IS DELIBERATELY ABSENT. No Hub ORM, no middleware, no root-route
+registration, no raw shell/path/argv, and no framework object: a route path is
+a RELATIVE declaration that is validated (see :func:`_validate_path`) so it
+cannot escape its mount, and the handler reference is an entry-point-style
+``module:attr`` string. Nothing in this module serves a request — the host
+composes routes; this layer says what may be composed.
+
+FAIL CLOSED. Every rule below refuses at construction, because each one would
+otherwise present as a working API: an undeclared auth scope opens an endpoint,
+a mutating method with no idempotency declaration double-creates on retry, an
+unstructured error leaves a client nothing to branch on, and a deprecation with
+no sunset never arrives. Strictness is the feature; the alternative is a client
+that ships against a promise nobody made.
+
+ZERO THIRD-PARTY DEPENDENCIES. scitex-app's base install is stdlib plus
+click/rich/scitex-config, and this module must stay importable from the CLI, the
+MCP surface and a test process alike. The descriptors are therefore frozen
+stdlib dataclasses, NOT pydantic models: the declaration layer is data, and
+validation of a live REQUEST is the serving host's job. Flagged as a decision
+for the card's owner — see the note in :data:`DESCRIPTOR_IMPLEMENTATION`.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from dataclasses import field
+from typing import Any
+from typing import Iterable
+from typing import Optional
+from typing import Sequence
+
+#: How the descriptors are implemented, stated where a reader will look. The
+#: alternative (pydantic v2 models) would add a hard dependency to a package
+#: whose base install is stdlib-only, so it is a published-install-surface
+#: change and therefore the card owner's ruling rather than a silent choice.
+DESCRIPTOR_IMPLEMENTATION = "stdlib-frozen-dataclasses"
+
+#: The entry-point group a leaf publishes its API plugin under. Parallel to the
+#: ``scitex.apps`` group in :mod:`scitex_app.plugins`: the value is read as a
+#: STRING (nothing is imported until the host deliberately loads it), which is
+#: what makes an installed package "trusted" rather than "arbitrary code".
+API_ENTRY_POINT_GROUP = "scitex.apis"
+
+#: HTTP methods a route may declare — the closed set the approval surface can
+#: reason about. Anything else (a custom verb, a bare ``*``) is refused.
+HTTP_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+
+#: Methods that CHANGE state. A route using one of these must declare its
+#: idempotency behaviour: a retried POST with no declared key is the
+#: double-create the operator called out.
+MUTATING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+
+#: How a route answers. ``sse`` and ``binary`` are first-class because leaves
+#: genuinely have them (measured on FigRecipe: a streaming chat endpoint and
+#: ``download/{fmt}``) — a contract that only models JSON would make those
+#: endpoints undescribable, which is how they end up undocumented.
+TRANSPORTS = ("json", "sse", "binary")
+
+#: JSON Schema's primitive type names. Borrowed rather than invented so the
+#: generated OpenAPI fragment needs no translation table.
+FIELD_TYPES = ("string", "integer", "number", "boolean", "object", "array")
+
+#: Who a route's data belongs to. ``user`` and ``project`` reuse the vocabulary
+#: already fixed by :mod:`scitex_app._app_scope`; ``none`` means the response is
+#: not scoped to an actor at all (a public listing).
+PROJECT_SCOPES = ("none", "user", "project")
+
+#: Whether and how much of a call is recorded. The minimal honest vocabulary:
+#: an endpoint either is not audited, records that a call happened, or records
+#: the call and its actor-visible arguments.
+AUDIT_LEVELS = ("none", "metadata", "full")
+
+#: Pagination styles a route may declare.
+PAGINATION_STYLES = ("none", "offset", "cursor")
+
+#: Default header a client sends its idempotency key in.
+IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
+
+_METHOD_RE = re.compile(r"^[A-Z]+$")
+_VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
+_HANDLER_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_][\w.]*$")
+_PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
+_PLACEHOLDER_RE = re.compile(r"^\{[A-Za-z_][\w]*\}$")
+
+#: Characters that must never appear in a declared path. A path is a
+#: DECLARATION that a host will compose into a real route, so anything that
+#: could escape the mount, reach a shell, or smuggle a scheme is refused here
+#: rather than trusted downstream ("no raw shell/path/argv").
+_FORBIDDEN_PATH_CHARS = ("..", "//", "\\", " ", "\t", "\n", "?", "#", "%")
+
+
+class ApiPluginContractError(ValueError):
+    """A leaf's API declaration is malformed.
+
+    Raised at construction: every condition this catches would otherwise ship an
+    endpoint whose promise differs from what a client was told.
+    """
+
+
+def _require_text(value: object, what: str) -> str:
+    """Return ``value`` stripped, or raise when it is not non-blank text."""
+    if not isinstance(value, str) or not value.strip():
+        raise ApiPluginContractError(
+            f"{what} must be a non-blank string (got {value!r}); an empty "
+            f"{what} is indistinguishable from an undeclared one"
+        )
+    return value.strip()
+
+
+def _require_choice(value: object, choices: Sequence[str], what: str) -> str:
+    """Return ``value`` if it is one of ``choices``, else raise."""
+    if value not in choices:
+        raise ApiPluginContractError(
+            f"{what} must be one of {tuple(choices)} (got {value!r}); a value "
+            "outside the closed set cannot be rendered or enforced"
+        )
+    return str(value)
+
+
+def _require_version(value: object, what: str) -> str:
+    """Return a dotted version string, or raise."""
+    text = _require_text(value, what)
+    if not _VERSION_RE.match(text):
+        raise ApiPluginContractError(
+            f"{what} must be a dotted version such as '1' or '1.2' (got "
+            f"{value!r}); a non-numeric version cannot be ordered against a "
+            "sunset or a client's supported range"
+        )
+    return text
+
+
+def _validate_path(path: object) -> str:
+    """A route path declaration: relative, no traversal, no shell surface.
+
+    Refused: a leading ``/`` (the host owns the mount prefix — a route that
+    names an absolute path is claiming the root, which is exactly the "no root
+    route registration" rule), ``..``, ``//``, backslashes, whitespace, query or
+    fragment characters, percent-encoding, and any segment that is neither a
+    plain name nor a ``{placeholder}``.
+    """
+    text = _require_text(path, "route path")
+    if text.startswith("/"):
+        raise ApiPluginContractError(
+            f"route path {text!r} is absolute; declare it RELATIVE to the app "
+            "(the host owns the mount prefix, and a leaf claiming a root route "
+            "is the root-registration this contract forbids)"
+        )
+    for bad in _FORBIDDEN_PATH_CHARS:
+        if bad in text:
+            raise ApiPluginContractError(
+                f"route path {text!r} contains {bad!r}; a declared path must "
+                "not be able to encode traversal, a query, a fragment or a "
+                "shell token"
+            )
+    for segment in text.split("/"):
+        if _PATH_SEGMENT_RE.match(segment) or _PLACEHOLDER_RE.match(segment):
+            continue
+        raise ApiPluginContractError(
+            f"route path {text!r} has segment {segment!r}; expected a plain "
+            "name or a {placeholder}"
+        )
+    return text
+
+
+@dataclass(frozen=True)
+class ApiField:
+    """One declared field of a request or response body."""
+
+    name: str
+    type: str = "string"
+    required: bool = True
+    description: str = ""
+    enum: Sequence[str] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        _require_text(self.name, "field name")
+        _require_choice(self.type, FIELD_TYPES, "field type")
+        if not isinstance(self.required, bool):
+            raise ApiPluginContractError(
+                f"field {self.name!r} has a non-boolean required flag "
+                f"({self.required!r})"
+            )
+        object.__setattr__(self, "enum", tuple(self.enum))
+        for member in self.enum:
+            _require_text(member, f"enum member of field {self.name!r}")
+
+
+@dataclass(frozen=True)
+class ApiSchema:
+    """A named body schema: strict, and never empty.
+
+    An empty schema is refused because it is ambiguous — "takes nothing" and
+    "nobody wrote it down" read the same to a client generator.
+    """
+
+    name: str
+    fields: Sequence[ApiField] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        _require_text(self.name, "schema name")
+        object.__setattr__(self, "fields", tuple(self.fields))
+        if not self.fields:
+            raise ApiPluginContractError(
+                f"schema {self.name!r} declares no fields; an empty schema "
+                "cannot be told apart from an undocumented body"
+            )
+        seen: list[str] = []
+        for item in self.fields:
+            if item.name in seen:
+                raise ApiPluginContractError(
+                    f"schema {self.name!r} declares field {item.name!r} twice"
+                )
+            seen.append(item.name)
+
+
+@dataclass(frozen=True)
+class ApiError:
+    """One structured error a route may return.
+
+    Structured on purpose: a bare ``{error: str}`` gives a client nothing to
+    branch on, and leaves retry-vs-dont-retry to string matching (measured on
+    FigRecipe's endpoints today).
+    """
+
+    code: str
+    status: int
+    message: str
+    retryable: bool = False
+
+    def __post_init__(self) -> None:
+        _require_text(self.code, "error code")
+        _require_text(self.message, "error message")
+        if not isinstance(self.status, int) or isinstance(self.status, bool):
+            raise ApiPluginContractError(
+                f"error {self.code!r} has a non-integer status ({self.status!r})"
+            )
+        if not 400 <= self.status <= 599:
+            raise ApiPluginContractError(
+                f"error {self.code!r} declares status {self.status}; an error a "
+                "client sees must be a 4xx or 5xx"
+            )
+        if not isinstance(self.retryable, bool):
+            raise ApiPluginContractError(
+                f"error {self.code!r} has a non-boolean retryable flag "
+                f"({self.retryable!r}); a client cannot act on an ambiguous one"
+            )
+
+
+@dataclass(frozen=True)
+class AuthScope:
+    """What a caller must present, and whose data the route touches.
+
+    ``scopes`` are OAuth/OIDC scope strings. A route with NO scope is refused
+    unless it says so explicitly with ``public=True``: forgetting to declare a
+    scope must not silently open an endpoint, which is the fail-closed rule this
+    whole contract rests on. Native clients authenticate with
+    authorization-code + PKCE against these scopes — the contract never carries
+    a client secret, because nothing here can hold one.
+    """
+
+    project_scope: str = "user"
+    scopes: Sequence[str] = field(default_factory=tuple)
+    public: bool = False
+
+    def __post_init__(self) -> None:
+        _require_choice(self.project_scope, PROJECT_SCOPES, "auth project_scope")
+        object.__setattr__(self, "scopes", tuple(self.scopes))
+        for scope in self.scopes:
+            _require_text(scope, "auth scope")
+        if not isinstance(self.public, bool):
+            raise ApiPluginContractError(
+                f"auth public flag must be a boolean (got {self.public!r})"
+            )
+        if not self.public and not self.scopes:
+            raise ApiPluginContractError(
+                "an auth scope declares neither scopes nor public=True; a route "
+                "whose auth was never stated must not be treated as open. "
+                "Declare the OAuth scopes it needs, or say public=True out loud."
+            )
+        if self.public and self.scopes:
+            raise ApiPluginContractError(
+                f"auth declares public=True together with scopes "
+                f"{tuple(self.scopes)}; exactly one of the two describes it"
+            )
+
+
+@dataclass(frozen=True)
+class Idempotency:
+    """The route's retry promise.
+
+    ``required=True`` means the caller MUST send a key (default header
+    :data:`IDEMPOTENCY_KEY_HEADER`) and the endpoint guarantees no second
+    effect for a replayed key.
+    """
+
+    required: bool = False
+    key_header: str = IDEMPOTENCY_KEY_HEADER
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.required, bool):
+            raise ApiPluginContractError(
+                f"idempotency required flag must be a boolean (got {self.required!r})"
+            )
+        _require_text(self.key_header, "idempotency key header")
+
+
+@dataclass(frozen=True)
+class Pagination:
+    """The route's list-envelope promise."""
+
+    style: str = "none"
+    default_limit: Optional[int] = None
+    max_limit: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        _require_choice(self.style, PAGINATION_STYLES, "pagination style")
+        for label, value in (("default_limit", self.default_limit), ("max_limit", self.max_limit)):
+            if value is None:
+                continue
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise ApiPluginContractError(
+                    f"pagination {label} must be a positive integer (got {value!r})"
+                )
+        if self.style == "none":
+            if self.default_limit is not None or self.max_limit is not None:
+                raise ApiPluginContractError(
+                    "pagination declares limits with style='none'; the route "
+                    "would advertise a page size it does not implement"
+                )
+            return
+        if self.default_limit is None or self.max_limit is None:
+            raise ApiPluginContractError(
+                f"pagination style {self.style!r} needs BOTH default_limit and "
+                "max_limit; an unbounded page size is what makes a list "
+                "endpoint unbounded for the client that builds against it"
+            )
+        if self.default_limit > self.max_limit:
+            raise ApiPluginContractError(
+                f"pagination default_limit {self.default_limit} exceeds "
+                f"max_limit {self.max_limit}"
+            )
+
+
+@dataclass(frozen=True)
+class RateLimit:
+    """The route's rate/quota class and its declared compute cost.
+
+    Both are REQUIRED and non-blank. The vocabulary itself is not fixed by any
+    operator ruling yet, so this contract deliberately does not invent a closed
+    taxonomy that a leaf could then be rejected for — it requires the leaf to
+    state one of the approved deployment's classes and the cost it implies
+    (``compute_cost``), which is the declaration the approval surface needs.
+    """
+
+    rate_class: str
+    compute_cost: str
+    quota_note: str = ""
+
+    def __post_init__(self) -> None:
+        _require_text(self.rate_class, "rate_class")
+        _require_text(self.compute_cost, "compute_cost")
+
+
+@dataclass(frozen=True)
+class Audit:
+    """Whether a call is recorded, and how much of it."""
+
+    level: str = "metadata"
+
+    def __post_init__(self) -> None:
+        _require_choice(self.level, AUDIT_LEVELS, "audit level")
+
+
+@dataclass(frozen=True)
+class Deprecation:
+    """The route's version window: when it goes, and what replaces it.
+
+    A deprecation with a sunset but no replacement is allowed (an endpoint can
+    simply end); a deprecation with no sunset is refused, because it is the
+    announcement that never arrives at the client.
+    """
+
+    sunset_version: str
+    replacement: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _require_version(self.sunset_version, "deprecation sunset_version")
+        if self.replacement is not None:
+            _require_text(self.replacement, "deprecation replacement")
+
+
+@dataclass(frozen=True)
+class ApiRoute:
+    """One declared endpoint: what it takes, returns, needs and promises."""
+
+    path: str
+    methods: Sequence[str]
+    request: Optional[ApiSchema] = None
+    response: Optional[ApiSchema] = None
+    errors: Sequence[ApiError] = field(default_factory=tuple)
+    auth: AuthScope = field(default_factory=AuthScope)
+    idempotency: Idempotency = field(default_factory=Idempotency)
+    pagination: Pagination = field(default_factory=Pagination)
+    rate: RateLimit = field(default_factory=lambda: RateLimit("standard", "standard"))
+    audit: Audit = field(default_factory=Audit)
+    transport: str = "json"
+    handler: str = ""
+    deprecation: Optional[Deprecation] = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "path", _validate_path(self.path))
+        methods = tuple(self.methods)
+        if not methods:
+            raise ApiPluginContractError(
+                f"route {self.path!r} declares no methods"
+            )
+        for method in methods:
+            if not isinstance(method, str) or not _METHOD_RE.match(method):
+                raise ApiPluginContractError(
+                    f"route {self.path!r} declares method {method!r}; expected "
+                    f"an uppercase HTTP method from {HTTP_METHODS}"
+                )
+            _require_choice(method, HTTP_METHODS, f"method of route {self.path!r}")
+        if len(set(methods)) != len(methods):
+            raise ApiPluginContractError(
+                f"route {self.path!r} declares a method twice"
+            )
+        object.__setattr__(self, "methods", methods)
+        _require_choice(self.transport, TRANSPORTS, f"transport of route {self.path!r}")
+        object.__setattr__(self, "errors", tuple(self.errors))
+        _require_text(self.handler, f"handler of route {self.path!r}")
+        if not _HANDLER_RE.match(self.handler):
+            raise ApiPluginContractError(
+                f"route {self.path!r} declares handler {self.handler!r}; expected "
+                "an entry-point-style 'module.path:attr' — a declaration, never "
+                "a shell command, a filesystem path or argv"
+            )
+        self._refuse_undeclared_mutation()
+        self._refuse_duplicate_errors()
+
+    def _refuse_undeclared_mutation(self) -> None:
+        """A mutating route must state its idempotency behaviour.
+
+        Silence here is the expensive kind: a retried POST creates a second
+        object, and the client had no way to know it was unsafe.
+        """
+        mutating = [m for m in self.methods if m in MUTATING_METHODS]
+        if mutating and not self.idempotency.required:
+            raise ApiPluginContractError(
+                f"route {self.path!r} accepts {tuple(mutating)} but declares no "
+                "required idempotency key; a retried mutating call would act "
+                "twice. Declare Idempotency(required=True) and honour the key, "
+                "or drop the mutating method."
+            )
+
+    def _refuse_duplicate_errors(self) -> None:
+        """Two errors with one code cannot be told apart by a client."""
+        seen: list[str] = []
+        for error in self.errors:
+            if error.code in seen:
+                raise ApiPluginContractError(
+                    f"route {self.path!r} declares error code {error.code!r} "
+                    "twice; a client branches on the code"
+                )
+            seen.append(error.code)
+
+    @property
+    def key(self) -> tuple[str, str]:
+        """``(path, method)`` pairs are declared one at a time: see ``route_keys``."""
+        return (self.path, self.methods[0])
+
+    def route_keys(self) -> tuple[tuple[str, str], ...]:
+        """Every ``(path, method)`` this route claims — the uniqueness unit."""
+        return tuple((self.path, method) for method in self.methods)
+
+
+@dataclass(frozen=True)
+class ApiPlugin:
+    """One leaf's whole API declaration, published under an entry point."""
+
+    id: str
+    title: str
+    api_version: str
+    routes: Sequence[ApiRoute] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        _require_text(self.id, "plugin id")
+        _require_text(self.title, "plugin title")
+        _require_version(self.api_version, "api_version")
+        object.__setattr__(self, "routes", tuple(self.routes))
+        if not self.routes:
+            raise ApiPluginContractError(
+                f"api plugin {self.id!r} declares no routes; an empty plugin "
+                "cannot be distinguished from one that failed to load"
+            )
+        self._refuse_duplicate_route_keys()
+
+    def _refuse_duplicate_route_keys(self) -> None:
+        """Refuse two routes claiming the same path+method.
+
+        The host can only compose one, so the loser would be dropped silently —
+        an endpoint the leaf believes it published and no client can reach.
+        """
+        seen: list[tuple[str, str]] = []
+        for route in self.routes:
+            for key in route.route_keys():
+                if key in seen:
+                    raise ApiPluginContractError(
+                        f"api plugin {self.id!r} declares {key[1]} {key[0]} "
+                        "twice; the host can compose only one of them, so the "
+                        "other would vanish without a trace"
+                    )
+                seen.append(key)
+
+    def openapi_fragment(self) -> dict[str, Any]:
+        """An OpenAPI 3.1 fragment a host can merge into its own document.
+
+        Declared metadata OpenAPI has no field for (idempotency, rate/quota
+        class, audit level, project scope, transport, compute cost) rides in
+        ``x-scitex-*`` extensions, which is where a specification-compliant
+        consumer ignores them rather than rejects the document.
+        """
+        paths: dict[str, Any] = {}
+        schemas: dict[str, Any] = {}
+        for route in self.routes:
+            operation: dict[str, Any] = {
+                "operationId": f"{self.id}.{route.methods[0].lower()}.{route.path.replace('/', '_')}",
+                "x-scitex-transport": route.transport,
+                "x-scitex-project-scope": route.auth.project_scope,
+                "x-scitex-audit": route.audit.level,
+                "x-scitex-rate-class": route.rate.rate_class,
+                "x-scitex-compute-cost": route.rate.compute_cost,
+                "x-scitex-api-version": self.api_version,
+            }
+            if route.auth.scopes:
+                operation["x-scitex-oauth-scopes"] = list(route.auth.scopes)
+            if route.auth.public:
+                operation["security"] = []
+            if route.idempotency.required:
+                operation["x-scitex-idempotency-key-header"] = route.idempotency.key_header
+            if route.pagination.style != "none":
+                operation["x-scitex-pagination"] = {
+                    "style": route.pagination.style,
+                    "default_limit": route.pagination.default_limit,
+                    "max_limit": route.pagination.max_limit,
+                }
+            if route.deprecation is not None:
+                operation["deprecated"] = True
+                operation["x-scitex-sunset-version"] = route.deprecation.sunset_version
+                if route.deprecation.replacement:
+                    operation["x-scitex-replacement"] = route.deprecation.replacement
+            if route.handler:
+                operation["x-scitex-handler"] = route.handler
+            if route.response is not None:
+                schemas[route.response.name] = _schema_fragment(route.response)
+                operation["responses"] = {
+                    "200": {
+                        "description": route.response.name,
+                        "content": {
+                            _media_type(route.transport): {
+                                "schema": {"$ref": f"#/components/schemas/{route.response.name}"}
+                            }
+                        },
+                    }
+                }
+            if route.errors:
+                operation.setdefault("responses", {})["default"] = {
+                    "description": "declared errors",
+                    "x-scitex-errors": [
+                        {
+                            "code": error.code,
+                            "status": error.status,
+                            "message": error.message,
+                            "retryable": error.retryable,
+                        }
+                        for error in route.errors
+                    ],
+                }
+            if route.request is not None:
+                schemas[route.request.name] = _schema_fragment(route.request)
+                operation["requestBody"] = {
+                    "content": {
+                        _media_type(route.transport): {
+                            "schema": {"$ref": f"#/components/schemas/{route.request.name}"}
+                        }
+                    }
+                }
+            entry = paths.setdefault(route.path, {})
+            for method in route.methods:
+                entry[method.lower()] = dict(operation)
+        return {"paths": paths, "components": {"schemas": schemas}}
+
+
+def _media_type(transport: str) -> str:
+    """The OpenAPI media type for a declared transport."""
+    return {
+        "json": "application/json",
+        "sse": "text/event-stream",
+        "binary": "application/octet-stream",
+    }[transport]
+
+
+def _schema_fragment(schema: ApiSchema) -> dict[str, Any]:
+    """A JSON-Schema object for a declared ``ApiSchema``."""
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    for item in schema.fields:
+        entry: dict[str, Any] = {"type": item.type}
+        if item.description:
+            entry["description"] = item.description
+        if item.enum:
+            entry["enum"] = list(item.enum)
+        properties[item.name] = entry
+        if item.required:
+            required.append(item.name)
+    fragment: dict[str, Any] = {
+        "title": schema.name,
+        "type": "object",
+        "properties": properties,
+    }
+    if required:
+        fragment["required"] = required
+    return fragment
+
+
+@dataclass(frozen=True)
+class ApiPluginRef:
+    """One ``scitex.apis`` entry point, read WITHOUT importing it."""
+
+    name: str
+    target: str
+    distribution: str = ""
+
+
+def discover_api_plugins(entry_points: Optional[Iterable] = None) -> list[ApiPluginRef]:
+    """Every installed ``scitex.apis`` entry point, sorted by name, first wins.
+
+    Mirrors :func:`scitex_app.plugins.discover_plugin_apps` deliberately: the
+    value is kept as a STRING, so discovery never imports a leaf's code (a host
+    reads this at settings time, and an import here would run every installed
+    leaf inside the host's configuration phase).
+    """
+    if entry_points is None:
+        from importlib.metadata import entry_points as _entry_points
+
+        entry_points = _entry_points(group=API_ENTRY_POINT_GROUP)
+    found: dict[str, ApiPluginRef] = {}
+    for ep in entry_points:
+        if ep.name in found:
+            continue
+        dist = getattr(getattr(ep, "dist", None), "name", "") or ""
+        found[ep.name] = ApiPluginRef(ep.name, ep.value, dist)
+    return [found[key] for key in sorted(found)]
+
+
+__all__ = [
+    "API_ENTRY_POINT_GROUP",
+    "AUDIT_LEVELS",
+    "DESCRIPTOR_IMPLEMENTATION",
+    "FIELD_TYPES",
+    "HTTP_METHODS",
+    "IDEMPOTENCY_KEY_HEADER",
+    "MUTATING_METHODS",
+    "PAGINATION_STYLES",
+    "PROJECT_SCOPES",
+    "TRANSPORTS",
+    "ApiError",
+    "ApiField",
+    "ApiPlugin",
+    "ApiPluginContractError",
+    "ApiPluginRef",
+    "ApiRoute",
+    "ApiSchema",
+    "Audit",
+    "AuthScope",
+    "Deprecation",
+    "Idempotency",
+    "Pagination",
+    "RateLimit",
+    "discover_api_plugins",
+]
+
+# EOF
