@@ -71,6 +71,11 @@ dev = [
     # fastmcp>=2.0.0 — required by tests/scitex_app/_mcp/test_server.py
     "fastmcp>=2.0.0",
     "litellm>=1.0.0",
+    # openapi-spec-validator>=0.8 — required by
+    # tests/scitex_app/test_api_plugin.py's fragment-validation arms. They
+    # importorskip, so WITHOUT this entry the OpenAPI-validity proof SKIPS in
+    # CI, and a skip is indistinguishable from a pass in the summary line.
+    "openapi-spec-validator>=0.8",
     "pytest-cov>=4.0.0",
     "pytest>=7.0.0",
     "requests>=2.28.0",
