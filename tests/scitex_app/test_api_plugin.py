@@ -223,14 +223,32 @@ def test_an_auth_scope_that_is_both_public_and_scoped_is_refused():
     # Arrange
     # Act
     # Assert
-    with pytest.raises(ApiPluginContractError):
+    with pytest.raises(ApiPluginContractError, match="exactly one of the two"):
         AuthScope(scopes=["recipes:read"], public=True)
 
 
-def test_an_explicitly_public_scope_is_accepted():
-    # Arrange — public must be SAID, not inferred from an omission.
+def test_a_public_scope_that_is_user_scoped_is_refused():
+    # Arrange — a public route is not scoped to an actor. The default
+    # project_scope is 'user', so omitting it here must not slip through.
     # Act
-    scope = AuthScope(public=True).public
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="project_scope='none'"):
+        AuthScope(public=True)
+
+
+def test_a_public_scope_that_is_project_scoped_is_refused():
+    # Arrange — a public listing advertised as project-filtered is a lie.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="project_scope='none'"):
+        AuthScope(project_scope="project", public=True)
+
+
+def test_an_explicitly_public_scope_is_accepted():
+    # Arrange — public must be SAID, not inferred from an omission, and it
+    # carries project_scope='none' with it.
+    # Act
+    scope = AuthScope(project_scope="none", public=True).public
     # Assert
     assert scope is True
 

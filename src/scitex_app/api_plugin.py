@@ -317,7 +317,10 @@ class AuthScope:
     ``scopes`` are OAuth/OIDC scope strings. A route with NO scope is refused
     unless it says so explicitly with ``public=True``: forgetting to declare a
     scope must not silently open an endpoint, which is the fail-closed rule this
-    whole contract rests on. Native clients authenticate with
+    whole contract rests on. ``public=True`` in turn REQUIRES
+    ``project_scope="none"``: a public route is not user- or project-scoped, and
+    a public declaration that claims to be would tell a client that a listing is
+    filtered by an actor when it is not. Native clients authenticate with
     authorization-code + PKCE against these scopes — the contract never carries
     a client secret, because nothing here can hold one.
     """
@@ -347,6 +350,13 @@ class AuthScope:
             raise ApiPluginContractError(
                 f"auth declares public=True together with scopes "
                 f"{tuple(self.scopes)}; exactly one of the two describes it"
+            )
+        if self.public and self.project_scope != "none":
+            raise ApiPluginContractError(
+                f"auth declares public=True with project_scope="
+                f"{self.project_scope!r}; a public route is not scoped to an "
+                "actor or a project at all, so declare project_scope='none' — "
+                "anything else advertises a listing as filtered when it is not"
             )
 
 
