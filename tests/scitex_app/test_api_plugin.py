@@ -16,9 +16,11 @@ import pytest
 from scitex_app.api_plugin import (
     API_ENTRY_POINT_GROUP,
     DESCRIPTOR_IMPLEMENTATION,
+    OAUTH2_FLOW,
     OAUTH_SECURITY_SCHEME,
     RECOMMENDED_COMPUTE_COSTS,
     RECOMMENDED_RATE_CLASSES,
+    RESERVED_IDEMPOTENCY_HEADERS,
     ApiError,
     ApiField,
     ApiPlugin,
@@ -29,6 +31,7 @@ from scitex_app.api_plugin import (
     AuthScope,
     Deprecation,
     Idempotency,
+    OAuthProvider,
     Pagination,
     RateLimit,
     discover_api_plugins,
@@ -69,6 +72,20 @@ def _rate(**overrides) -> RateLimit:
     return RateLimit(**base)
 
 
+def _oauth(**overrides) -> OAuthProvider:
+    """The authorization server a scoped plugin has to declare (blocker 5)."""
+    base = {
+        "authorization_url": "https://auth.scitex.example/oauth2/authorize",
+        "token_url": "https://auth.scitex.example/oauth2/token",
+        "scopes": {
+            "recipes:write": "Create and modify recipes",
+            "recipes:read": "Read recipes",
+        },
+    }
+    base.update(overrides)
+    return OAuthProvider(**base)
+
+
 def _route(**overrides) -> ApiRoute:
     base = {
         "path": "recipes/save",
@@ -87,6 +104,7 @@ def _plugin(**overrides) -> ApiPlugin:
         "title": "FigRecipe",
         "api_version": "1",
         "routes": [_route()],
+        "oauth": _oauth(),
     }
     base.update(overrides)
     return ApiPlugin(**base)
@@ -1018,7 +1036,122 @@ def test_the_fragment_declares_the_security_scheme_component():
         OAUTH_SECURITY_SCHEME
     ]
     # Assert
-    assert scheme["scheme"] == "bearer"
+    assert list(scheme) == ["type", "description", "flows"]
+
+
+def test_the_security_scheme_is_oauth2_because_the_requirement_carries_scopes():
+    # Arrange — blocker 5: this arm used to pin `scheme == "bearer"`, i.e. an
+    # http bearer component while every operation requirement carried an OAuth2
+    # SCOPE ARRAY. A bearer scheme publishes no flows and no scope map, so the
+    # document named scopes it never defined and showed no way to obtain a token.
+    # Act
+    scheme = _plugin().openapi_fragment()["components"]["securitySchemes"][
+        OAUTH_SECURITY_SCHEME
+    ]
+    # Assert
+    assert scheme["type"] == "oauth2"
+
+
+def test_the_security_scheme_publishes_the_declared_flow_endpoints():
+    # Arrange — the endpoints come from the DECLARATION, never from a renderer:
+    # an invented production URL is a promise the leaf never made.
+    # Act
+    scheme = _plugin().openapi_fragment()["components"]["securitySchemes"][
+        OAUTH_SECURITY_SCHEME
+    ]
+    # Assert
+    assert scheme["flows"][OAUTH2_FLOW]["authorizationUrl"] == (
+        "https://auth.scitex.example/oauth2/authorize"
+    )
+
+
+def test_the_security_scheme_publishes_the_declared_token_endpoint():
+    # Arrange
+    # Act
+    scheme = _plugin().openapi_fragment()["components"]["securitySchemes"][
+        OAUTH_SECURITY_SCHEME
+    ]
+    # Assert
+    assert scheme["flows"][OAUTH2_FLOW]["tokenUrl"] == (
+        "https://auth.scitex.example/oauth2/token"
+    )
+
+
+def test_the_scheme_scope_map_names_the_scopes_the_requirement_carries():
+    # Arrange — the requirement and the scheme must agree: a scope named by an
+    # operation but absent from the scheme's map resolves to nothing.
+    # Act
+    fragment = _plugin().openapi_fragment()
+    declared = fragment["components"]["securitySchemes"][OAUTH_SECURITY_SCHEME][
+        "flows"
+    ][OAUTH2_FLOW]["scopes"]
+    required = fragment["paths"]["/recipes/save"]["get"]["security"][0][
+        OAUTH_SECURITY_SCHEME
+    ]
+    # Assert
+    assert all(scope in declared for scope in required)
+
+
+def test_a_scoped_plugin_without_an_oauth_provider_is_refused():
+    # Arrange — a scope-carrying requirement is satisfied by an oauth2 scheme,
+    # which cannot be emitted without the authorization/token endpoints.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="no OAuth provider"):
+        _plugin(oauth=None)
+
+
+def test_a_scope_the_provider_never_declares_is_refused():
+    # Arrange — the requirement would name a scope the scheme's map omits.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="does not declare"):
+        _plugin(oauth=_oauth(scopes={"other:scope": "Something else"}))
+
+
+def test_a_scope_declaration_that_is_not_a_mapping_is_refused():
+    # Arrange — a sequence of pairs is not the map OpenAPI requires.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="must be a mapping"):
+        _oauth(scopes=[("recipes:write", "Write recipes")])
+
+
+def test_an_empty_scope_map_is_refused():
+    # Arrange — the validator accepts an empty map (measured), so the refusal
+    # has to live here: a scheme defining no scope cannot back any requirement.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="declares none"):
+        _oauth(scopes={})
+
+
+def test_a_relative_authorization_url_is_refused():
+    # Arrange — a flow endpoint a client must call has to name scheme and host.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="absolute http"):
+        _oauth(authorization_url="/oauth2/authorize")
+
+
+def test_a_non_string_scope_description_is_refused():
+    # Arrange — the scheme's scope map is prose; a non-string is not.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="must be a non-blank string"):
+        _oauth(scopes={"recipes:write": 5})
+
+
+def test_a_public_only_plugin_needs_no_oauth_provider():
+    # Arrange — a public route carries `security: []` and names no scope, so
+    # there is nothing a provider would issue.
+    # Act
+    components = _plugin(
+        routes=[_route(auth=AuthScope(project_scope="none", public=True))],
+        oauth=None,
+    ).openapi_fragment()["components"]
+    # Assert
+    assert components["securitySchemes"] == {}
 
 
 def test_the_fragment_emits_a_path_parameter_for_every_placeholder():
@@ -1097,12 +1230,16 @@ def test_each_method_gets_its_own_operation_object():
 
 
 def test_the_operation_id_names_the_lowercased_method():
-    # Arrange
+    # Arrange — the path is PERCENT-ENCODED into the id, not flattened: the old
+    # `path.replace("/", "_")` form ("figrecipe.get.recipes_save") was lossy, and
+    # `a/b_c` collapsed onto the same id as `a_b/c` (blocker 1). A slash inside a
+    # path segment is spelled out, so the id cannot be confused with a path whose
+    # segment happens to contain the character the old joiner used.
     # Act
     fragment = _plugin().openapi_fragment()
     # Assert
     assert fragment["paths"]["/recipes/save"]["get"]["operationId"] == (
-        "figrecipe.get.recipes_save"
+        "figrecipe.get.recipes%2Fsave"
     )
 
 
@@ -1190,6 +1327,425 @@ def test_every_declared_route_appears_in_the_fragment():
     fragment = _plugin(routes=routes).openapi_fragment()
     # Assert
     assert sorted(fragment["paths"]) == ["/recipes/export", "/recipes/save"]
+
+
+# ─── blocker 1: operationIds are INJECTIVE, not lossy ──────────────────────
+#
+# `a/b_c` and `a_b/c` are two different routes whose paths both flattened to
+# `a_b_c` under the old `path.replace("/", "_")` slug, so the document carried
+# one operationId for two operations and openapi-spec-validator reported
+# `DuplicateOperationIDError`. Each arm below feeds that adversarial pair (or a
+# sibling of it) in, and the last one pins the encoding itself.
+
+
+def test_paths_that_flatten_to_one_slug_get_distinct_operation_ids():
+    # Arrange — the adversarial pair a/b_c vs a_b/c.
+    routes = [_route(path="a/b_c"), _route(path="a_b/c", handler="figrecipe.api:other")]
+    # Act
+    entry = _plugin(routes=routes).openapi_fragment()["paths"]
+    # Assert
+    assert entry["/a/b_c"]["get"]["operationId"] != entry["/a_b/c"]["get"]["operationId"]
+
+
+def test_a_placeholder_path_does_not_collide_with_its_literal_sibling():
+    # Arrange — the old id stripped the braces, so `call/{call_id}` and
+    # `call/call_id` both became `call_call_id`.
+    routes = [
+        _route(path="call/{call_id}", path_params=["call_id"]),
+        _route(path="call/call_id", handler="figrecipe.api:other"),
+    ]
+    # Act
+    entry = _plugin(routes=routes).openapi_fragment()["paths"]
+    # Assert
+    assert (
+        entry["/call/{call_id}"]["get"]["operationId"]
+        != entry["/call/call_id"]["get"]["operationId"]
+    )
+
+
+def test_the_operation_id_escapes_a_dot_inside_a_path_segment():
+    # Arrange — a declared segment may contain '.', which is the id's own field
+    # separator: left raw, (plugin id, method, path) could not be split back.
+    routes = [_route(path="get.a")]
+    # Act
+    operation_id = _plugin(routes=routes).openapi_fragment()["paths"]["/get.a"][
+        "get"
+    ]["operationId"]
+    # Assert
+    assert operation_id == "figrecipe.get.get%2Ea"
+
+
+def test_the_operation_id_encoding_is_injective_over_the_adversarial_corpus():
+    # Arrange — every pair here is one the lossy joiner conflated, fed through
+    # the public surface: one single-route plugin per path.
+    paths = [
+        ("a/b_c", ()),
+        ("a_b/c", ()),
+        ("call/{call_id}", ("call_id",)),
+        ("call/call_id", ()),
+        ("a.b", ()),
+        ("a_b", ()),
+        ("x/y", ()),
+        ("x_y", ()),
+        ("things/{id}", ("id",)),
+        ("things/{name}", ("name",)),
+    ]
+    ids = [
+        _plugin(
+            routes=[_route(path=path, path_params=list(params), handler="figrecipe.api:one")]
+        ).openapi_fragment()["paths"][f"/{path}"]["get"]["operationId"]
+        for path, params in paths
+    ]
+    # Act
+    distinct = set(ids)
+    # Assert
+    assert len(distinct) == len(ids)
+
+
+# ─── blocker 2: same-hierarchy templates are ONE OpenAPI path ──────────────
+#
+# `/things/{id}` and `/things/{name}` are the same path to OpenAPI, and
+# openapi-spec-validator 0.9.0 does NOT catch it (pinned below): a host merging
+# both would silently keep one operation. The refusal therefore has to happen at
+# construction, against the CANONICAL (placeholder-name-free) path.
+
+
+def test_two_same_hierarchy_templates_are_refused():
+    # Arrange — different placeholder names, one path.
+    routes = [
+        _route(path="things/{id}", path_params=["id"]),
+        _route(path="things/{name}", path_params=["name"], handler="figrecipe.api:other"),
+    ]
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="twice"):
+        _plugin(routes=routes)
+
+
+def test_a_template_and_a_literal_sibling_are_still_distinct_routes():
+    # Arrange — canonicalizing must not over-refuse: /things/{id} and /things/all
+    # really are two paths.
+    routes = [
+        _route(path="things/{id}", path_params=["id"]),
+        _route(path="things/all", handler="figrecipe.api:other"),
+    ]
+    # Act
+    plugin = _plugin(routes=routes)
+    # Assert
+    assert len(plugin.routes) == 2
+
+
+def test_a_dot_segment_in_a_path_is_refused():
+    # Arrange — RFC 3986 removes '.' segments, so two declarations could differ
+    # only by a segment the host discards.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match=r"has a '.' segment"):
+        _route(path="recipes/./save")
+
+
+def test_a_placeholder_repeated_in_one_path_is_refused():
+    # Arrange — two segments constrained by one value would emit the same path
+    # parameter twice, which is not a valid operation.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="more than once"):
+        _route(path="{a}/{a}/x", path_params=["a"])
+
+
+# ─── blocker 3: every nested descriptor is validated AT CONSTRUCTION ───────
+#
+# A dict that carries the right keys is not the descriptor. Before this, a dict
+# `auth` was accepted and reached fragment generation as
+# `AttributeError: 'dict' object has no attribute 'project_scope'` — an error
+# naming the renderer instead of the declaration.
+
+
+def test_a_dict_declared_where_the_auth_descriptor_belongs_is_refused():
+    # Arrange — the shape a JSON-ish config produces.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="expected an instance of AuthScope"):
+        _route(auth={"project_scope": "user", "scopes": ["recipes:write"]})
+
+
+def test_a_dict_declared_where_the_idempotency_descriptor_belongs_is_refused():
+    # Arrange — a mutating route whose retry promise is a plain dict.
+    # Act
+    # Assert
+    with pytest.raises(
+        ApiPluginContractError, match="expected an instance of Idempotency"
+    ):
+        _route(methods=["POST"], idempotency={"required": True})
+
+
+def test_a_dict_declared_where_the_pagination_descriptor_belongs_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(
+        ApiPluginContractError, match="expected an instance of Pagination"
+    ):
+        _route(pagination={"style": "offset", "default_limit": 20, "max_limit": 100})
+
+
+def test_a_dict_declared_where_the_audit_descriptor_belongs_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="expected an instance of Audit"):
+        _route(audit={"level": "full"})
+
+
+def test_a_dict_declared_where_the_deprecation_descriptor_belongs_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="expected an instance of Deprecation"):
+        _route(deprecation={"sunset_version": "2"})
+
+
+def test_a_dict_declared_where_the_oauth_provider_belongs_is_refused():
+    # Arrange — the provider is a descriptor too, and its URLs reach the
+    # document: a dict would render as a flow with no endpoints.
+    # Act
+    # Assert
+    with pytest.raises(
+        ApiPluginContractError, match="expected an instance of OAuthProvider"
+    ):
+        _plugin(oauth={"authorization_url": "https://a.example/x"})
+
+
+# ─── blocker 4: every value that reaches the document is a valid one ───────
+
+
+def test_a_schema_name_with_a_slash_is_refused():
+    # Arrange — measured: the validator rejects 'Bad/Name' on the component-key
+    # pattern '^[a-zA-Z0-9._-]+$'.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="component name"):
+        ApiSchema(name="Bad/Name", fields=[_field()])
+
+
+def test_a_schema_name_with_a_tilde_is_refused():
+    # Arrange — '~' is JSON-Pointer escaping and is not a component-key char.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="component name"):
+        ApiSchema(name="Bad~Name", fields=[_field()])
+
+
+def test_a_field_name_with_a_space_is_refused():
+    # Arrange — schemas and fields share one namespace, so both take the
+    # component-key alphabet rather than anything a JSON string allows.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="component name"):
+        _field(name="recipe path")
+
+
+def test_a_field_name_with_a_slash_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="component name"):
+        _field(name="recipe/path")
+
+
+def test_a_plugin_id_with_a_slash_is_refused():
+    # Arrange — the id prefixes every operationId and names the plugin.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="component name"):
+        _plugin(id="bad/id")
+
+
+def test_a_component_name_using_dots_and_dashes_is_accepted():
+    # Arrange — the rule is the specification's alphabet, not an over-strict one.
+    # Act
+    schema = ApiSchema(name="Recipe.State-1", fields=[_field()])
+    # Assert
+    assert schema.name == "Recipe.State-1"
+
+
+def test_a_non_string_field_description_is_refused():
+    # Arrange — a JSON-Schema description is a string; `5` reached the document
+    # verbatim and made it invalid.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="must be a string"):
+        _field(description=5)
+
+
+def test_a_non_string_quota_note_is_refused():
+    # Arrange — the same rule for the rate descriptor's prose.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="must be a string"):
+        _rate(quota_note=5)
+
+
+# ─── blocker 6: a reserved header cannot carry an idempotency key ──────────
+
+
+def test_authorization_as_the_idempotency_header_is_refused():
+    # Arrange — the client sends its credential in Authorization: one header
+    # cannot carry both that and a replay key.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="RESERVED"):
+        Idempotency(required=True, key_header="Authorization")
+
+
+def test_the_reserved_header_check_ignores_case():
+    # Arrange — HTTP field names are case-insensitive, so this is the same name.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="RESERVED"):
+        Idempotency(required=True, key_header="authorization")
+
+
+def test_proxy_authorization_as_the_idempotency_header_is_refused():
+    # Arrange — the Proxy-Authorization family shares the case above.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="RESERVED"):
+        Idempotency(required=True, key_header="Proxy-Authorization")
+
+
+def test_cookie_as_the_idempotency_header_is_refused():
+    # Arrange — Cookie carries session state, not a replay promise.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="RESERVED"):
+        Idempotency(required=True, key_header="Cookie")
+
+
+def test_set_cookie_as_the_idempotency_header_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="RESERVED"):
+        Idempotency(required=True, key_header="Set-Cookie")
+
+
+def test_host_as_the_idempotency_header_is_refused():
+    # Arrange — Host is the request target, not a key a client may set.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="RESERVED"):
+        Idempotency(required=True, key_header="Host")
+
+
+def test_content_length_as_the_idempotency_header_is_refused():
+    # Arrange — a framing field cannot also carry an application value.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="RESERVED"):
+        Idempotency(required=True, key_header="Content-Length")
+
+
+def test_content_type_as_the_idempotency_header_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="RESERVED"):
+        Idempotency(required=True, key_header="Content-Type")
+
+
+def test_transfer_encoding_as_the_idempotency_header_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="RESERVED"):
+        Idempotency(required=True, key_header="Transfer-Encoding")
+
+
+def test_connection_as_the_idempotency_header_is_refused():
+    # Arrange — a hop-by-hop control is not the endpoint's to reinterpret.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="RESERVED"):
+        Idempotency(required=True, key_header="Connection")
+
+
+def test_the_reserved_set_covers_the_declared_families():
+    # Arrange — calibration of the exported constant, so a silent narrowing of
+    # the set cannot pass as "still refused".
+    declared = {"authorization", "proxy-authorization", "cookie", "set-cookie", "host"}
+    declared |= {"content-length", "content-type", "transfer-encoding", "connection"}
+    # Act
+    reserved = set(RESERVED_IDEMPOTENCY_HEADERS)
+    # Assert
+    assert declared <= reserved
+
+
+# ─── blocker 7: declared sequences are deterministic, ordered inputs ───────
+#
+# `_require_elements` used to accept ANY iterable. A set's order is the hash
+# seed's, and a generator is consumed by the first render, so one declaration
+# could render two different documents (or none at all).
+
+
+def test_a_set_of_methods_is_refused():
+    # Arrange — a set is not ordered, so the declaration is not stable.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="a set"):
+        _route(methods={"GET"})
+
+
+def test_a_dict_of_methods_is_refused():
+    # Arrange — a dict iterates its keys and means something other than a list.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="a dict"):
+        _route(methods={"GET": True})
+
+
+def test_a_set_of_scopes_is_refused():
+    # Arrange — a scope list is ORDERED (it is copied into the requirement).
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="a set"):
+        AuthScope(project_scope="project", scopes={"recipes:read", "recipes:write"})
+
+
+def test_a_string_of_scopes_is_refused():
+    # Arrange — the case to kill: "abc" must not become three one-character
+    # scopes by being iterated.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="a str"):
+        AuthScope(project_scope="project", scopes="abc")
+
+
+def test_a_set_of_errors_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="a set"):
+        _route(errors={ApiError(code="no_recipe", status=400, message="x")})
+
+
+def test_a_generator_of_enum_values_is_refused():
+    # Arrange — a generator is consumed by the FIRST render; a second call would
+    # see an empty enum and silently emit a document with no enum at all.
+    enum = (name for name in ("csv", "png"))
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="a generator"):
+        _field(enum=enum)
+
+
+def test_a_tuple_of_methods_is_accepted_and_keeps_its_order():
+    # Arrange — the strictness is about ORDER being declared, and a tuple
+    # declares it.
+    # Act
+    methods = _route(methods=("GET", "POST"), idempotency=Idempotency(required=True)).methods
+    # Assert
+    assert methods == ("GET", "POST")
 
 
 # ─── discovery: entry points are read, never imported ──────────────────────
@@ -1359,6 +1915,83 @@ def test_the_validated_document_carries_the_declared_security_scheme():
     validate(document)
     # Assert
     assert list(document["components"]["securitySchemes"]) == [OAUTH_SECURITY_SCHEME]
+
+
+def test_the_validator_accepts_the_document_for_the_two_flattening_paths():
+    # Arrange — blocker 1, through the real validator: `a/b_c` and `a_b/c` are
+    # distinct routes that the old lossy operationId collapsed into one, and the
+    # validator refused the document with DuplicateOperationIDError. This is the
+    # arm that failed before the fix.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    routes = [_route(path="a/b_c"), _route(path="a_b/c", handler="figrecipe.api:other")]
+    document = _validated_document(_plugin(routes=routes))
+    # Act
+    result = validate(document)
+    # Assert
+    assert result is None
+
+
+def test_the_validator_refuses_a_component_key_outside_the_alphabet():
+    # Arrange — blocker 4, pinned against the validator rather than against a
+    # literal regex: the contract's component-name rule IS this check, applied at
+    # construction so the invalid document is never buildable. The document here
+    # is built from a VALID declaration and then renamed by hand.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    errors = pytest.importorskip("openapi_spec_validator.validation.exceptions")
+    routes = [_route(response=_schema(name="RecipeState"))]
+    document = _validated_document(_plugin(routes=routes))
+    schemas = document["components"]["schemas"]
+    schemas["Bad/Name"] = schemas.pop("RecipeState")
+    # Act
+    # Assert
+    with pytest.raises(errors.OpenAPIValidationError):
+        validate(document)
+
+
+def test_the_validator_does_not_catch_two_same_hierarchy_templates():
+    # Arrange — blocker 2: fed the /things/{id} + /things/{name} document
+    # DIRECTLY, openapi-spec-validator 0.9.0 accepts it. Nothing downstream
+    # reports the conflict, so the refusal has to live in the contract (see
+    # test_two_same_hierarchy_templates_are_refused) rather than in the check a
+    # host runs on the merged document.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+
+    def path_parameter(name: str) -> dict:
+        return {
+            "name": name,
+            "in": "path",
+            "required": True,
+            "schema": {"type": "string"},
+        }
+
+    document = {
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {
+            "/things/{id}": {
+                "get": {"operationId": "a", "parameters": [path_parameter("id")]}
+            },
+            "/things/{name}": {
+                "get": {"operationId": "b", "parameters": [path_parameter("name")]}
+            },
+        },
+    }
+    # Act
+    result = validate(document)
+    # Assert
+    assert result is None
+
+
+def test_the_validator_accepts_the_document_of_a_public_only_plugin():
+    # Arrange — a plugin with no provider emits no securitySchemes; the document
+    # must still be complete rather than carry a dangling scheme.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    routes = [_route(auth=AuthScope(project_scope="none", public=True))]
+    document = _validated_document(_plugin(routes=routes, oauth=None))
+    # Act
+    result = validate(document)
+    # Assert
+    assert result is None
 
 
 # EOF
