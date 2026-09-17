@@ -1,0 +1,47 @@
+{# THE CONSUMER CONTRACT, as a template. Three states, three renderings.
+
+   A page that rendered the `none` and `unavailable` arms identically would look
+   correct and would be the silent failure the product rules forbid: the visitor
+   cannot tell "you have not chosen a project" from "the project service is
+   down", and the remedy for one is not the remedy for the other.
+
+   Note there is no path anywhere below, and no URL construction. The change
+   action is addressed by the COMMAND NAME the context carries, so a keystroke,
+   a macro and an agent can invoke the same operation this button does. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Project context</title>
+</head>
+<body>
+  <section id="project-context" data-state="{{ project_state }}">
+    <h1>Project context</h1>
+
+    {% if active_project %}
+      <p id="active-project" data-project-id="{{ active_project.id }}">
+        Current project: <strong>{{ active_project.name }}</strong>
+      </p>
+
+    {% elif project_state == "unavailable" %}
+      <p id="unavailable">
+        Projects are temporarily unavailable. Nothing has been changed.
+      </p>
+
+    {% elif project_state == "denied" %}
+      <p id="denied">
+        That project is not available to you. The current project is unchanged.
+      </p>
+
+    {% else %}
+      <p id="no-project">No project is selected yet. Choose one to continue.</p>
+    {% endif %}
+
+    <form method="post" action="change">
+      <input type="hidden" name="command" value="{{ project_command }}">
+      <input name="project" aria-label="Project id">
+      <button type="submit">Change project</button>
+    </form>
+  </section>
+</body>
+</html>
