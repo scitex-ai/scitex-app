@@ -446,7 +446,23 @@ def _require_oauth_endpoint_url(value: object, label: str) -> str:
     # something else out of (or into) its result, the parse and the stored text
     # stop agreeing and the declaration is refused instead of published.
     reparsed = urlsplit(text)
-    if (reparsed.scheme, reparsed.netloc, reparsed.hostname) != (
+    # HOSTS ARE COMPARED CASE-INSENSITIVELY, AND ONLY THE HOST (fifth review,
+    # 2026-09-17). Measured: `urlsplit` preserves the case it is handed whenever
+    # the host contains a percent escape — `https://ex%2Fample.example/…` and
+    # `https://%41BC.example/…` both come back with their case intact — while
+    # this module lowercases the raw host for its reg-name grammar check. RFC
+    # 3986 §3.2.2 makes the host case-insensitive (and §2.1 makes a percent
+    # triplet's hex digits case-insensitive), so a case difference here is NOT a
+    # round-trip failure and must not refuse a valid endpoint. The RAW declared
+    # string is still what is stored and emitted; this comparison only stops
+    # host case deciding a URL's validity. Authority and scheme are compared as
+    # parsed: netloc round-trips verbatim (no normalisation either side), and
+    # the scheme is already lowercased by both.
+    if (
+        reparsed.scheme,
+        reparsed.netloc,
+        (reparsed.hostname or "").lower(),
+    ) != (
         parts.scheme,
         authority,
         hostname,

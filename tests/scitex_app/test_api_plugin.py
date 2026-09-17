@@ -2684,4 +2684,127 @@ def test_the_validator_accepts_a_malformed_flow_url():
     assert result is None
 
 
+# ─── fifth review: percent-triplet HEX CASE must not decide validity ───────
+# A reg-name host may carry percent triplets, and RFC 3986 §2.1 makes their hex
+# digits case-insensitive — but urlsplit preserves the case it was handed while
+# the module lowercases the raw host for its grammar check, so
+# `https://%41BC.example/…` was refused as "does not round-trip". These arms pin
+# both directions: the URL is ACCEPTED and it is EMITTED VERBATIM (the raw
+# declared string, not a lowercased hex form).
+
+_UP_HEX_AUTH = "https://%41BC.example/oauth2/authorize"
+_UP_HEX_TOKEN = "https://%41BC.example/oauth2/token"
+
+
+def _up_hex_provider() -> OAuthProvider:
+    """A provider whose reg-name host carries an UPPERCASE-hex triplet."""
+    return OAuthProvider(
+        authorization_url=_UP_HEX_AUTH,
+        token_url=_UP_HEX_TOKEN,
+        scopes={"recipes:write": "write"},
+    )
+
+
+def _up_hex_flow() -> dict:
+    """The emitted authorizationCode flow of that provider."""
+    plugin = ApiPlugin(
+        id="figrecipe",
+        title="FigRecipe",
+        api_version="1",
+        oauth=_up_hex_provider(),
+        routes=[
+            ApiRoute(
+                path="recipes/save",
+                methods=["GET"],
+                handler="figrecipe.api:save_recipe",
+                auth=AuthScope(scopes=["recipes:write"]),
+                rate=RateLimit("interactive", "light"),
+            )
+        ],
+    )
+    schemes = plugin.openapi_fragment()["components"]["securitySchemes"]
+    return schemes["scitexOAuth"]["flows"]["authorizationCode"]
+
+
+def test_an_uppercase_hex_triplet_in_the_authorization_host_is_accepted():
+    # Arrange — the fifth-review blocker: this used to be refused.
+    # Act
+    provider = _up_hex_provider()
+    # Assert — construction succeeds and the RAW string is what is stored.
+    assert provider.authorization_url == _UP_HEX_AUTH
+
+
+def test_the_uppercase_hex_authorization_url_is_emitted_verbatim():
+    # Arrange — emitted, not merely accepted (checking construction was the
+    # gap in the round-four verification).
+    # Act
+    flow = _up_hex_flow()
+    # Assert — the declared case survives into the document.
+    assert flow["authorizationUrl"] == _UP_HEX_AUTH
+
+
+def test_an_uppercase_hex_triplet_in_the_token_host_is_accepted():
+    # Arrange
+    # Act
+    provider = _up_hex_provider()
+    # Assert
+    assert provider.token_url == _UP_HEX_TOKEN
+
+
+def test_the_uppercase_hex_token_url_is_emitted_verbatim():
+    # Arrange — the reviewer required regressions for token_url as well as
+    # authorization_url.
+    # Act
+    flow = _up_hex_flow()
+    # Assert
+    assert flow["tokenUrl"] == _UP_HEX_TOKEN
+
+
+def test_the_emitted_hex_url_still_validates_as_openapi():
+    # Arrange — acceptance must not buy correctness: the document has to stand.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    document = {
+        "openapi": "3.1.0",
+        "info": {"title": "FigRecipe", "version": "1"},
+        **_up_hex_flow_document(),
+    }
+    # Act
+    result = validate(document)
+    # Assert
+    assert result is None
+
+
+def _up_hex_flow_document() -> dict:
+    """The fragment of the uppercase-hex provider's plugin."""
+    plugin = ApiPlugin(
+        id="figrecipe",
+        title="FigRecipe",
+        api_version="1",
+        oauth=_up_hex_provider(),
+        routes=[
+            ApiRoute(
+                path="recipes/save",
+                methods=["GET"],
+                handler="figrecipe.api:save_recipe",
+                auth=AuthScope(scopes=["recipes:write"]),
+                rate=RateLimit("interactive", "light"),
+            )
+        ],
+    )
+    return plugin.openapi_fragment()
+
+
+def test_a_lowercase_hex_triplet_host_is_still_accepted():
+    # Arrange — the control: folding hex case must not START refusing the form
+    # that already worked.
+    # Act
+    provider = OAuthProvider(
+        authorization_url="https://%41bc.example/oauth2/authorize",
+        token_url="https://%41bc.example/oauth2/token",
+        scopes={"recipes:write": "write"},
+    )
+    # Assert
+    assert provider.authorization_url == "https://%41bc.example/oauth2/authorize"
+
+
 # EOF
