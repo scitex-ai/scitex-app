@@ -121,6 +121,19 @@ concurrency = ["multiprocessing", "thread"]
 [tool.scitex-linter]
 library_dirs = ["src", "tests", "examples"]
 
+# Ruff: scitex_app is THIS repo's own package, so import ordering must treat it
+# as first-party. Without this line ruff AUTO-DETECTS the source layout, and the
+# detection changed: ruff 0.16.8 (installed here) classifies `scitex_app` as
+# first-party and accepts the blank line between `import pytest` and
+# `from scitex_app.api_plugin import ...`, while older ruff (measured 0.4.10)
+# classifies it as third-party and demands that blank line be REMOVED — i.e.
+# the same file cannot satisfy both tools by editing imports alone. Pinning the
+# classification makes one layout correct for every ruff generation, which is
+# what an import-order finding on a shared branch needs. Raised by the PR #200
+# exact-head review (2026-09-17), whose ruff disagreed with the installed one.
+[tool.ruff.lint.isort]
+known-first-party = ["scitex_app"]
+
 [tool.scitex_dev]
 # §6 MCP-tool <-> Python-API parity exemption (scitex-dev
 # _mcp_parity.py). scitex-app's public surface is a mix: agent-actionable
