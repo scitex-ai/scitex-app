@@ -414,25 +414,188 @@ def test_scoped_excludes_null_owner_via_public_grant(_db, _testing):
     assert got == {"doc:/pub"}
 
 
-def test_scoped_excludes_malformed_parent_via_resource_grant(_db, _testing):
-    """Hub review 3, item 1: a malformed access_parent (doc:relative,
-    doc:/../x) that bypassed save() is excluded at QUERY level when the row
-    is admitted via a resource grant — the parent canonical check is what
-    excludes it, since ref + owner are both valid."""
+def test_scoped_admits_a_core_constructible_parent_when_the_core_grants(_db, _testing):
+    """Hub verdict 2026-09-17 (PR #198 re-review, blocker): `doc:/../x` as a
+    PARENT is constructible in the core (`split_resource_ref` is shape-only;
+    only a resource's OWN path is '..'-checked), so a row the core grants must
+    not be dropped by the query. This supersedes the earlier, stricter parent
+    clause, which is what produced check=True/query=False."""
     # Arrange
     _core, _testing = _testing
     _NullableOwnerRow.objects.all().delete()
-    good = "doc:/child"
-    _raw_insert(_NullableOwnerRow, good, "user:u1", parent="doc:/parent")  # valid parent
-    bad_rel = "doc:/rel"
-    _raw_insert(_NullableOwnerRow, bad_rel, "user:u1", parent="doc:relative")   # non-absolute parent
-    bad_trav = "doc:/trav"
-    _raw_insert(_NullableOwnerRow, bad_trav, "user:u1", parent="doc:/../x")     # traversal parent
-    f = _make_filter(resources=[good, bad_rel, bad_trav])
+    ref = "doc:/trav"
+    _raw_insert(_NullableOwnerRow, ref, "user:u1", parent="doc:/../x")
+    f = _make_filter(resources=[ref])
+    # Act
+    got = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)}
+    # Assert — admitted, because the core admits it (ref + owner canonical).
+    assert got == {ref}
+
+
+def test_scoped_excludes_a_parent_the_core_cannot_construct(_db, _testing):
+    """The other direction of the same rule: `doc:relative` is NOT a ref the
+    core can construct a Resource from, so excluding it AGREES with the core
+    (there is no resource for check() to grant)."""
+    # Arrange
+    _core, _testing = _testing
+    _NullableOwnerRow.objects.all().delete()
+    good, bad = "doc:/child", "doc:/rel"
+    _raw_insert(_NullableOwnerRow, good, "user:u1", parent="doc:/parent")
+    _raw_insert(_NullableOwnerRow, bad, "user:u1", parent="doc:relative")
+    f = _make_filter(resources=[good, bad])
     # Act
     got = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)}
     # Assert
     assert got == {good}
+
+
+# --------------------------------------------------------------------------
+# HUB VERDICT 2026-09-17 (PR #198 re-review at bbfbb9a): `filter.parents`
+# DIFFERENTIALS. For each parent form the hub named — plus the canonical
+# control — the core's own per-row decision (`AccessFilter.matches` on a real
+# Resource built from the row) and the adapter's query must be EQUAL. A
+# divergence in either direction is the blocker: check=True/query=False drops
+# a row the core grants (what was measured), and check=False/query=True would
+# admit one the core denies.
+# --------------------------------------------------------------------------
+
+#: (label, parent) pairs: the three forms the core ACCEPTS and the adapter used
+#: to reject, plus the canonical control.
+_PARENT_FORMS = (
+    ("uppercase-kind", "Doc:/parent"),
+    ("traversal", "doc:/../parent"),
+    ("empty-kind", ":/parent"),
+    ("canonical", "doc:/parent"),
+)
+
+
+@pytest.mark.parametrize("label,parent", _PARENT_FORMS)
+def test_parent_form_differential_check_equals_query(label, parent, _db, _testing):
+    """check() and to_q() must agree for every parent form the core accepts."""
+    # Arrange
+    _core, _testing = _testing
+    _NullableOwnerRow.objects.all().delete()
+    ref = "doc:/child"
+    _raw_insert(_NullableOwnerRow, ref, "user:u1", parent=parent)
+    row = _NullableOwnerRow.objects.first()
+    f = _make_filter(parents=[parent])
+    resource = _core.Resource(
+        kind="doc",
+        path="/child",
+        owner=_core.Principal("user", "u1"),
+        parent=parent,
+    )
+    # Act
+    check = f.matches(resource)
+    query = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)} == {ref}
+    # Assert — equal in BOTH directions for this form.
+    assert check is query
+
+
+@pytest.mark.parametrize("label,parent", _PARENT_FORMS)
+def test_parent_form_is_admitted_by_the_query(label, parent, _db, _testing):
+    """The measured blocker itself: each form must actually be RETURNED (the
+    core grants it), not merely agree with a False check()."""
+    # Arrange
+    _core, _testing = _testing
+    _NullableOwnerRow.objects.all().delete()
+    ref = "doc:/child"
+    _raw_insert(_NullableOwnerRow, ref, "user:u1", parent=parent)
+    f = _make_filter(parents=[parent])
+    # Act
+    got = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)}
+    # Assert
+    assert got == {ref}
+
+
+def test_a_parent_the_core_denies_is_not_admitted_by_the_query(_db, _testing):
+    """Control in the denying direction: a parent NOT in the filter is denied
+    by check() and must not be returned by the query either."""
+    # Arrange
+    _core, _testing = _testing
+    _NullableOwnerRow.objects.all().delete()
+    ref = "doc:/child"
+    _raw_insert(_NullableOwnerRow, ref, "user:u1", parent="doc:/other")
+    row = _NullableOwnerRow.objects.first()
+    f = _make_filter(parents=["doc:/parent"])
+    resource = _core.Resource(
+        kind="doc", path="/child", owner=_core.Principal("user", "u1"), parent="doc:/other"
+    )
+    # Act
+    check = f.matches(resource)
+    query = {r.access_ref for r in _NullableOwnerRow.objects.scoped(f)} == {ref}
+    # Assert
+    assert (check, query) == (False, False)
+
+
+def test_save_accepts_the_core_parent_forms(_db, _testing):
+    """save() must accept what the core accepts, or the write path becomes the
+    divergent side (the same class of bug, mirrored)."""
+    # Arrange
+    _NullableOwnerRow.objects.all().delete()
+    parents = [parent for _label, parent in _PARENT_FORMS]
+    # Act
+    errors = []
+    for parent in parents:
+        row = _NullableOwnerRow(access_ref="doc:/child", access_parent=parent, access_owner="user:u1")
+        try:
+            row.save()
+        except _ad.InvalidAccessRowError as exc:
+            errors.append((parent, exc))
+    # Assert — none of the core's forms is refused at write time.
+    assert errors == []
+
+
+def test_save_refuses_a_parent_the_core_cannot_construct():
+    """`doc:relative` has no leading '/', so the core refuses it as a parent
+    and so must save()."""
+    # Arrange
+    row = _NullableOwnerRow(access_ref="doc:/child", access_parent="doc:relative", access_owner="user:u1")
+    # Act
+    error = None
+    try:
+        row.save()
+    except _ad.InvalidAccessRowError as exc:
+        error = exc
+    # Assert
+    assert error is not None
+
+
+def test_the_parent_predicate_agrees_with_the_core_own_splitter(_testing):
+    """The strongest form of the alignment: the adapter's predicate is pinned
+    to the CORE'S OWN function rather than to a re-derived grammar. Runs in the
+    conformance job (and any env with the core installed); skipped otherwise,
+    with the reason naming what was not checked."""
+    # Arrange
+    _core, _testing = _testing
+    from scitex_dev.access._types import split_resource_ref
+
+    candidates = [
+        "doc:/parent",
+        "Doc:/parent",
+        "doc:/../parent",
+        ":/parent",
+        "::/x",
+        "doc:relative",
+        "doc:",
+        "",
+        "/parent",
+        "doc:/a/b",
+    ]
+    # Act
+    disagreements = []
+    for candidate in candidates:
+        try:
+            split_resource_ref(candidate)
+            core_accepts = True
+        except Exception:
+            core_accepts = False
+        adapter_accepts = bool(_ad._PARENT_REF.match(candidate))
+        if core_accepts is not adapter_accepts:
+            disagreements.append((candidate, core_accepts, adapter_accepts))
+    # Assert — no candidate where the two grammars disagree.
+    assert disagreements == []
+
 
 
 def test_owner_traversal_refused_user():

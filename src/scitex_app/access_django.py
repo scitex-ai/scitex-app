@@ -35,6 +35,22 @@ well-formed) so a row that slips past (a) is still EXCLUDED from every scoped
 query, never admitted. The core's ``matches`` only ever sees well-formed rows,
 so the conjunct is a no-op on valid data and a shield on bad data.
 
+THE CONJUNCT IS "WHAT THE CORE ACCEPTS", PER FIELD, NOT ONE GRAMMAR FOR ALL
+THREE (hub verdict 2026-09-17, PR #198 re-review at bbfbb9a). The core applies
+DIFFERENT rules to the three dimensions, so a single strict grammar was itself
+a divergence — measured: the core accepted rows whose parent was
+``Doc:/parent``/``doc:/../parent``/``:/parent`` while the query rejected them,
+i.e. a row the core GRANTED was silently dropped (check=True/query=False).
+Each field therefore mirrors the core's OWN rule for that field:
+``access_ref`` = canonical ``kind:/...`` with no ``..`` (the core's ``Resource``
+path rule), ``access_owner`` = ``user:``/``org:`` with a valid segment (the
+core's ``Principal``/``Resource`` owner rule), ``access_parent`` = the core's
+``split_resource_ref`` shape only (see ``_PARENT_REF`` — kind case and ``..``
+are NOT checked there, because the core does not check them). A diverging rule
+is not "extra safety": in one direction it drops rows the core grants, in the
+other it admits rows the core would reject, and both break the equivalence this
+module exists to provide.
+
 DEPENDENCY GATE (hub review items 2 + 4): the adapter imports
 ``scitex_dev.access`` ONLY inside ``AccessScopedManager.scoped`` — never at
 module load — so this file imports cleanly in scitex-app CI (which pins an
@@ -136,7 +152,39 @@ _OWNER_TRAVERSAL = re.compile(r"\.\.")
 # required to be immediately followed by ":/" — i.e. the path is absolute —
 # which is exactly check_ref's "path.startswith('/')" for the field as a whole.
 # Traversal ("..") is excluded separately, matching check_ref's ".. in path".
+#
+# THIS PATTERN IS FOR THE ROW'S OWN IDENTITY (access_ref) ONLY. A PARENT is a
+# different grammar: see _PARENT_REF below, which mirrors the core instead of
+# the save path, because the core's own parent rule is looser than this one.
 _REF_QUERY = re.compile(_KIND_NAME.pattern.rstrip("$") + r":/")
+
+# The PARENT grammar, taken from the CORE ITSELF rather than from this
+# module's stricter save grammar. Hub verdict 2026-09-17 (PR #198 re-review at
+# bbfbb9a, blocker): "core accepts inherited parents Doc:/parent,
+# doc:/../parent, :/parent, adapter query rejects; reproduced
+# check=True/query=False" — a silent UNDER-REPORT, which is the one failure a
+# filter translation must not have.
+#
+# MEASURED against the exact core (scitex-dev 72e8891584d8,
+# ``scitex_dev.access._types.split_resource_ref`` + ``Resource.__post_init__``):
+#
+#   'Doc:/parent'       -> accepted   (kind CASE is not checked for a parent)
+#   'doc:/../parent'    -> accepted   (a parent is compared by STRING equality
+#                                      against the default grants; only a
+#                                      resource's OWN path is '..'-checked)
+#   ':/parent'          -> accepted   (empty kind is not checked for a parent)
+#   'doc:/parent'       -> accepted
+#   'doc:relative'      -> REFUSED    (path does not start with '/')
+#   'doc:'              -> REFUSED    (no path at all)
+#
+# So the accept condition is exactly "contains a ':' AND the part after the
+# FIRST ':' starts with '/'", which is what this pattern encodes ('::/x' is
+# refused because the part after the first ':' is ':/x'). Mirrored rather than
+# invented: a row whose parent fails this shape is one the core cannot
+# construct a Resource from, so excluding it AGREES with the core; a row whose
+# parent passes it is a resource the core decides on, and the adapter
+# translates that decision instead of overriding it.
+_PARENT_REF = re.compile(r"^[^:]*:/")
 
 
 def _owner_is_canonical(value: Optional[str]) -> bool:
@@ -149,6 +197,26 @@ def _owner_is_canonical(value: Optional[str]) -> bool:
     if not isinstance(value, str) or not _OWNER.match(value):
         return False
     return _OWNER_TRAVERSAL.search(value) is None
+
+
+def _check_parent(value: Optional[str], field: str) -> None:
+    """Fail closed on a parent the core could not put on a ``Resource``.
+
+    The grammar is the CORE's (``split_resource_ref``), measured rather than
+    assumed: a parent must contain ``':'`` and the part after the FIRST ``':'``
+    must start with ``'/'``. Kind case and traversal are deliberately NOT
+    checked here — the core does not check them for a parent, and a rule the
+    core does not have is a divergence, not extra safety (hub verdict
+    2026-09-17). ``None`` is the top-level case and stays valid.
+    """
+    if value is None:
+        return
+    if not isinstance(value, str) or not _PARENT_REF.match(value):
+        raise InvalidAccessRowError(
+            f"{field} {value!r} is not a ref the access core accepts as a "
+            "parent: it must contain ':' with the part after it starting with "
+            "'/' (the core's own split_resource_ref rule)"
+        )
 
 
 def _validate_dimensions(
@@ -194,7 +262,14 @@ def _validate_dimensions(
         )
 
     check_ref(access_ref, "access_ref")
-    check_ref(access_parent, "access_parent")
+    # The PARENT uses the CORE's grammar, not check_ref's: measured against the
+    # exact core, a parent is accepted when it contains ':' and its remainder
+    # starts with '/' — kind case and '..' are NOT checked there (see
+    # _PARENT_REF). Using the stricter save grammar here was what produced
+    # check=True/query=False for 'Doc:/parent', 'doc:/../parent' and ':/parent'
+    # (hub verdict 2026-09-17), so save() must accept what the core accepts or
+    # the two paths disagree again in the other direction.
+    _check_parent(access_parent, "access_parent")
 
 
 def _canonical_row_q() -> Q:
@@ -216,10 +291,16 @@ def _canonical_row_q() -> Q:
     """
     ref_q = Q(access_ref__regex=_REF_QUERY.pattern) & ~Q(access_ref__contains="..")
     owner_q = Q(access_owner__regex=_OWNER.pattern) & ~Q(access_owner__contains="..")
-    # access_parent is nullable: it must be either absent OR a canonical
-    # kind:/... ref with no traversal (check_ref treats "" as non-absolute).
-    parent_q = Q(access_parent__isnull=True) | (
-        Q(access_parent__regex=_REF_QUERY.pattern) & ~Q(access_parent__contains="..")
+    # access_parent is nullable: it must be either absent OR a ref the CORE
+    # accepts as a parent (_PARENT_REF — kind case and '..' are not checked
+    # there, because the core does not check them either). Hub verdict
+    # 2026-09-17: the previous, stricter parent clause made the query reject
+    # parents the core accepts, so a row the core GRANTED was silently dropped
+    # (check=True/query=False). The clause now mirrors the core; a parent the
+    # core cannot construct a Resource from ('doc:relative', 'doc:') is still
+    # excluded, which is agreement rather than strictness.
+    parent_q = Q(access_parent__isnull=True) | Q(
+        access_parent__regex=_PARENT_REF.pattern
     )
     return ref_q & owner_q & parent_q
 
@@ -322,6 +403,8 @@ __all__ = [
     "AccessScopedModel",
     "InvalidAccessRowError",
     "ScitexDevAccessMissingError",
+    "_PARENT_REF",
+    "_check_parent",
     "_load_core",
     "_missing_access",
     "to_q",
