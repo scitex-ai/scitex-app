@@ -20,17 +20,47 @@ When the access release lands, the proof runs and is the merge gate.
 
 from __future__ import annotations
 
+import os
+
 import django
 import pytest
 from django.conf import settings
 from django.db import connection, models
 
+# WHY THE REAL DATABASE IS CONFIGURED ONLY FOR THE STRICT PROOF RUN.
+#
+# Django settings are PROCESS-GLOBAL, and pytest imports every module it will
+# run into one process — under CI's `-n auto`, one process per xdist worker. A
+# real `DATABASES["default"]` configured here therefore leaks into whatever else
+# that worker runs. Measured on PR #198 (commit b1b253a): five
+# tests/scitex_app/_chat cases assert "this process really has no database" and
+# failed in the workers that also received this module; reproduced
+# deterministically (no xdist needed) with
+#
+#     pytest tests/scitex_app/test_access_django.py \
+#            tests/scitex_app/_chat/test__django_db_free.py ...   -> 5 failed
+#
+# Neither module is wrong: the _chat suite states a TRUE precondition about the
+# process it runs in, and this module needs a real DB to prove its translation.
+# So the DB is configured only where it is the POINT of the run — the isolated
+# conformance step, which sets SCITEX_ACCESS_STRICT=1 (the same flag that turns
+# any skip into a failure). Everywhere else this module configures the same
+# empty DATABASES as its siblings, and its DB-backed cases skip with the reason
+# the `_db` fixture gives. The strict step runs this module ALONE, so nothing
+# else in that process can be affected.
+_ACCESS_STRICT_PROOF = os.environ.get("SCITEX_ACCESS_STRICT") == "1"
+
 if not settings.configured:
-    # In-memory SQLite so the Q is exercised against a real table, not a mock.
     settings.configure(
         DEFAULT_CHARSET="utf-8",
         ALLOWED_HOSTS=["*"],
-        DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}},
+        # In-memory SQLite so the Q is exercised against a real table, not a
+        # mock — ONLY in the proof run (see above).
+        DATABASES=(
+            {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
+            if _ACCESS_STRICT_PROOF
+            else {}
+        ),
         INSTALLED_APPS=["django.contrib.contenttypes"],
     )
     django.setup()
