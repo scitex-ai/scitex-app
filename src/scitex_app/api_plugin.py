@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """The leaf API-plugin contract: what an approved leaf DECLARES about its API.
 
 A leaf app (FigRecipe, Writer, Scholar, ...) owns the behaviour of its own
@@ -42,12 +41,9 @@ for the card's owner — see the note in :data:`DESCRIPTOR_IMPLEMENTATION`.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
-from dataclasses import dataclass
-from dataclasses import field
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 from typing import Any
-from typing import Optional
-from typing import Sequence
 
 #: How the descriptors are implemented, stated where a reader will look. The
 #: alternative (pydantic v2 models) would add a hard dependency to a package
@@ -430,8 +426,8 @@ class Pagination:
     """The route's list-envelope promise."""
 
     style: str = "none"
-    default_limit: Optional[int] = None
-    max_limit: Optional[int] = None
+    default_limit: int | None = None
+    max_limit: int | None = None
 
     def __post_init__(self) -> None:
         _require_choice(self.style, PAGINATION_STYLES, "pagination style")
@@ -506,7 +502,7 @@ class Deprecation:
     """
 
     sunset_version: str
-    replacement: Optional[str] = None
+    replacement: str | None = None
 
     def __post_init__(self) -> None:
         _require_version(self.sunset_version, "deprecation sunset_version")
@@ -528,8 +524,8 @@ class ApiRoute:
     methods: Sequence[str]
     rate: RateLimit
     path_params: Sequence[str] = field(default_factory=tuple)
-    request: Optional[ApiSchema] = None
-    response: Optional[ApiSchema] = None
+    request: ApiSchema | None = None
+    response: ApiSchema | None = None
     errors: Sequence[ApiError] = field(default_factory=tuple)
     auth: AuthScope = field(default_factory=AuthScope)
     idempotency: Idempotency = field(default_factory=Idempotency)
@@ -537,7 +533,7 @@ class ApiRoute:
     audit: Audit = field(default_factory=Audit)
     transport: str = "json"
     handler: str = ""
-    deprecation: Optional[Deprecation] = None
+    deprecation: Deprecation | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", _validate_path(self.path))
@@ -958,7 +954,7 @@ class ApiPluginRef:
     distribution: str = ""
 
 
-def discover_api_plugins(entry_points: Optional[Iterable] = None) -> list[ApiPluginRef]:
+def discover_api_plugins(entry_points: Iterable | None = None) -> list[ApiPluginRef]:
     """Every installed ``scitex.apis`` entry point, sorted by name.
 
     Mirrors :func:`scitex_app.plugins.discover_plugin_apps` deliberately: the

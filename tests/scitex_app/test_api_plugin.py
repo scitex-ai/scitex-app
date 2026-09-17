@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """The leaf API-plugin contract (``scitex_app.api_plugin``).
 
 Mirrors src/scitex_app/api_plugin.py (PS-204). Pure inputs, real objects, no
@@ -1234,7 +1233,7 @@ def test_discovery_reports_the_distribution_when_there_is_one():
     # cannot be attached to a hand-made one.
     from importlib.metadata import entry_points
 
-    real = list(entry_points(group="console_scripts"))[0]
+    real = next(iter(entry_points(group="console_scripts")))
     # Act
     distribution = discover_api_plugins([real])[0].distribution
     # Assert
@@ -1248,6 +1247,118 @@ def test_no_installed_package_publishes_this_group_yet():
     found = discover_api_plugins()
     # Assert
     assert found == []
+
+
+# ─── the fragment, validated by a real OpenAPI validator ───────────────────
+#
+# Asserting structure is still our own reading of the specification. These arms
+# merge the fragment into a complete document and hand it to
+# openapi-spec-validator (0.9.x, OpenAPI 3.1.0 — the validator supports 3.1), so
+# the check is the one a host's own tooling performs. The adversarial arms prove
+# the validator is really inspecting the document rather than accepting it.
+
+
+def _validated_document(plugin: ApiPlugin) -> dict:
+    """The plugin's fragment as a complete OpenAPI 3.1 document."""
+    document: dict = {
+        "openapi": "3.1.0",
+        "info": {"title": plugin.title, "version": plugin.api_version},
+    }
+    document.update(plugin.openapi_fragment())
+    return document
+
+
+def test_a_plain_fragment_validates_as_an_openapi_31_document():
+    # Arrange
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    document = _validated_document(_plugin())
+    # Act
+    result = validate(document)
+    # Assert
+    assert result is None
+
+
+def test_a_fully_declared_fragment_validates_as_an_openapi_31_document():
+    # Arrange — one document carrying every descriptor the contract has: a path
+    # parameter, a body in, a body out, structured errors, pagination, a sunset
+    # window and a public streaming route.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    plugin = _plugin(routes=[
+        _route(
+            path="call/{call_id}",
+            path_params=["call_id"],
+            methods=["POST"],
+            idempotency=Idempotency(required=True),
+            request=_schema(name="CallRequest"),
+            response=_schema(name="CallResult"),
+            errors=[ApiError(code="no_call", status=404, message="no call", retryable=False)],
+            pagination=Pagination(style="cursor", default_limit=20, max_limit=100),
+            deprecation=Deprecation(sunset_version="2", replacement="call/{call_id}"),
+        ),
+        _route(
+            path="recipes",
+            methods=["GET"],
+            auth=AuthScope(project_scope="none", public=True),
+            transport="sse",
+        ),
+    ])
+    document = _validated_document(plugin)
+    # Act
+    result = validate(document)
+    # Assert
+    assert result is None
+
+
+def test_the_validator_refuses_duplicate_operation_ids_in_a_document():
+    # Arrange — proves the validator inspects operationIds, and pins why they
+    # are built per method rather than deep-copied.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    errors = pytest.importorskip("openapi_spec_validator.validation.exceptions")
+    routes = [_route(methods=["GET", "POST"], idempotency=Idempotency(required=True))]
+    document = _validated_document(_plugin(routes=routes))
+    for operation in document["paths"]["/recipes/save"].values():
+        operation["operationId"] = "figrecipe.duplicated"
+    # Act
+    # Assert
+    with pytest.raises(errors.DuplicateOperationIDError):
+        validate(document)
+
+
+def test_the_validator_refuses_a_relative_path_key():
+    # Arrange — pins why the generated keys carry a leading slash.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    errors = pytest.importorskip("openapi_spec_validator.validation.exceptions")
+    document = _validated_document(_plugin())
+    document["paths"] = {"recipes/save": document["paths"]["/recipes/save"]}
+    # Act
+    # Assert
+    with pytest.raises(errors.OpenAPIValidationError):
+        validate(document)
+
+
+def test_the_validator_refuses_a_path_template_without_its_parameter():
+    # Arrange — pins why every declared {param} is emitted: without the
+    # parameter the document does not resolve at all.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    errors = pytest.importorskip("openapi_spec_validator.validation.exceptions")
+    routes = [_route(path="call/{call_id}", path_params=["call_id"])]
+    document = _validated_document(_plugin(routes=routes))
+    document["paths"]["/call/{call_id}"]["get"].pop("parameters")
+    # Act
+    # Assert
+    with pytest.raises(errors.UnresolvableParameterError):
+        validate(document)
+
+
+def test_the_validated_document_carries_the_declared_security_scheme():
+    # Arrange — the requirement names a scheme the document itself defines, so
+    # a validator resolves it instead of rejecting an unknown name.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    document = _validated_document(_plugin())
+    # Act
+    validate(document)
+    # Assert
+    assert list(document["components"]["securitySchemes"]) == [OAUTH_SECURITY_SCHEME]
 
 
 # EOF
