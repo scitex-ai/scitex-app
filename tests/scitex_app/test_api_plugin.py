@@ -1994,4 +1994,409 @@ def test_the_validator_accepts_the_document_of_a_public_only_plugin():
     assert result is None
 
 
+# ─── the third review: MERGE one path, STORE what was validated ────────────
+#
+# Three blockers were reproduced at 1ad8269:
+#
+#  1. the public model accepted `GET x` and `POST x` as two separate routes while
+#     openapi_fragment() REFUSED the second instead of merging both operations
+#     into ONE Path Item;
+#  2. ApiSchema(' Bad ', ...) constructed and then EMITTED the padded component
+#     key, which openapi-spec-validator rejects;
+#  3. a padded absolute OAuth authorization URL constructed and was emitted
+#     unchanged.
+#
+# 2 and 3 are one defect class: a validator that returns the NORMALIZED value
+# while the descriptor stores the DECLARED one. Every arm below asserts the
+# EMITTED value, because "construction succeeded" is exactly what the review
+# measured to be insufficient — a check whose result is not stored is not a
+# check.
+
+
+def test_two_routes_with_disjoint_methods_render_one_path_item():
+    # Arrange — blocker 1: GET x and POST x are two operations on one URL.
+    routes = [
+        _route(),
+        _route(methods=["POST"], idempotency=Idempotency(required=True)),
+    ]
+    # Act
+    paths = _plugin(routes=routes).openapi_fragment()["paths"]
+    # Assert
+    assert (list(paths), sorted(paths["/recipes/save"])) == (
+        ["/recipes/save"],
+        ["get", "post"],
+    )
+
+
+def test_the_merged_path_item_gives_each_method_its_own_operation_id():
+    # Arrange — one shared operation dict would publish one id for two methods,
+    # which OpenAPI forbids.
+    routes = [
+        _route(),
+        _route(methods=["POST"], idempotency=Idempotency(required=True)),
+    ]
+    # Act
+    item = _plugin(routes=routes).openapi_fragment()["paths"]["/recipes/save"]
+    # Assert
+    assert item["get"]["operationId"] != item["post"]["operationId"]
+
+
+def test_each_merged_operation_is_built_for_its_own_route():
+    # Arrange — the merge must not let one method's metadata stand for the
+    # other's: the POST here is the streaming one.
+    routes = [
+        _route(),
+        _route(
+            methods=["POST"],
+            idempotency=Idempotency(required=True),
+            transport="sse",
+        ),
+    ]
+    # Act
+    item = _plugin(routes=routes).openapi_fragment()["paths"]["/recipes/save"]
+    # Assert
+    assert (item["get"]["x-scitex-transport"], item["post"]["x-scitex-transport"]) == (
+        "json",
+        "sse",
+    )
+
+
+def test_two_routes_claiming_one_path_and_method_are_still_refused():
+    # Arrange — the genuine collision: the host composes one operation there and
+    # the loser disappears without a trace.
+    routes = [_route(), _route(handler="figrecipe.api:other")]
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="twice"):
+        _plugin(routes=routes)
+
+
+def test_two_get_routes_on_one_path_are_refused_before_any_render():
+    # Arrange — the arm that pins CONSTRUCTION, not rendering: the model and the
+    # renderer must agree, so the refusal cannot wait for openapi_fragment().
+    routes = [_route(), _route(handler="figrecipe.api:other")]
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="twice"):
+        ApiPlugin(
+            id="figrecipe",
+            title="FigRecipe",
+            api_version="1",
+            routes=routes,
+            oauth=_oauth(),
+        )
+
+
+def test_two_spellings_of_one_canonical_path_stay_refused_with_disjoint_methods():
+    # Arrange — `things/{id}` and `things/{name}` are ONE OpenAPI path, so there
+    # is no single template to merge two spellings under: the emitted item would
+    # name one of them and the other operation's parameter would resolve to
+    # nothing.
+    routes = [
+        _route(path="things/{id}", path_params=["id"]),
+        _route(
+            path="things/{name}",
+            path_params=["name"],
+            methods=["POST"],
+            idempotency=Idempotency(required=True),
+            handler="figrecipe.api:other",
+        ),
+    ]
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="ONE path"):
+        _plugin(routes=routes)
+
+
+def test_the_merged_path_document_validates():
+    # Arrange — blocker 1 through the real validator, on the document a host
+    # would merge.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    routes = [
+        _route(),
+        _route(methods=["POST"], idempotency=Idempotency(required=True)),
+    ]
+    document = _validated_document(_plugin(routes=routes))
+    # Act
+    result = validate(document)
+    # Assert
+    assert result is None
+
+
+def test_a_padded_schema_name_is_emitted_stripped():
+    # Arrange — blocker 2: the padded key is what openapi-spec-validator 0.9.0
+    # refuses, and this arm reads the key the fragment actually carries.
+    routes = [_route(response=_schema(name=" SaveRequest "))]
+    # Act
+    schemas = _plugin(routes=routes).openapi_fragment()["components"]["schemas"]
+    # Assert
+    assert list(schemas) == ["SaveRequest"]
+
+
+def test_the_emitted_reference_names_the_stripped_schema_key():
+    # Arrange — a stripped key with an unstripped $ref would be a dangling one.
+    routes = [_route(response=_schema(name=" SaveRequest "))]
+    # Act
+    schema = _plugin(routes=routes).openapi_fragment()["paths"]["/recipes/save"][
+        "get"
+    ]["responses"]["200"]["content"]["application/json"]["schema"]
+    # Assert
+    assert schema == {"$ref": "#/components/schemas/SaveRequest"}
+
+
+def test_the_document_of_a_padded_schema_name_validates():
+    # Arrange — the fix, measured against the validator that rejects the padded
+    # key (pinned below by test_the_validator_refuses_a_padded_component_key).
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    document = _validated_document(
+        _plugin(routes=[_route(response=_schema(name=" SaveRequest "))])
+    )
+    # Act
+    result = validate(document)
+    # Assert
+    assert result is None
+
+
+def test_a_padded_field_name_is_emitted_stripped():
+    # Arrange — a JSON-Schema property name is read from the same flat namespace.
+    routes = [_route(response=_schema(fields=[_field(name=" recipe_path ")]))]
+    # Act
+    properties = _plugin(routes=routes).openapi_fragment()["components"][
+        "schemas"
+    ]["SaveRequest"]["properties"]
+    # Assert
+    assert list(properties) == ["recipe_path"]
+
+
+def test_a_padded_field_name_reaches_the_required_list_stripped():
+    # Arrange — the required list is written from the same declared names.
+    routes = [_route(response=_schema(fields=[_field(name=" recipe_path ")]))]
+    # Act
+    fragment = _plugin(routes=routes).openapi_fragment()["components"]["schemas"][
+        "SaveRequest"
+    ]
+    # Assert
+    assert fragment["required"] == ["recipe_path"]
+
+
+def test_a_padded_enum_member_is_emitted_stripped():
+    # Arrange — an enum member is a value a client matches on, not prose.
+    routes = [
+        _route(response=_schema(fields=[_field(name="fmt", enum=[" csv ", "png"])]))
+    ]
+    # Act
+    entry = _plugin(routes=routes).openapi_fragment()["components"]["schemas"][
+        "SaveRequest"
+    ]["properties"]["fmt"]
+    # Assert
+    assert entry["enum"] == ["csv", "png"]
+
+
+def test_a_padded_path_parameter_is_emitted_stripped():
+    # Arrange — the emitted parameter name has to be the template's own name.
+    routes = [_route(path="call/{call_id}", path_params=[" call_id "])]
+    # Act
+    fragment = _plugin(routes=routes).openapi_fragment()["paths"]["/call/{call_id}"][
+        "get"
+    ]
+    # Assert
+    assert fragment["parameters"][0]["name"] == "call_id"
+
+
+def test_padded_route_scopes_are_stored_stripped():
+    # Arrange — a scope is copied into the security requirement verbatim.
+    # Act
+    scopes = AuthScope(project_scope="project", scopes=[" recipes:write "]).scopes
+    # Assert
+    assert scopes == ("recipes:write",)
+
+
+def test_a_padded_plugin_id_is_emitted_stripped():
+    # Arrange — the id is the first field of every operationId, so a padded one
+    # would publish ids that no host-generated id matches.
+    # Act
+    operation_id = _plugin(id=" figrecipe ").openapi_fragment()["paths"][
+        "/recipes/save"
+    ]["get"]["operationId"]
+    # Assert
+    assert operation_id == "figrecipe.get.recipes%2Fsave"
+
+
+def test_a_padded_api_version_is_emitted_stripped():
+    # Arrange
+    # Act
+    version = _plugin(api_version=" 1 ").openapi_fragment()["paths"]["/recipes/save"][
+        "get"
+    ]["x-scitex-api-version"]
+    # Assert
+    assert version == "1"
+
+
+def test_a_padded_title_is_stored_stripped():
+    # Arrange — the title becomes the document's `info.title` on the host side.
+    # Act
+    title = _plugin(title=" FigRecipe ").title
+    # Assert
+    assert title == "FigRecipe"
+
+
+def test_a_padded_handler_is_emitted_stripped():
+    # Arrange — the composer resolves exactly this declared string.
+    # Act
+    handler = _plugin(routes=[_route(handler=" figrecipe.api:save_recipe ")]) \
+        .openapi_fragment()["paths"]["/recipes/save"]["get"]["x-scitex-handler"]
+    # Assert
+    assert handler == "figrecipe.api:save_recipe"
+
+
+def test_a_padded_error_code_and_message_are_emitted_stripped():
+    # Arrange — a client branches on the code and shows the message.
+    errors = [ApiError(code=" no_recipe ", status=404, message=" no such recipe ")]
+    # Act
+    entry = _plugin(routes=[_route(errors=errors)]).openapi_fragment()["paths"][
+        "/recipes/save"
+    ]["get"]["responses"]["default"]["x-scitex-errors"][0]
+    # Assert
+    assert (entry["code"], entry["message"]) == ("no_recipe", "no such recipe")
+
+
+def test_a_padded_rate_class_is_emitted_stripped():
+    # Arrange
+    # Act
+    value = _plugin(routes=[_route(rate=_rate(rate_class=" standard "))]) \
+        .openapi_fragment()["paths"]["/recipes/save"]["get"]["x-scitex-rate-class"]
+    # Assert
+    assert value == "standard"
+
+
+def test_a_padded_compute_cost_is_emitted_stripped():
+    # Arrange
+    # Act
+    value = _plugin(routes=[_route(rate=_rate(compute_cost=" heavy "))]) \
+        .openapi_fragment()["paths"]["/recipes/save"]["get"]["x-scitex-compute-cost"]
+    # Assert
+    assert value == "heavy"
+
+
+def test_a_padded_sunset_version_and_replacement_are_emitted_stripped():
+    # Arrange — the sunset window is what tells a client when the route goes.
+    routes = [
+        _route(deprecation=Deprecation(sunset_version=" 2 ", replacement=" call/x "))
+    ]
+    # Act
+    operation = _plugin(routes=routes).openapi_fragment()["paths"]["/recipes/save"][
+        "get"
+    ]
+    # Assert
+    assert (
+        operation["x-scitex-sunset-version"],
+        operation["x-scitex-replacement"],
+    ) == ("2", "call/x")
+
+
+def test_a_padded_authorization_url_is_emitted_stripped():
+    # Arrange — blocker 3: this string is the flow endpoint a client calls. The
+    # validator accepts the padded form (measured), so only this assertion
+    # catches it.
+    provider = _oauth(
+        authorization_url=" https://auth.scitex.example/oauth2/authorize "
+    )
+    # Act
+    flows = _plugin(oauth=provider).openapi_fragment()["components"][
+        "securitySchemes"
+    ][OAUTH_SECURITY_SCHEME]["flows"]
+    # Assert
+    assert flows[OAUTH2_FLOW]["authorizationUrl"] == (
+        "https://auth.scitex.example/oauth2/authorize"
+    )
+
+
+def test_a_padded_token_url_is_emitted_stripped():
+    # Arrange — the same rule for the endpoint that issues the token.
+    provider = _oauth(token_url=" https://auth.scitex.example/oauth2/token ")
+    # Act
+    flows = _plugin(oauth=provider).openapi_fragment()["components"][
+        "securitySchemes"
+    ][OAUTH_SECURITY_SCHEME]["flows"]
+    # Assert
+    assert flows[OAUTH2_FLOW]["tokenUrl"] == "https://auth.scitex.example/oauth2/token"
+
+
+def test_a_padded_scope_name_is_emitted_stripped_in_the_flow_map():
+    # Arrange — the map's KEY is the scope a requirement names.
+    provider = _oauth(scopes={" recipes:write ": " Create and modify recipes "})
+    # Act
+    flows = _plugin(oauth=provider).openapi_fragment()["components"][
+        "securitySchemes"
+    ][OAUTH_SECURITY_SCHEME]["flows"]
+    # Assert
+    assert flows[OAUTH2_FLOW]["scopes"] == {
+        "recipes:write": "Create and modify recipes"
+    }
+
+
+def test_a_padded_scope_name_resolves_in_the_operation_requirement():
+    # Arrange — the route's spelling and the provider's spelling normalize to
+    # one name, which is what makes the requirement resolvable rather than
+    # naming a scope the scheme's map omits.
+    routes = [
+        _route(auth=AuthScope(project_scope="project", scopes=[" recipes:write "]))
+    ]
+    provider = _oauth(scopes={" recipes:write ": "Create and modify recipes"})
+    # Act
+    requirement = _plugin(routes=routes, oauth=provider).openapi_fragment()["paths"][
+        "/recipes/save"
+    ]["get"]["security"]
+    # Assert
+    assert requirement == [{OAUTH_SECURITY_SCHEME: ["recipes:write"]}]
+
+
+def test_two_spellings_of_one_scope_are_refused():
+    # Arrange — the map is keyed by name, so one spelling would be dropped and a
+    # requirement naming it would resolve to nothing.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="twice"):
+        _oauth(scopes={"recipes:write": "a", " recipes:write ": "b"})
+
+
+def test_the_document_of_a_padded_provider_validates():
+    # Arrange — the end-to-end arm for blocker 3.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    provider = _oauth(
+        authorization_url=" https://auth.scitex.example/oauth2/authorize ",
+        token_url=" https://auth.scitex.example/oauth2/token ",
+    )
+    document = _validated_document(_plugin(oauth=provider))
+    # Act
+    result = validate(document)
+    # Assert
+    assert result is None
+
+
+def test_a_padded_choice_value_is_refused_rather_than_normalized():
+    # Arrange — the store rule covers TEXT, not a closed set: `" json "` is not
+    # a transport, and stripping it would invent a declaration nobody made.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError):
+        _route(transport=" json ")
+
+
+def test_the_validator_refuses_a_padded_component_key():
+    # Arrange — pins WHY storing the normalized name is the fix rather than a
+    # nicety: the document is built from a valid declaration and then padded by
+    # hand, exactly as the padded key was emitted before the fix.
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    errors = pytest.importorskip("openapi_spec_validator.validation.exceptions")
+    routes = [_route(response=_schema(name="RecipeState"))]
+    document = _validated_document(_plugin(routes=routes))
+    schemas = document["components"]["schemas"]
+    schemas[" RecipeState "] = schemas.pop("RecipeState")
+    # Act
+    # Assert
+    with pytest.raises(errors.OpenAPIValidationError):
+        validate(document)
+
+
 # EOF
