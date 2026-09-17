@@ -41,9 +41,10 @@ for the card's owner — see the note in :data:`DESCRIPTOR_IMPLEMENTATION`.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote, urlsplit
 
 #: How the descriptors are implemented, stated where a reader will look. The
 #: alternative (pydantic v2 models) would add a hard dependency to a package
@@ -92,12 +93,50 @@ PAGINATION_STYLES = ("none", "offset", "cursor")
 #: Default header a client sends its idempotency key in.
 IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
 
+#: Header names an idempotency key may NEVER be declared in, lowercased. An
+#: idempotency key and an authentication credential (or a cookie, or a
+#: framing/length field, or a hop-by-hop control) cannot share one header: the
+#: message would have to carry two values with different meanings, and whichever
+#: of the two the declaring client loses is a security or framing bug that the
+#: declaration itself caused. Comparison is case-insensitive (HTTP field names
+#: are), so ``Authorization`` and ``authorization`` are the same refusal.
+RESERVED_IDEMPOTENCY_HEADERS = frozenset({
+    "authorization",
+    "proxy-authorization",
+    "proxy-authenticate",
+    "www-authenticate",
+    "authentication-info",
+    "proxy-authentication-info",
+    "cookie",
+    "set-cookie",
+    "host",
+    "content-length",
+    "content-type",
+    "content-encoding",
+    "content-range",
+    "transfer-encoding",
+    "connection",
+    "keep-alive",
+    "upgrade",
+    "te",
+    "trailer",
+    "expect",
+})
+
 #: The security scheme every scoped operation's requirement names, and the
-#: component the fragment declares it as. OAuth/OIDC issues the bearer token, so
-#: the scheme is a bearer one — a generic consumer that has never heard of SciTeX
-#: still reads the requirement and sends the token — and a route's OAuth scopes
-#: ride as the requirement's value.
+#: component the fragment declares it as. The scheme is an OAuth2
+#: ``authorizationCode`` flow when it is emitted, because that is what the
+#: requirement's value IS: an array of OAuth scopes. A scheme that carries a
+#: scope array but declares no flows and no scope map would be a document that
+#: names scopes it never defines, so the plugin has to declare the authorization
+#: server it trusts (see :class:`OAuthProvider`) for a scoped requirement to be
+#: emittable at all.
 OAUTH_SECURITY_SCHEME = "scitexOAuth"
+
+#: The OAuth2 flow name the emitted scheme uses: the one a native/agent client
+#: with no secret can actually run (authorization code + PKCE). Declared here
+#: rather than chosen per render, so the document says one thing.
+OAUTH2_FLOW = "authorizationCode"
 
 #: RECOMMENDED rate/quota classes — examples for the approved deployments, NOT
 #: a closed enum. The hub ruled (2026-09-17) that a leaf may declare its own
@@ -115,6 +154,18 @@ _VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
 _HANDLER_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_][\w.]*$")
 _PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
 _PLACEHOLDER_RE = re.compile(r"^\{[A-Za-z_][\w]*\}$")
+
+#: Any ``{placeholder}`` inside a path, for the COLLISION form (see
+#: :func:`_canonical_path`): the placeholder's name does not distinguish two
+#: paths for OpenAPI, so it must not distinguish two declarations here either.
+_TEMPLATE_RE = re.compile(r"\{[A-Za-z_][\w]*\}")
+
+#: OpenAPI's component-key pattern, verbatim: a component name, a schema name or
+#: a JSON-Schema property name is read by generators as an identifier, and the
+#: specification itself refuses anything outside this alphabet (``/``, ``~``,
+#: whitespace, ``:``). Enforced at construction so a name that the document
+#: validator would reject cannot be declared at all.
+_COMPONENT_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 #: RFC 7230 ``tchar`` — the ONLY characters an HTTP field name may contain.
 #: A header name carrying CR, LF or any other control character lets a
@@ -145,6 +196,45 @@ def _require_text(value: object, what: str) -> str:
             f"{what} is indistinguishable from an undeclared one"
         )
     return value.strip()
+
+
+def _require_text_or_empty(value: object, what: str) -> str:
+    """Return ``value`` stripped when it is a string — empty allowed, else raise.
+
+    The optional-text rule: an ABSENT description and an undescribed one read
+    the same, so ``""`` is fine, but a non-string is not. ``description: 5``
+    would otherwise be copied verbatim into the generated JSON Schema, where the
+    specification requires a string: one wrong type at the declaration site
+    becomes a document the host's own tooling rejects.
+    """
+    if not isinstance(value, str):
+        raise ApiPluginContractError(
+            f"{what} must be a string (got {value!r}, a "
+            f"{type(value).__name__}); a non-string reaches the generated "
+            "document as an invalid value rather than as prose"
+        )
+    return value.strip()
+
+
+def _require_component_name(value: object, what: str) -> str:
+    """Return ``value`` if it is a valid OpenAPI component key, else raise.
+
+    OpenAPI's own pattern for a component key is ``^[a-zA-Z0-9._-]+$``: a name
+    carrying ``/``, ``~``, whitespace, ``:`` or ``%`` is not merely ugly, it is
+    a document the specification refuses (measured: openapi-spec-validator
+    rejects ``Bad/Name`` on the component-key pattern). The same alphabet is
+    required of a JSON-Schema property name, because a generator reads both as
+    identifiers from one flat namespace.
+    """
+    text = _require_text(value, what)
+    if not _COMPONENT_NAME_RE.match(text):
+        raise ApiPluginContractError(
+            f"{what} {value!r} is not a valid OpenAPI component name; it must "
+            "be one or more of the characters a-zA-Z0-9._- and may not contain "
+            "'/', '~', ':', '%', whitespace or any other character a "
+            "specification-compliant consumer refuses"
+        )
+    return text
 
 
 def _require_choice(value: object, choices: Sequence[str], what: str) -> str:
@@ -179,19 +269,34 @@ def _require_token(value: object, what: str) -> str:
 def _require_elements(value: object, element_type: type, what: str) -> tuple:
     """Return ``value`` as a tuple whose every element IS an ``element_type``.
 
-    Strict on purpose, and strict by ``isinstance`` rather than by shape. A
-    duck-typed stand-in (a dict that happens to carry ``name``/``type``, an
-    ``int`` where a descriptor was meant, a bare string where a list was meant)
-    would otherwise be accepted here and blow up later as an AttributeError
-    three frames into a renderer — naming nothing the leaf can fix. The refusal
-    below names the ELEMENT and its position, so the declaration site is
-    obvious from the message alone.
+    STRICT ON SHAPE AND ON ORDER. ``value`` must be a
+    :class:`collections.abc.Sequence`, which refuses four kinds of near-miss:
+
+    * a ``str``/``bytes``, because iterating it yields CHARACTERS — ``"abc"``
+      where ``["a", "b", "c"]`` was meant declares three scopes nobody named;
+    * a ``dict``/``set``/``frozenset``, because the iteration order of a set is
+      an implementation detail of the hash seed, so one declaration would
+      render a different document in a different process;
+    * a generator or other iterator, because it is CONSUMED by the first render:
+      the second call sees an empty sequence and silently emits nothing;
+    * a single element where a sequence was declared.
+
+    Strict by ``isinstance`` rather than by shape as well. A duck-typed
+    stand-in (a dict that happens to carry ``name``/``type``, an ``int`` where a
+    descriptor was meant) would otherwise be accepted here and blow up later as
+    an AttributeError three frames into a renderer — naming nothing the leaf can
+    fix. The refusals below name the FIELD, the offending TYPE and, for an
+    element, its position, so the declaration site is obvious from the message
+    alone.
     """
-    if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
         raise ApiPluginContractError(
             f"{what} must be a sequence of {element_type.__name__} (got "
-            f"{value!r}); a single value where a sequence was declared is "
-            "refused rather than iterated element by element"
+            f"{value!r}, a {type(value).__name__}); a single value where a "
+            "sequence was declared is refused rather than iterated element by "
+            "element, and a str, bytes, dict, set, frozenset, generator or "
+            "other iterator is refused because its elements, or their order, "
+            "are not a stable declaration"
         )
     items = tuple(value)
     for index, item in enumerate(items):
@@ -222,9 +327,9 @@ def _validate_path(path: object) -> str:
 
     Refused: a leading ``/`` (the host owns the mount prefix — a route that
     names an absolute path is claiming the root, which is exactly the "no root
-    route registration" rule), ``..``, ``//``, backslashes, whitespace, query or
-    fragment characters, percent-encoding, and any segment that is neither a
-    plain name nor a ``{placeholder}``.
+    route registration" rule), ``..``, ``.`` as a whole segment, ``//``,
+    backslashes, whitespace, query or fragment characters, percent-encoding, and
+    any segment that is neither a plain name nor a ``{placeholder}``.
     """
     text = _require_text(path, "route path")
     if text.startswith("/"):
@@ -248,6 +353,12 @@ def _validate_path(path: object) -> str:
             f"{text.rstrip('/')!r} instead."
         )
     for segment in text.split("/"):
+        if segment == ".":
+            raise ApiPluginContractError(
+                f"route path {text!r} has a '.' segment; RFC 3986 normalization "
+                "removes a dot segment, so two declarations of one endpoint "
+                "could differ only by a segment the host discards"
+            )
         if _PATH_SEGMENT_RE.match(segment) or _PLACEHOLDER_RE.match(segment):
             continue
         raise ApiPluginContractError(
@@ -268,13 +379,16 @@ class ApiField:
     enum: Sequence[str] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        _require_text(self.name, "field name")
+        _require_component_name(self.name, "field name")
         _require_choice(self.type, FIELD_TYPES, "field type")
         if not isinstance(self.required, bool):
             raise ApiPluginContractError(
                 f"field {self.name!r} has a non-boolean required flag "
                 f"({self.required!r})"
             )
+        object.__setattr__(self, "description", _require_text_or_empty(
+            self.description, f"description of field {self.name!r}"
+        ))
         object.__setattr__(self, "enum", _require_elements(
             self.enum, str, f"enum of field {self.name!r}"
         ))
@@ -287,14 +401,17 @@ class ApiSchema:
     """A named body schema: strict, and never empty.
 
     An empty schema is refused because it is ambiguous — "takes nothing" and
-    "nobody wrote it down" read the same to a client generator.
+    "nobody wrote it down" read the same to a client generator. The name must be
+    a valid OpenAPI component key (see :func:`_require_component_name`): it
+    becomes ``components.schemas[<name>]`` and the schema's ``title``, and the
+    validator refuses a key outside ``[a-zA-Z0-9._-]``.
     """
 
     name: str
     fields: Sequence[ApiField] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        _require_text(self.name, "schema name")
+        _require_component_name(self.name, "schema name")
         object.__setattr__(self, "fields", _require_elements(
             self.fields, ApiField, f"fields of schema {self.name!r}"
         ))
@@ -404,6 +521,13 @@ class Idempotency:
     effect for a replayed key. ``key_header`` must be a valid HTTP field name:
     a name carrying CR, LF or any other control character would let the
     declaration smuggle a second header into the request the client writes.
+
+    ``key_header`` may not name a RESERVED header (:data:`RESERVED_IDEMPOTENCY_HEADERS`)
+    either. ``Authorization`` is the case that matters: the client sends the
+    bearer credential there, and a header carrying both one credential and one
+    idempotency key is a header whose second value the server drops — so either
+    the credential or the retry guarantee silently stops working. A reserved
+    name is compared case-insensitively, because HTTP field names are.
     """
 
     required: bool = False
@@ -414,11 +538,16 @@ class Idempotency:
             raise ApiPluginContractError(
                 f"idempotency required flag must be a boolean (got {self.required!r})"
             )
-        object.__setattr__(
-            self,
-            "key_header",
-            _require_token(self.key_header, "idempotency key header"),
-        )
+        header = _require_token(self.key_header, "idempotency key header")
+        if header.lower() in RESERVED_IDEMPOTENCY_HEADERS:
+            raise ApiPluginContractError(
+                f"idempotency key header {self.key_header!r} is RESERVED; it "
+                "already carries an authentication credential, a cookie, a "
+                "framing/length value or a hop-by-hop control, so one header "
+                "cannot carry that AND an idempotency key. Declare a header of "
+                f"the route's own, such as {IDEMPOTENCY_KEY_HEADER!r}."
+            )
+        object.__setattr__(self, "key_header", header)
 
 
 @dataclass(frozen=True)
@@ -480,6 +609,9 @@ class RateLimit:
     def __post_init__(self) -> None:
         _require_text(self.rate_class, "rate_class")
         _require_text(self.compute_cost, "compute_cost")
+        object.__setattr__(self, "quota_note", _require_text_or_empty(
+            self.quota_note, "rate quota_note"
+        ))
 
 
 @dataclass(frozen=True)
@@ -542,6 +674,27 @@ class ApiRoute:
                 f"route {self.path!r} declares rate {self.rate!r}, a "
                 f"{type(self.rate).__name__}; expected a RateLimit"
             )
+        for slot, declared, expected in (
+            ("auth", self.auth, AuthScope),
+            ("idempotency", self.idempotency, Idempotency),
+            ("pagination", self.pagination, Pagination),
+            ("audit", self.audit, Audit),
+        ):
+            if not isinstance(declared, expected):
+                raise ApiPluginContractError(
+                    f"{slot} of route {self.path!r} is {declared!r}, a "
+                    f"{type(declared).__name__}; expected an instance of "
+                    f"{expected.__name__} — a dict that happens to carry the "
+                    "right keys is refused HERE, by name, rather than reaching "
+                    "fragment generation as an AttributeError that names the "
+                    "renderer instead of the declaration"
+                )
+        if self.deprecation is not None and not isinstance(self.deprecation, Deprecation):
+            raise ApiPluginContractError(
+                f"deprecation of route {self.path!r} is {self.deprecation!r}, a "
+                f"{type(self.deprecation).__name__}; expected an instance of "
+                "Deprecation or None"
+            )
         object.__setattr__(self, "path_params", _require_elements(
             self.path_params, str, f"path_params of route {self.path!r}"
         ))
@@ -603,6 +756,14 @@ class ApiRoute:
                 "parameter cannot be described two ways"
             )
         in_path = _path_placeholders(self.path)
+        repeated = [name for name in in_path if in_path.count(name) > 1]
+        if repeated:
+            raise ApiPluginContractError(
+                f"route {self.path!r} uses placeholder {repeated[0]!r} more "
+                "than once; one operation cannot declare the same path "
+                "parameter twice, and two segments cannot be constrained by "
+                "one value"
+            )
         missing = [name for name in in_path if name not in declared]
         if missing:
             raise ApiPluginContractError(
@@ -665,6 +826,44 @@ def _normalize_path(path: str) -> str:
     return path.rstrip("/")
 
 
+def _canonical_path(path: str) -> str:
+    """The COLLISION form of a declared path: one token per placeholder.
+
+    OpenAPI keys paths by TEMPLATE, and two templates differing only by a
+    placeholder's NAME are the SAME path: ``/things/{id}`` and
+    ``/things/{name}`` occupy one slot, so a host merging both would keep one
+    operation and drop the other — silently, because neither declaration was
+    wrong on its own. Replacing every ``{placeholder}`` with one canonical token
+    (``{}``) makes the two collide HERE, where the refusal can name both
+    declarations, rather than inside a merged document with no author left to
+    tell. Comparison is case-sensitive: OpenAPI paths are.
+    """
+    return _TEMPLATE_RE.sub("{}", _normalize_path(path))
+
+
+#: How a declared name or an operationId component is spelled. PERCENT-ENCODING
+#: (``quote`` with nothing marked safe) is a bijection, which is the property
+#: that matters: the previous lossy ``path.replace("/", "_")`` mapped
+#: ``a/b_c`` and ``a_b/c`` onto ONE id and published two operations under it,
+#: which the document validator then refused. ``.`` is escaped as well (urlquote
+#: leaves it alone, since it is unreserved in a URI) so the emitted id contains
+#: exactly two dots and splits back into ``id``/``method``/``path`` with no
+#: ambiguity — that is what makes the id injective over the whole triple, not
+#: merely over the path within one plugin.
+_OPERATION_ID_ESCAPE_CHAR = "%2E"
+
+
+def _encode_operation_id(text: str) -> str:
+    """The injective ``operationId`` spelling of a declared name or path.
+
+    ``urllib.parse.quote`` with an empty ``safe`` set percent-encodes every
+    character outside the unreserved set, including ``/`` (so ``a/b_c`` becomes
+    ``a%2Fb_c`` and cannot be confused with ``a_b%2Fc``); the ``.`` substitution
+    afterwards keeps the method separator unambiguous.
+    """
+    return quote(text, safe="").replace(".", _OPERATION_ID_ESCAPE_CHAR)
+
+
 def _path_placeholders(path: str) -> tuple[str, ...]:
     """Every ``{param}`` a declared path uses, in declaration order."""
     return tuple(
@@ -679,21 +878,94 @@ def _declared_schemas(route: ApiRoute) -> tuple[tuple[str, ApiSchema], ...]:
 
 
 @dataclass(frozen=True)
+class OAuthProvider:
+    """The OAuth2 authorization server a plugin's scopes are ISSUED by.
+
+    Required to be declared whenever a route declares OAuth scopes, because an
+    OAuth2 scheme IS its flows: the fragment's ``security`` requirement carries
+    a scope array, and a scheme with no ``flows``/``scopes`` would name scopes
+    the document never defines. The endpoints are DECLARED data — the fragment
+    never invents a URL, because a generated production URL is a promise the
+    leaf never made and the deployment may not honour.
+
+    ``authorization_url``/``token_url`` must be absolute ``http(s)`` URLs (a
+    localhost deployment is legitimate, a bare host or a relative path is not:
+    a client has to be able to construct the request). ``scopes`` is the map the
+    emitted scheme publishes, scope name -> human description; every scope a
+    route requires must appear in it (checked by :class:`ApiPlugin`).
+    """
+
+    authorization_url: str
+    token_url: str
+    scopes: Mapping[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for label, url in (
+            ("authorization_url", self.authorization_url),
+            ("token_url", self.token_url),
+        ):
+            text = _require_text(url, f"OAuth {label}")
+            try:
+                parts = urlsplit(text)
+            except ValueError as exc:
+                raise ApiPluginContractError(
+                    f"OAuth {label} {url!r} is not a parseable URL: {exc}"
+                ) from exc
+            if parts.scheme not in ("http", "https") or not parts.netloc:
+                raise ApiPluginContractError(
+                    f"OAuth {label} {url!r} is not an absolute http(s) URL; a "
+                    "flow endpoint a client must call has to name its scheme "
+                    "and host, and it is declared here rather than invented by "
+                    "the fragment renderer"
+                )
+        if not isinstance(self.scopes, Mapping):
+            raise ApiPluginContractError(
+                "OAuth scopes must be a mapping of scope name to description "
+                f"(got {self.scopes!r}, a {type(self.scopes).__name__}); the "
+                "scheme's scope map is what gives an operation requirement's "
+                "scope its meaning"
+            )
+        if not self.scopes:
+            raise ApiPluginContractError(
+                "OAuth scopes declares none; a scheme whose scope map is empty "
+                "defines no scope any requirement may name"
+            )
+        for name, description in self.scopes.items():
+            _require_text(name, "OAuth scope name")
+            _require_text(description, f"description of OAuth scope {name!r}")
+        object.__setattr__(self, "scopes", dict(self.scopes))
+
+
+@dataclass(frozen=True)
 class ApiPlugin:
-    """One leaf's whole API declaration, published under an entry point."""
+    """One leaf's whole API declaration, published under an entry point.
+
+    ``oauth`` is the authorization server its scopes are issued by. It is
+    optional only for a plugin that declares NO scopes anywhere: the moment one
+    route declares a scope, construction refuses a missing (or non-covering)
+    provider, so a scoped API cannot be published without saying which server
+    issues its scopes.
+    """
 
     id: str
     title: str
     api_version: str
     routes: Sequence[ApiRoute] = field(default_factory=tuple)
+    oauth: OAuthProvider | None = None
 
     def __post_init__(self) -> None:
-        _require_text(self.id, "plugin id")
+        _require_component_name(self.id, "plugin id")
         _require_text(self.title, "plugin title")
         _require_version(self.api_version, "api_version")
         object.__setattr__(self, "routes", _require_elements(
             self.routes, ApiRoute, f"routes of api plugin {self.id!r}"
         ))
+        if self.oauth is not None and not isinstance(self.oauth, OAuthProvider):
+            raise ApiPluginContractError(
+                f"oauth of api plugin {self.id!r} is {self.oauth!r}, a "
+                f"{type(self.oauth).__name__}; expected an instance of "
+                "OAuthProvider or None"
+            )
         if not self.routes:
             raise ApiPluginContractError(
                 f"api plugin {self.id!r} declares no routes; an empty plugin "
@@ -701,26 +973,66 @@ class ApiPlugin:
             )
         self._refuse_duplicate_route_keys()
         self._refuse_duplicate_schema_names()
+        self._refuse_uncovered_oauth_scopes()
 
     def _refuse_duplicate_route_keys(self) -> None:
         """Refuse two routes claiming the same path+method.
 
         The host can only compose one, so the loser would be dropped silently —
         an endpoint the leaf believes it published and no client can reach. The
-        comparison is on the NORMALIZED path, so a spelling that differs only by
-        a trailing slash cannot slip past as a "different" route.
+        comparison is on the CANONICAL path (see :func:`_canonical_path`), so
+        neither a spelling that differs only by a trailing slash nor two
+        same-hierarchy templates (``things/{id}`` and ``things/{name}``, which
+        OpenAPI keys as ONE path) can slip past as "different" routes.
         """
         seen: list[tuple[str, str]] = []
         for route in self.routes:
             for key in route.route_keys():
-                normalized = (_normalize_path(key[0]), key[1])
+                normalized = (_canonical_path(key[0]), key[1])
                 if normalized in seen:
                     raise ApiPluginContractError(
                         f"api plugin {self.id!r} declares {key[1]} {normalized[0]} "
                         "twice; the host can compose only one of them, so the "
-                        "other would vanish without a trace"
+                        "other would vanish without a trace. Two templates that "
+                        "differ only by a placeholder's NAME are the same OpenAPI "
+                        "path, not two."
                     )
                 seen.append(normalized)
+
+    def _refuse_uncovered_oauth_scopes(self) -> None:
+        """Every scope a route requires must be a scope the provider declares.
+
+        The emitted scheme is an OAuth2 ``authorizationCode`` flow, whose
+        ``scopes`` map is where a scope name gets its meaning. An operation
+        requirement naming a scope that map does not carry is a security
+        statement no client can resolve, and the flow that would issue it is
+        undescribed. A plugin with scoped routes and NO provider at all is
+        refused for the same reason: the honest scheme for a scope-carrying
+        requirement needs the authorization and token endpoints, and this layer
+        will not invent production URLs.
+        """
+        used: list[str] = []
+        for route in self.routes:
+            used.extend(route.auth.scopes)
+        if not used:
+            return
+        if self.oauth is None:
+            raise ApiPluginContractError(
+                f"api plugin {self.id!r} declares scopes {tuple(used)} on its "
+                "routes but no OAuth provider; a scope-carrying security "
+                "requirement is satisfied by an oauth2 scheme, whose flows must "
+                "name the authorization and token endpoints. Declare "
+                "OAuthProvider(authorization_url=..., token_url=..., scopes=..."
+                ")."
+            )
+        missing = [scope for scope in used if scope not in self.oauth.scopes]
+        if missing:
+            raise ApiPluginContractError(
+                f"api plugin {self.id!r} requires scope(s) {tuple(missing)} that "
+                f"its OAuth provider does not declare (declared: "
+                f"{tuple(self.oauth.scopes)}); an operation requirement naming a "
+                "scope the scheme's map omits resolves to nothing"
+            )
 
     def _refuse_duplicate_schema_names(self) -> None:
         """One flat component namespace: a name may describe only one thing.
@@ -771,10 +1083,18 @@ class ApiPlugin:
         by the absolute path the host will serve (the declaration is relative to
         the mount, the document is not), every declared ``{param}`` is emitted
         as an ``in: path`` parameter, each operation is built for its OWN method
-        (so operationIds are unique and the metadata is method-specific), scoped
-        routes carry a standard ``security`` requirement naming
-        :data:`OAUTH_SECURITY_SCHEME`, and every generated schema closes itself
+        (so operationIds are unique and the metadata is method-specific), a
+        scoped route carries a standard ``security`` requirement naming
+        :data:`OAUTH_SECURITY_SCHEME` — an OAuth2 scheme whose ``flows`` are the
+        provider the plugin DECLARED — and every generated schema closes itself
         with ``additionalProperties: false``.
+
+        Two document-level invariants are re-checked here even though
+        construction already enforces them, because this is the function that
+        would otherwise ship an invalid document: no two operations share an
+        ``operationId``, and no two routes share a canonical path. Both raise
+        :class:`ApiPluginContractError` rather than returning a document a
+        validator would reject with no author left to point at.
 
         Declared metadata OpenAPI has no field for (idempotency, rate/quota
         class, audit level, project scope, transport, compute cost) rides in
@@ -783,15 +1103,42 @@ class ApiPlugin:
         """
         paths: dict[str, Any] = {}
         schemas: dict[str, Any] = {}
+        operation_ids: dict[str, str] = {}
+        canonical_paths: dict[str, str] = {}
         for route in self.routes:
+            collision_key = _canonical_path(route.path)
+            if collision_key in canonical_paths:
+                raise ApiPluginContractError(
+                    f"api plugin {self.id!r} would emit two operations onto the "
+                    f"one OpenAPI path {collision_key!r} ({canonical_paths[collision_key]!r} "
+                    f"and {route.path!r}); OpenAPI keys paths by template and "
+                    "placeholder names do not distinguish them, so a merged "
+                    "document would silently keep one"
+                )
+            canonical_paths[collision_key] = route.path
             entry = paths.setdefault(f"/{route.path}", {})
             for method in route.methods:
-                entry[method.lower()] = self._operation(route, method, schemas)
+                operation = self._operation(route, method, schemas)
+                operation_id = operation["operationId"]
+                if operation_id in operation_ids:
+                    raise ApiPluginContractError(
+                        f"api plugin {self.id!r} generated operationId "
+                        f"{operation_id!r} for both {operation_ids[operation_id]} "
+                        f"and {method} /{route.path}; OpenAPI requires "
+                        "operationIds to be unique across the whole document, so "
+                        "the id is refused here rather than emitted as a document "
+                        "no validator will accept"
+                    )
+                operation_ids[operation_id] = f"{method} /{route.path}"
+                entry[method.lower()] = operation
+        security_schemes: dict[str, Any] = {}
+        if self.oauth is not None:
+            security_schemes[OAUTH_SECURITY_SCHEME] = _security_scheme_fragment(self.oauth)
         return {
             "paths": paths,
             "components": {
                 "schemas": schemas,
-                "securitySchemes": {OAUTH_SECURITY_SCHEME: _security_scheme_fragment()},
+                "securitySchemes": security_schemes,
             },
         }
 
@@ -880,14 +1227,25 @@ class ApiPlugin:
         return operation
 
     def _operation_id(self, route: ApiRoute, method: str) -> str:
-        """A document-unique ``operationId`` that NAMES its method.
+        """A document-unique ``operationId`` that NAMES its method and its path.
 
         OpenAPI requires operationIds to be unique across the whole document, so
         the lowercased method is part of the id: without it, a route declaring
         both GET and POST would publish two operations under one id.
+
+        The id must be INJECTIVE in ``(plugin id, method, path)``. A lossy
+        ``path.replace("/", "_")`` was not: ``a/b_c`` and ``a_b/c`` both became
+        ``a_b_c``, and the validator refused the resulting document with
+        ``DuplicateOperationIDError``. Both the id and the path are therefore
+        percent-encoded (see :func:`_encode_operation_id`) instead of flattened,
+        and ``.`` is escaped on the way so the emitted id splits back into
+        exactly ``id``/``method``/``path``.
         """
-        slug = route.path.replace("/", "_").replace("{", "").replace("}", "")
-        return f"{self.id}.{method.lower()}.{slug}"
+        return (
+            f"{_encode_operation_id(self.id)}."
+            f"{method.lower()}."
+            f"{_encode_operation_id(route.path)}"
+        )
 
 
 def _media_type(transport: str) -> str:
@@ -899,20 +1257,36 @@ def _media_type(transport: str) -> str:
     }[transport]
 
 
-def _security_scheme_fragment() -> dict[str, Any]:
+def _security_scheme_fragment(provider: OAuthProvider) -> dict[str, Any]:
     """The ``components.securitySchemes`` entry for :data:`OAUTH_SECURITY_SCHEME`.
+
+    The scheme an OAuth2 requirement is written against is an ``oauth2``
+    scheme, and its ``flows`` are the endpoints that actually issue the token:
+    the requirement's value is an array of SCOPES, so the scheme must publish a
+    scope map and the flow that grants them. An ``http``/``bearer`` scheme
+    carrying an OAuth2 scope array is a document that describes neither — it
+    tells a consumer scopes exist while declaring no way to obtain them — so
+    this renderer emits only the honest form, using the endpoints the plugin
+    DECLARED (nothing here invents a URL).
 
     A fresh dict per call: the fragment is handed to a host that merges it, and
     a shared module-level object would let one merge mutate every later one.
     """
     return {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT",
+        "type": "oauth2",
         "description": (
-            "SciTeX OIDC-issued bearer access token; a deployment may express "
-            "the same scheme as openIdConnect. Scopes are declared per operation."
+            "SciTeX OAuth2 (authorization code + PKCE). Run the flow against "
+            "the declared provider and present the issued access token as a "
+            "bearer credential. The scopes below are the ones this API's "
+            "operation requirements name."
         ),
+        "flows": {
+            OAUTH2_FLOW: {
+                "authorizationUrl": provider.authorization_url,
+                "tokenUrl": provider.token_url,
+                "scopes": dict(provider.scopes),
+            }
+        },
     }
 
 
@@ -995,11 +1369,13 @@ __all__ = [
     "HTTP_METHODS",
     "IDEMPOTENCY_KEY_HEADER",
     "MUTATING_METHODS",
+    "OAUTH2_FLOW",
     "OAUTH_SECURITY_SCHEME",
     "PAGINATION_STYLES",
     "PROJECT_SCOPES",
     "RECOMMENDED_COMPUTE_COSTS",
     "RECOMMENDED_RATE_CLASSES",
+    "RESERVED_IDEMPOTENCY_HEADERS",
     "TRANSPORTS",
     "ApiError",
     "ApiField",
@@ -1012,6 +1388,7 @@ __all__ = [
     "AuthScope",
     "Deprecation",
     "Idempotency",
+    "OAuthProvider",
     "Pagination",
     "RateLimit",
     "discover_api_plugins",
