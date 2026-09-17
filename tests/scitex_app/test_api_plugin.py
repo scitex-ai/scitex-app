@@ -34,6 +34,16 @@ from scitex_app.api_plugin import (
     discover_api_plugins,
 )
 
+#: The declared-sequence carriers on each descriptor, paired with a value that
+#: is the WRONG type for that sequence — the shapes a duck-typed stand-in
+#: arrives in. Each is fed to its descriptor below and must be refused by name.
+_BAD_ROUTES: list = ["x"]
+_BAD_FIELDS: list = ["recipe_path"]
+_BAD_METHODS: list = [1]
+_BAD_SCOPES: list = [1]
+_BAD_ERRORS: list = [1]
+_BAD_ENUM: list = [1]
+
 
 def _field(**overrides) -> ApiField:
     base = {"name": "recipe_path", "type": "string"}
@@ -633,6 +643,78 @@ def test_two_routes_on_one_path_with_different_methods_are_accepted():
     plugin = _plugin(routes=routes)
     # Assert
     assert len(plugin.routes) == 2
+
+
+# ─── strict nested element types ───────────────────────────────────────────
+#
+# Every declared sequence must hold INSTANCES of its descriptor type. A
+# duck-typed stand-in (a dict shaped like a field, an int where a method was
+# meant) has to be refused HERE, by name, rather than surfacing later as an
+# AttributeError inside a renderer.
+
+
+def test_a_schema_field_that_is_not_an_api_field_is_refused():
+    # Arrange — a bare string where the field descriptor was meant.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="element 0 is 'recipe_path'"):
+        ApiSchema(name="SaveRequest", fields=_BAD_FIELDS)
+
+
+def test_a_route_that_is_not_an_api_route_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="expected an instance of ApiRoute"):
+        _plugin(routes=_BAD_ROUTES)
+
+
+def test_a_dict_that_merely_looks_like_a_route_is_refused():
+    # Arrange — duck typing would accept this and fail three frames deeper.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="expected an instance of ApiRoute"):
+        _plugin(routes=[{"path": "recipes/save", "methods": ["GET"]}])
+
+
+def test_a_non_boolean_route_element_is_refused():
+    # Arrange — the error must name the element and its index, not the list.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="element 0 is 1"):
+        _route(methods=_BAD_METHODS)
+
+
+def test_a_non_string_scope_element_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="element 0 is 1"):
+        AuthScope(project_scope="project", scopes=_BAD_SCOPES)
+
+
+def test_a_non_api_error_element_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="element 0 is 1"):
+        _route(errors=_BAD_ERRORS)
+
+
+def test_a_non_string_enum_element_is_refused():
+    # Arrange — naming the FIELD, so the offending declaration is findable.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="enum of field 'recipe_path'"):
+        _field(enum=_BAD_ENUM)
+
+
+def test_a_bare_string_where_a_sequence_is_declared_is_refused():
+    # Arrange — "GET" must not be iterated character by character into ['G', ...].
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="must be a sequence of str"):
+        _route(methods="GET")
 
 
 # ─── the OpenAPI fragment ──────────────────────────────────────────────────

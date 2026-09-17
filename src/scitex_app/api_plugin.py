@@ -42,10 +42,10 @@ for the card's owner — see the note in :data:`DESCRIPTOR_IMPLEMENTATION`.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
-from typing import Iterable
 from typing import Optional
 from typing import Sequence
 
@@ -148,6 +148,35 @@ def _require_choice(value: object, choices: Sequence[str], what: str) -> str:
     return str(value)
 
 
+def _require_elements(value: object, element_type: type, what: str) -> tuple:
+    """Return ``value`` as a tuple whose every element IS an ``element_type``.
+
+    Strict on purpose, and strict by ``isinstance`` rather than by shape. A
+    duck-typed stand-in (a dict that happens to carry ``name``/``type``, an
+    ``int`` where a descriptor was meant, a bare string where a list was meant)
+    would otherwise be accepted here and blow up later as an AttributeError
+    three frames into a renderer — naming nothing the leaf can fix. The refusal
+    below names the ELEMENT and its position, so the declaration site is
+    obvious from the message alone.
+    """
+    if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
+        raise ApiPluginContractError(
+            f"{what} must be a sequence of {element_type.__name__} (got "
+            f"{value!r}); a single value where a sequence was declared is "
+            "refused rather than iterated element by element"
+        )
+    items = tuple(value)
+    for index, item in enumerate(items):
+        if not isinstance(item, element_type):
+            raise ApiPluginContractError(
+                f"{what} element {index} is {item!r}, a "
+                f"{type(item).__name__}; expected an instance of "
+                f"{element_type.__name__} — a value that merely looks like one "
+                "is not one"
+            )
+    return items
+
+
 def _require_version(value: object, what: str) -> str:
     """Return a dotted version string, or raise."""
     text = _require_text(value, what)
@@ -211,7 +240,9 @@ class ApiField:
                 f"field {self.name!r} has a non-boolean required flag "
                 f"({self.required!r})"
             )
-        object.__setattr__(self, "enum", tuple(self.enum))
+        object.__setattr__(self, "enum", _require_elements(
+            self.enum, str, f"enum of field {self.name!r}"
+        ))
         for member in self.enum:
             _require_text(member, f"enum member of field {self.name!r}")
 
@@ -229,7 +260,9 @@ class ApiSchema:
 
     def __post_init__(self) -> None:
         _require_text(self.name, "schema name")
-        object.__setattr__(self, "fields", tuple(self.fields))
+        object.__setattr__(self, "fields", _require_elements(
+            self.fields, ApiField, f"fields of schema {self.name!r}"
+        ))
         if not self.fields:
             raise ApiPluginContractError(
                 f"schema {self.name!r} declares no fields; an empty schema "
@@ -295,7 +328,9 @@ class AuthScope:
 
     def __post_init__(self) -> None:
         _require_choice(self.project_scope, PROJECT_SCOPES, "auth project_scope")
-        object.__setattr__(self, "scopes", tuple(self.scopes))
+        object.__setattr__(self, "scopes", _require_elements(
+            self.scopes, str, "auth scopes"
+        ))
         for scope in self.scopes:
             _require_text(scope, "auth scope")
         if not isinstance(self.public, bool):
@@ -444,13 +479,15 @@ class ApiRoute:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", _validate_path(self.path))
-        methods = tuple(self.methods)
+        methods = _require_elements(
+            self.methods, str, f"methods of route {self.path!r}"
+        )
         if not methods:
             raise ApiPluginContractError(
                 f"route {self.path!r} declares no methods"
             )
         for method in methods:
-            if not isinstance(method, str) or not _METHOD_RE.match(method):
+            if not _METHOD_RE.match(method):
                 raise ApiPluginContractError(
                     f"route {self.path!r} declares method {method!r}; expected "
                     f"an uppercase HTTP method from {HTTP_METHODS}"
@@ -462,7 +499,9 @@ class ApiRoute:
             )
         object.__setattr__(self, "methods", methods)
         _require_choice(self.transport, TRANSPORTS, f"transport of route {self.path!r}")
-        object.__setattr__(self, "errors", tuple(self.errors))
+        object.__setattr__(self, "errors", _require_elements(
+            self.errors, ApiError, f"errors of route {self.path!r}"
+        ))
         _require_text(self.handler, f"handler of route {self.path!r}")
         if not _HANDLER_RE.match(self.handler):
             raise ApiPluginContractError(
@@ -522,7 +561,9 @@ class ApiPlugin:
         _require_text(self.id, "plugin id")
         _require_text(self.title, "plugin title")
         _require_version(self.api_version, "api_version")
-        object.__setattr__(self, "routes", tuple(self.routes))
+        object.__setattr__(self, "routes", _require_elements(
+            self.routes, ApiRoute, f"routes of api plugin {self.id!r}"
+        ))
         if not self.routes:
             raise ApiPluginContractError(
                 f"api plugin {self.id!r} declares no routes; an empty plugin "
