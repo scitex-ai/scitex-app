@@ -37,6 +37,7 @@ from __future__ import annotations
 import dataclasses
 
 import django
+import pytest
 from django.conf import settings
 from django.test import RequestFactory
 
@@ -641,3 +642,71 @@ def _standalone_provider():
     from django.utils.module_loading import import_string
 
     return import_string(STANDALONE_PROVIDER_PATH)()
+
+
+# ── The provider/picker slot ─────────────────────────────────────────────────
+
+
+def test_the_slot_is_empty_when_nothing_is_declared():
+    """Fail-closed: no declared endpoint means no slot, not a guessed one."""
+    # Arrange
+    from scitex_app.project_context import project_provider_endpoint
+
+    # Act
+    endpoint = project_provider_endpoint()
+    # Assert
+    assert endpoint == ""
+
+
+def test_the_slot_is_never_the_site_root():
+    """A self-link would fetch the app's own root and look like a working picker."""
+    # Arrange
+    from scitex_app.project_context import project_provider_endpoint
+
+    # Act
+    endpoint = project_provider_endpoint()
+    # Assert
+    assert endpoint != "/"
+
+
+def test_the_slot_returns_a_declared_literal_path():
+    # Arrange
+    pytest.importorskip("scitex_ui.project_scope")
+    from django.test import override_settings
+
+    from scitex_app.project_context import project_provider_endpoint
+
+    declared = "/platform/api/project-scope"
+    # Act
+    with override_settings(SCITEX_PROJECT_PROVIDER_URL=declared):
+        endpoint = project_provider_endpoint()
+    # Assert
+    assert endpoint == declared
+
+
+def test_the_setting_name_we_delegate_through_is_scitex_uis():
+    """One producer of the name, asserted rather than assumed."""
+    # Arrange
+    scitex_ui_project_scope = pytest.importorskip("scitex_ui.project_scope")
+    # Act
+    name = scitex_ui_project_scope.PROJECT_PROVIDER_URL_SETTING
+    # Assert
+    assert name == "SCITEX_PROJECT_PROVIDER_URL"
+
+
+def test_the_advertised_meta_name_is_the_one_client_code_reads():
+    # Arrange
+    scitex_ui_project_scope = pytest.importorskip("scitex_ui.project_scope")
+    # Act
+    meta = scitex_ui_project_scope.PROJECT_PROVIDER_META_NAME
+    # Assert
+    assert meta == "stx-project-provider"
+
+
+def test_the_context_carries_the_slot_for_the_template():
+    # Arrange
+    provider = _RecordedProvider("alice")
+    # Act
+    context = project_context(_request(), provider)
+    # Assert
+    assert "project_provider_endpoint" in context

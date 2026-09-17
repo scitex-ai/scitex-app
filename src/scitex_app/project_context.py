@@ -60,6 +60,7 @@ __all__ = [
     "ProjectUnavailableError",
     "change_project",
     "project_context",
+    "project_provider_endpoint",
     "resolve_active_project",
 ]
 
@@ -372,6 +373,10 @@ def project_context(request: Any, provider: Optional[_ProjectProvider] = None) -
         ),
         "project_state": resolution.state,
         "project_command": CHANGE_PROJECT_COMMAND,
+        # The slot travels with the context too: a leaf that renders a picker
+        # affordance needs to know WHERE to fetch the list from, and the answer
+        # is the host's, not something the leaf may construct.
+        "project_provider_endpoint": project_provider_endpoint(),
     }
 
 
@@ -422,6 +427,40 @@ def change_project(
 
     resolved_provider.remember(request, project_id)
     return accessible[project_id]
+
+
+def project_provider_endpoint() -> str:
+    """The URL a picker fetches projects from, or ``""`` when nothing is declared.
+
+    THE SLOT, as opposed to the RESOLUTION this module already owns. Resolution
+    answers "which project is active"; the slot answers "where does anyone find
+    out" — and it is a slot rather than a fixed path because only the host knows
+    its own URL layout. scitex-ui owns both ends of it: the setting below and
+    the ``<meta name="stx-project-provider">`` that advertises the URL to client
+    code.
+
+    DELEGATED, NOT REDECLARED. The obvious implementation copies the setting
+    name (``SCITEX_PROJECT_PROVIDER_URL``) and its own reverse() call in here.
+    That would make scitex-app a SECOND producer of a name scitex-ui already
+    owns — two copies with no link between them, drifting silently, which is the
+    forked-producer shape this contract exists to avoid. So the names are read
+    from scitex-ui when it is installed, and this module only exposes the answer.
+
+    FAIL-CLOSED: ``""`` when scitex-ui is absent, when no URL is declared, or
+    when the declared name does not reverse. An empty endpoint is the truth —
+    "no picker slot here" — whereas a guessed path or a self-link would render a
+    picker that fetches the wrong thing.
+    """
+    try:
+        from scitex_ui.project_scope import host_project_provider_url
+    except ImportError:
+        return ""
+    try:
+        return host_project_provider_url() or ""
+    except Exception:
+        # A broken reverse() must not take down a leaf page whose only
+        # job here was to advertise a slot.
+        return ""
 
 
 def _standalone_provider_class():
