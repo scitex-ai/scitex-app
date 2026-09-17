@@ -96,6 +96,13 @@ PAGINATION_STYLES = ("none", "offset", "cursor")
 #: Default header a client sends its idempotency key in.
 IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
 
+#: The security scheme every scoped operation's requirement names, and the
+#: component the fragment declares it as. OAuth/OIDC issues the bearer token, so
+#: the scheme is a bearer one — a generic consumer that has never heard of SciTeX
+#: still reads the requirement and sends the token — and a route's OAuth scopes
+#: ride as the requirement's value.
+OAUTH_SECURITY_SCHEME = "scitexOAuth"
+
 #: RECOMMENDED rate/quota classes — examples for the approved deployments, NOT
 #: a closed enum. The hub ruled (2026-09-17) that a leaf may declare its own
 #: extensible class, so these are documentation constants: a third-party plugin
@@ -520,6 +527,7 @@ class ApiRoute:
     path: str
     methods: Sequence[str]
     rate: RateLimit
+    path_params: Sequence[str] = field(default_factory=tuple)
     request: Optional[ApiSchema] = None
     response: Optional[ApiSchema] = None
     errors: Sequence[ApiError] = field(default_factory=tuple)
@@ -538,6 +546,9 @@ class ApiRoute:
                 f"route {self.path!r} declares rate {self.rate!r}, a "
                 f"{type(self.rate).__name__}; expected a RateLimit"
             )
+        object.__setattr__(self, "path_params", _require_elements(
+            self.path_params, str, f"path_params of route {self.path!r}"
+        ))
         methods = _require_elements(
             self.methods, str, f"methods of route {self.path!r}"
         )
@@ -576,6 +587,40 @@ class ApiRoute:
             )
         self._refuse_undeclared_mutation()
         self._refuse_duplicate_errors()
+        self._refuse_undeclared_path_params()
+
+    def _refuse_undeclared_path_params(self) -> None:
+        """The declared ``path_params`` and the path's ``{placeholders}`` match.
+
+        A ``{param}`` nobody declared is a parameter no client can supply and no
+        generator can name; a declaration with no ``{param}`` behind it is a
+        parameter the route claims to take and can never receive. Refusing both
+        keeps the fragment's ``parameters`` list exactly equal to the path
+        template the host will serve.
+        """
+        declared = list(self.path_params)
+        for name in declared:
+            _require_text(name, f"path parameter of route {self.path!r}")
+        if len(set(declared)) != len(declared):
+            raise ApiPluginContractError(
+                f"route {self.path!r} declares a path parameter twice; one "
+                "parameter cannot be described two ways"
+            )
+        in_path = _path_placeholders(self.path)
+        missing = [name for name in in_path if name not in declared]
+        if missing:
+            raise ApiPluginContractError(
+                f"route {self.path!r} uses placeholder(s) {tuple(missing)} that "
+                "are not declared in path_params; an undeclared path parameter "
+                "reaches a client as an argument it was never told to send"
+            )
+        extra = [name for name in declared if name not in in_path]
+        if extra:
+            raise ApiPluginContractError(
+                f"route {self.path!r} declares path_params {tuple(extra)} that "
+                "do not appear as {placeholder} segments in its path; the route "
+                "would promise a parameter it can never receive"
+            )
 
     def _refuse_undeclared_mutation(self) -> None:
         """A mutating route must state its idempotency behaviour.
@@ -622,6 +667,13 @@ def _normalize_path(path: str) -> str:
     which spelling a future declaration used.
     """
     return path.rstrip("/")
+
+
+def _path_placeholders(path: str) -> tuple[str, ...]:
+    """Every ``{param}`` a declared path uses, in declaration order."""
+    return tuple(
+        segment[1:-1] for segment in path.split("/") if _PLACEHOLDER_RE.match(segment)
+    )
 
 
 def _declared_schemas(route: ApiRoute) -> tuple[tuple[str, ApiSchema], ...]:
@@ -719,6 +771,15 @@ class ApiPlugin:
     def openapi_fragment(self) -> dict[str, Any]:
         """An OpenAPI 3.1 fragment a host can merge into its own document.
 
+        This is a VALID document, not an approximation of one: paths are keyed
+        by the absolute path the host will serve (the declaration is relative to
+        the mount, the document is not), every declared ``{param}`` is emitted
+        as an ``in: path`` parameter, each operation is built for its OWN method
+        (so operationIds are unique and the metadata is method-specific), scoped
+        routes carry a standard ``security`` requirement naming
+        :data:`OAUTH_SECURITY_SCHEME`, and every generated schema closes itself
+        with ``additionalProperties: false``.
+
         Declared metadata OpenAPI has no field for (idempotency, rate/quota
         class, audit level, project scope, transport, compute cost) rides in
         ``x-scitex-*`` extensions, which is where a specification-compliant
@@ -727,72 +788,110 @@ class ApiPlugin:
         paths: dict[str, Any] = {}
         schemas: dict[str, Any] = {}
         for route in self.routes:
-            operation: dict[str, Any] = {
-                "operationId": f"{self.id}.{route.methods[0].lower()}.{route.path.replace('/', '_')}",
-                "x-scitex-transport": route.transport,
-                "x-scitex-project-scope": route.auth.project_scope,
-                "x-scitex-audit": route.audit.level,
-                "x-scitex-rate-class": route.rate.rate_class,
-                "x-scitex-compute-cost": route.rate.compute_cost,
-                "x-scitex-api-version": self.api_version,
+            entry = paths.setdefault(f"/{route.path}", {})
+            for method in route.methods:
+                entry[method.lower()] = self._operation(route, method, schemas)
+        return {
+            "paths": paths,
+            "components": {
+                "schemas": schemas,
+                "securitySchemes": {OAUTH_SECURITY_SCHEME: _security_scheme_fragment()},
+            },
+        }
+
+    def _operation(
+        self, route: ApiRoute, method: str, schemas: dict[str, Any]
+    ) -> dict[str, Any]:
+        """The operation for ONE ``(route, method)`` pair.
+
+        Built per method rather than deep-copied: one shared dict would give a
+        GET and a POST the same ``operationId`` (which OpenAPI forbids) and let
+        one method's ``parameters`` stand in for the other's.
+        """
+        operation: dict[str, Any] = {
+            "operationId": self._operation_id(route, method),
+            "x-scitex-transport": route.transport,
+            "x-scitex-project-scope": route.auth.project_scope,
+            "x-scitex-audit": route.audit.level,
+            "x-scitex-rate-class": route.rate.rate_class,
+            "x-scitex-compute-cost": route.rate.compute_cost,
+            "x-scitex-api-version": self.api_version,
+        }
+        if route.path_params:
+            operation["parameters"] = [
+                {
+                    "name": name,
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                }
+                for name in route.path_params
+            ]
+        if route.auth.public:
+            operation["security"] = []
+        elif route.auth.scopes:
+            operation["security"] = [{OAUTH_SECURITY_SCHEME: list(route.auth.scopes)}]
+            operation["x-scitex-oauth-scopes"] = list(route.auth.scopes)
+        if route.idempotency.required:
+            operation["x-scitex-idempotency-key-header"] = route.idempotency.key_header
+        if route.pagination.style != "none":
+            operation["x-scitex-pagination"] = {
+                "style": route.pagination.style,
+                "default_limit": route.pagination.default_limit,
+                "max_limit": route.pagination.max_limit,
             }
-            if route.auth.scopes:
-                operation["x-scitex-oauth-scopes"] = list(route.auth.scopes)
-            if route.auth.public:
-                operation["security"] = []
-            if route.idempotency.required:
-                operation["x-scitex-idempotency-key-header"] = route.idempotency.key_header
-            if route.pagination.style != "none":
-                operation["x-scitex-pagination"] = {
-                    "style": route.pagination.style,
-                    "default_limit": route.pagination.default_limit,
-                    "max_limit": route.pagination.max_limit,
-                }
-            if route.deprecation is not None:
-                operation["deprecated"] = True
-                operation["x-scitex-sunset-version"] = route.deprecation.sunset_version
-                if route.deprecation.replacement:
-                    operation["x-scitex-replacement"] = route.deprecation.replacement
-            if route.handler:
-                operation["x-scitex-handler"] = route.handler
-            if route.response is not None:
-                schemas[route.response.name] = _schema_fragment(route.response)
-                operation["responses"] = {
-                    "200": {
-                        "description": route.response.name,
-                        "content": {
-                            _media_type(route.transport): {
-                                "schema": {"$ref": f"#/components/schemas/{route.response.name}"}
-                            }
-                        },
-                    }
-                }
-            if route.errors:
-                operation.setdefault("responses", {})["default"] = {
-                    "description": "declared errors",
-                    "x-scitex-errors": [
-                        {
-                            "code": error.code,
-                            "status": error.status,
-                            "message": error.message,
-                            "retryable": error.retryable,
-                        }
-                        for error in route.errors
-                    ],
-                }
-            if route.request is not None:
-                schemas[route.request.name] = _schema_fragment(route.request)
-                operation["requestBody"] = {
+        if route.deprecation is not None:
+            operation["deprecated"] = True
+            operation["x-scitex-sunset-version"] = route.deprecation.sunset_version
+            if route.deprecation.replacement:
+                operation["x-scitex-replacement"] = route.deprecation.replacement
+        if route.handler:
+            operation["x-scitex-handler"] = route.handler
+        if route.response is not None:
+            schemas[route.response.name] = _schema_fragment(route.response)
+            operation["responses"] = {
+                "200": {
+                    "description": route.response.name,
                     "content": {
                         _media_type(route.transport): {
-                            "schema": {"$ref": f"#/components/schemas/{route.request.name}"}
+                            "schema": {"$ref": f"#/components/schemas/{route.response.name}"}
                         }
+                    },
+                }
+            }
+        if route.errors:
+            operation.setdefault("responses", {})["default"] = {
+                "description": "declared errors",
+                "x-scitex-errors": [
+                    {
+                        "code": error.code,
+                        "status": error.status,
+                        "message": error.message,
+                        "retryable": error.retryable,
+                    }
+                    for error in route.errors
+                ],
+            }
+        if route.request is not None:
+            schemas[route.request.name] = _schema_fragment(route.request)
+            operation["requestBody"] = {
+                "content": {
+                    _media_type(route.transport): {
+                        "schema": {"$ref": f"#/components/schemas/{route.request.name}"}
                     }
                 }
-            entry = paths.setdefault(route.path, {})
-            for method in route.methods:
-                entry[method.lower()] = dict(operation)
-        return {"paths": paths, "components": {"schemas": schemas}}
+            }
+        return operation
+
+    def _operation_id(self, route: ApiRoute, method: str) -> str:
+        """A document-unique ``operationId`` that NAMES its method.
+
+        OpenAPI requires operationIds to be unique across the whole document, so
+        the lowercased method is part of the id: without it, a route declaring
+        both GET and POST would publish two operations under one id.
+        """
+        slug = route.path.replace("/", "_").replace("{", "").replace("}", "")
+        return f"{self.id}.{method.lower()}.{slug}"
 
 
 def _media_type(transport: str) -> str:
@@ -804,8 +903,30 @@ def _media_type(transport: str) -> str:
     }[transport]
 
 
+def _security_scheme_fragment() -> dict[str, Any]:
+    """The ``components.securitySchemes`` entry for :data:`OAUTH_SECURITY_SCHEME`.
+
+    A fresh dict per call: the fragment is handed to a host that merges it, and
+    a shared module-level object would let one merge mutate every later one.
+    """
+    return {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": (
+            "SciTeX OIDC-issued bearer access token; a deployment may express "
+            "the same scheme as openIdConnect. Scopes are declared per operation."
+        ),
+    }
+
+
 def _schema_fragment(schema: ApiSchema) -> dict[str, Any]:
-    """A JSON-Schema object for a declared ``ApiSchema``."""
+    """A JSON-Schema object for a declared ``ApiSchema``.
+
+    Closed with ``additionalProperties: false``: the declared fields ARE the
+    body, so a consumer can rely on the shape instead of accepting whatever a
+    client (or a mistyped field name) sends alongside it.
+    """
     properties: dict[str, Any] = {}
     required: list[str] = []
     for item in schema.fields:
@@ -821,6 +942,7 @@ def _schema_fragment(schema: ApiSchema) -> dict[str, Any]:
         "title": schema.name,
         "type": "object",
         "properties": properties,
+        "additionalProperties": False,
     }
     if required:
         fragment["required"] = required
@@ -877,6 +999,7 @@ __all__ = [
     "HTTP_METHODS",
     "IDEMPOTENCY_KEY_HEADER",
     "MUTATING_METHODS",
+    "OAUTH_SECURITY_SCHEME",
     "PAGINATION_STYLES",
     "PROJECT_SCOPES",
     "RECOMMENDED_COMPUTE_COSTS",

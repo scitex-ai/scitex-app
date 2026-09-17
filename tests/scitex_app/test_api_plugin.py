@@ -17,6 +17,7 @@ import pytest
 from scitex_app.api_plugin import (
     API_ENTRY_POINT_GROUP,
     DESCRIPTOR_IMPLEMENTATION,
+    OAUTH_SECURITY_SCHEME,
     RECOMMENDED_COMPUTE_COSTS,
     RECOMMENDED_RATE_CLASSES,
     ApiError,
@@ -572,9 +573,9 @@ def test_two_routes_that_differ_only_by_a_trailing_slash_are_refused():
 
 
 def test_a_placeholder_segment_is_accepted():
-    # Arrange
+    # Arrange — the placeholder is declared alongside the path it appears in.
     # Act
-    path = _route(path="call/{call_id}").path
+    path = _route(path="call/{call_id}", path_params=["call_id"]).path
     # Assert
     assert path == "call/{call_id}"
 
@@ -941,11 +942,12 @@ def test_a_bare_string_where_a_sequence_is_declared_is_refused():
 
 
 def test_the_fragment_exposes_the_declared_paths():
-    # Arrange
+    # Arrange — the document is absolute even though the declaration is
+    # relative to the mount: paths are keyed by what the host will serve.
     # Act
     fragment = _plugin().openapi_fragment()
     # Assert
-    assert list(fragment["paths"]) == ["recipes/save"]
+    assert list(fragment["paths"]) == ["/recipes/save"]
 
 
 def test_the_fragment_lowercases_the_operation_key():
@@ -953,7 +955,7 @@ def test_the_fragment_lowercases_the_operation_key():
     # Act
     fragment = _plugin().openapi_fragment()
     # Assert
-    assert list(fragment["paths"]["recipes/save"]) == ["get"]
+    assert list(fragment["paths"]["/recipes/save"]) == ["get"]
 
 
 def test_the_fragment_carries_the_idempotency_header_extension():
@@ -962,7 +964,7 @@ def test_the_fragment_carries_the_idempotency_header_extension():
     # Act
     fragment = _plugin(routes=routes).openapi_fragment()
     # Assert
-    assert fragment["paths"]["recipes/save"]["post"]["x-scitex-idempotency-key-header"] == "Idempotency-Key"
+    assert fragment["paths"]["/recipes/save"]["post"]["x-scitex-idempotency-key-header"] == "Idempotency-Key"
 
 
 def test_the_fragment_carries_the_compute_cost_declaration():
@@ -971,7 +973,7 @@ def test_the_fragment_carries_the_compute_cost_declaration():
     # Act
     fragment = _plugin(routes=routes).openapi_fragment()
     # Assert
-    assert fragment["paths"]["recipes/save"]["get"]["x-scitex-compute-cost"] == "render"
+    assert fragment["paths"]["/recipes/save"]["get"]["x-scitex-compute-cost"] == "render"
 
 
 def test_the_fragment_marks_a_deprecation_with_its_sunset():
@@ -980,7 +982,7 @@ def test_the_fragment_marks_a_deprecation_with_its_sunset():
     # Act
     fragment = _plugin(routes=routes).openapi_fragment()
     # Assert
-    assert fragment["paths"]["recipes/save"]["get"]["x-scitex-sunset-version"] == "2"
+    assert fragment["paths"]["/recipes/save"]["get"]["x-scitex-sunset-version"] == "2"
 
 
 def test_the_fragment_marks_a_public_route_as_unsecured():
@@ -989,7 +991,7 @@ def test_the_fragment_marks_a_public_route_as_unsecured():
     # Act
     fragment = _plugin(routes=routes).openapi_fragment()
     # Assert
-    assert fragment["paths"]["recipes/save"]["get"]["security"] == []
+    assert fragment["paths"]["/recipes/save"]["get"]["security"] == []
 
 
 def test_the_fragment_reports_scoped_routes_with_their_oauth_scopes():
@@ -997,7 +999,122 @@ def test_the_fragment_reports_scoped_routes_with_their_oauth_scopes():
     # Act
     fragment = _plugin().openapi_fragment()
     # Assert
-    assert fragment["paths"]["recipes/save"]["get"]["x-scitex-oauth-scopes"] == ["recipes:write"]
+    assert fragment["paths"]["/recipes/save"]["get"]["x-scitex-oauth-scopes"] == ["recipes:write"]
+
+
+def test_a_scoped_operation_declares_a_standard_security_requirement():
+    # Arrange — a generic consumer reads `security`, not a vendor extension.
+    # Act
+    fragment = _plugin().openapi_fragment()
+    # Assert
+    assert fragment["paths"]["/recipes/save"]["get"]["security"] == [
+        {OAUTH_SECURITY_SCHEME: ["recipes:write"]}
+    ]
+
+
+def test_the_fragment_declares_the_security_scheme_component():
+    # Arrange — the requirement must name a scheme the document defines.
+    # Act
+    scheme = _plugin().openapi_fragment()["components"]["securitySchemes"][
+        OAUTH_SECURITY_SCHEME
+    ]
+    # Assert
+    assert scheme["scheme"] == "bearer"
+
+
+def test_the_fragment_emits_a_path_parameter_for_every_placeholder():
+    # Arrange
+    routes = [_route(path="call/{call_id}", path_params=["call_id"])]
+    # Act
+    fragment = _plugin(routes=routes).openapi_fragment()
+    # Assert
+    assert fragment["paths"]["/call/{call_id}"]["get"]["parameters"][0]["name"] == "call_id"
+
+
+def test_a_path_parameter_is_required_and_string_typed():
+    # Arrange
+    routes = [_route(path="call/{call_id}", path_params=["call_id"])]
+    # Act
+    parameter = _plugin(routes=routes).openapi_fragment()["paths"]["/call/{call_id}"][
+        "get"
+    ]["parameters"][0]
+    # Assert
+    assert (parameter["in"], parameter["required"], parameter["schema"]) == (
+        "path",
+        True,
+        {"type": "string"},
+    )
+
+
+def test_a_placeholder_that_is_never_declared_is_refused():
+    # Arrange — a client cannot send an argument nobody declared.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="not declared in path_params"):
+        _route(path="call/{call_id}")
+
+
+def test_a_declared_path_param_absent_from_the_path_is_refused():
+    # Arrange — the route would promise a parameter it never receives.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="do not appear as"):
+        _route(path="call", path_params=["call_id"])
+
+
+def test_a_path_parameter_declared_twice_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="path parameter twice"):
+        _route(path="{a}/{b}", path_params=["a", "a", "b"])
+
+
+def test_a_non_string_path_param_element_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="element 0 is 1"):
+        _route(path="call/{call_id}", path_params=[1])
+
+
+def test_each_method_gets_its_own_operation_id():
+    # Arrange — a deep-copied operation would give both methods one id, which
+    # OpenAPI forbids.
+    routes = [_route(methods=["GET", "POST"], idempotency=Idempotency(required=True))]
+    # Act
+    entry = _plugin(routes=routes).openapi_fragment()["paths"]["/recipes/save"]
+    # Assert
+    assert entry["get"]["operationId"] != entry["post"]["operationId"]
+
+
+def test_each_method_gets_its_own_operation_object():
+    # Arrange — method-specific metadata is built per method, not shared.
+    routes = [_route(methods=["GET", "POST"], idempotency=Idempotency(required=True))]
+    # Act
+    entry = _plugin(routes=routes).openapi_fragment()["paths"]["/recipes/save"]
+    # Assert
+    assert entry["get"] is not entry["post"]
+
+
+def test_the_operation_id_names_the_lowercased_method():
+    # Arrange
+    # Act
+    fragment = _plugin().openapi_fragment()
+    # Assert
+    assert fragment["paths"]["/recipes/save"]["get"]["operationId"] == (
+        "figrecipe.get.recipes_save"
+    )
+
+
+def test_every_generated_schema_forbids_additional_properties():
+    # Arrange — the declared fields ARE the body.
+    # Act
+    schemas = _plugin(routes=[_route(response=_schema(name="RecipeState"))]).openapi_fragment()[
+        "components"
+    ]["schemas"]
+    # Assert
+    assert schemas["RecipeState"]["additionalProperties"] is False
 
 
 def test_the_fragment_emits_a_component_schema_for_a_declared_response():
@@ -1015,7 +1132,7 @@ def test_the_fragment_references_the_response_schema():
     # Act
     fragment = _plugin(routes=routes).openapi_fragment()
     # Assert
-    ref = fragment["paths"]["recipes/save"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    ref = fragment["paths"]["/recipes/save"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
     assert ref == "#/components/schemas/RecipeState"
 
 
@@ -1025,7 +1142,7 @@ def test_the_fragment_uses_the_streaming_media_type_for_sse():
     # Act
     fragment = _plugin(routes=routes).openapi_fragment()
     # Assert
-    content = fragment["paths"]["recipes/save"]["get"]["responses"]["200"]["content"]
+    content = fragment["paths"]["/recipes/save"]["get"]["responses"]["200"]["content"]
     assert list(content) == ["text/event-stream"]
 
 
@@ -1035,7 +1152,7 @@ def test_the_fragment_uses_the_binary_media_type_for_a_download():
     # Act
     fragment = _plugin(routes=routes).openapi_fragment()
     # Assert
-    content = fragment["paths"]["recipes/save"]["get"]["responses"]["200"]["content"]
+    content = fragment["paths"]["/recipes/save"]["get"]["responses"]["200"]["content"]
     assert list(content) == ["application/octet-stream"]
 
 
@@ -1045,7 +1162,7 @@ def test_the_fragment_reports_declared_errors_with_their_retryability():
     # Act
     fragment = _plugin(routes=[_route(errors=errors)]).openapi_fragment()
     # Assert
-    entry = fragment["paths"]["recipes/save"]["get"]["responses"]["default"]["x-scitex-errors"][0]
+    entry = fragment["paths"]["/recipes/save"]["get"]["responses"]["default"]["x-scitex-errors"][0]
     assert entry["retryable"] is False
 
 
@@ -1055,7 +1172,7 @@ def test_the_fragment_carries_the_pagination_bounds():
     # Act
     fragment = _plugin(routes=routes).openapi_fragment()
     # Assert
-    pagination = fragment["paths"]["recipes/save"]["get"]["x-scitex-pagination"]
+    pagination = fragment["paths"]["/recipes/save"]["get"]["x-scitex-pagination"]
     assert pagination["max_limit"] == 100
 
 
@@ -1064,7 +1181,7 @@ def test_the_fragment_names_the_handler_for_the_composer():
     # Act
     fragment = _plugin().openapi_fragment()
     # Assert
-    assert fragment["paths"]["recipes/save"]["get"]["x-scitex-handler"] == "figrecipe.api:save_recipe"
+    assert fragment["paths"]["/recipes/save"]["get"]["x-scitex-handler"] == "figrecipe.api:save_recipe"
 
 
 def test_every_declared_route_appears_in_the_fragment():
@@ -1073,7 +1190,7 @@ def test_every_declared_route_appears_in_the_fragment():
     # Act
     fragment = _plugin(routes=routes).openapi_fragment()
     # Assert
-    assert sorted(fragment["paths"]) == ["recipes/export", "recipes/save"]
+    assert sorted(fragment["paths"]) == ["/recipes/export", "/recipes/save"]
 
 
 # ─── discovery: entry points are read, never imported ──────────────────────
