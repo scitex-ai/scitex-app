@@ -450,6 +450,16 @@ def project_provider_endpoint() -> str:
     when the declared name does not reverse. An empty endpoint is the truth —
     "no picker slot here" — whereas a guessed path or a self-link would render a
     picker that fetches the wrong thing.
+
+    REQUEST-INDEPENDENT, deliberately — and NOT the same question scitex-ui's
+    ``{% scitex_project_provider_meta %}`` tag answers. Both call the same
+    ``host_project_provider_url()``, so they cannot disagree about the URL; the
+    tag additionally renders nothing unless the visitor is SIGNED IN, because
+    it will not advertise a project API to an anonymous visitor. This function
+    reports what the host DECLARED, which is what a leaf's own view needs, and
+    leaves the sign-in gate to the leaf if it renders a picker for signed-out
+    visitors. Silently inheriting the tag's gate here would make the value
+    empty for the one caller that per-request context cannot serve.
     """
     try:
         from scitex_ui.project_scope import host_project_provider_url

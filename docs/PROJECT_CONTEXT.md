@@ -102,6 +102,48 @@ SCITEX_PROJECT_PROVIDER = "myhost.projects.HostProjectProvider"  # dotted path
 SCITEX_PROJECT_PROVIDER_URL = "api_project_scope"                # URL name
 ```
 
+## The provider slot
+
+Two settings, one slot, and the slot is where a picker fetches its list from.
+A leaf asks the SDK rather than constructing a URL, because only the host knows
+its own URL layout:
+
+```python
+from scitex_app.project_context import project_provider_endpoint
+
+project_provider_endpoint()      # "/platform/api/project-scope", or "" if none
+```
+
+It is also carried in the context as `project_provider_endpoint`, so a template
+can advertise the slot without importing scitex-ui.
+
+Two properties worth knowing, because both are deliberate:
+
+- **Delegated, not redeclared.** the function reads the settings through
+  scitex-ui rather than copying the names and calling `reverse()` itself. A
+  second copy of a name with no link to the first is a thing that drifts, and
+  the whole point of this contract is that there is one precedence rule and one
+  producer of each name. If scitex-ui is absent, or the name does not reverse,
+  the answer is `""`.
+- **Empty means "no slot".** Never a guessed path and never a self-link: a
+  picker pointed at the wrong endpoint looks like it works while fetching the
+  wrong thing, which is worse than an affordance that is simply absent.
+
+### Not the same question as scitex-ui's meta tag
+
+`{% scitex_project_provider_meta %}` (scitex-ui) renders
+`<meta name="stx-project-provider">` from the same setting and the same
+`host_project_provider_url()` call this function delegates to — so the two
+cannot disagree about the URL. They do differ in one respect, and it is the
+tag's own rule rather than a divergence: the tag renders **nothing** unless the
+request is present and the visitor is **signed in**, because advertising your
+project API to an anonymous visitor is not something it will do.
+
+`project_provider_endpoint()` is request-independent by design — it answers
+"what has the host declared", which is the question a leaf's own view has. A
+leaf that renders a picker for signed-out visitors should therefore gate the
+affordance itself; the SDK will not decide that for it.
+
 ## Standalone
 
 `run_standalone()` registers `scitex_app.project_context.StandaloneProjectProvider`
