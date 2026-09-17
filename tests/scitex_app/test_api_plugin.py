@@ -2010,7 +2010,9 @@ def test_the_validator_accepts_the_document_of_a_public_only_plugin():
 # while the descriptor stores the DECLARED one. Every arm below asserts the
 # EMITTED value, because "construction succeeded" is exactly what the review
 # measured to be insufficient — a check whose result is not stored is not a
-# check.
+# check. (For the two OAuth endpoint URLs the fourth review closed the class
+# harder still: the raw declaration is validated as a whole RFC 3986 URI and a
+# padded one is refused, so the arms for them below are refusals.)
 
 
 def test_two_routes_with_disjoint_methods_render_one_path_item():
@@ -2294,32 +2296,27 @@ def test_a_padded_sunset_version_and_replacement_are_emitted_stripped():
     ) == ("2", "call/x")
 
 
-def test_a_padded_authorization_url_is_emitted_stripped():
-    # Arrange — blocker 3: this string is the flow endpoint a client calls. The
-    # validator accepts the padded form (measured), so only this assertion
-    # catches it.
-    provider = _oauth(
-        authorization_url=" https://auth.scitex.example/oauth2/authorize "
-    )
+def test_a_padded_authorization_url_is_refused():
+    # Arrange — the third review closed blocker 3 by STORING the stripped URL;
+    # it is stored stripped no longer. The fourth review validates the endpoint
+    # as a WHOLE RFC 3986 URI against the RAW declaration, and no URI carries
+    # padding, so the padded form is refused rather than normalized: the string
+    # a client is handed is then always the string that was validated, and no
+    # strip can be forgotten because there is no strip.
     # Act
-    flows = _plugin(oauth=provider).openapi_fragment()["components"][
-        "securitySchemes"
-    ][OAUTH_SECURITY_SCHEME]["flows"]
     # Assert
-    assert flows[OAUTH2_FLOW]["authorizationUrl"] == (
-        "https://auth.scitex.example/oauth2/authorize"
-    )
+    with pytest.raises(ApiPluginContractError, match="whitespace"):
+        _oauth(
+            authorization_url=" https://auth.scitex.example/oauth2/authorize "
+        )
 
 
-def test_a_padded_token_url_is_emitted_stripped():
+def test_a_padded_token_url_is_refused():
     # Arrange — the same rule for the endpoint that issues the token.
-    provider = _oauth(token_url=" https://auth.scitex.example/oauth2/token ")
     # Act
-    flows = _plugin(oauth=provider).openapi_fragment()["components"][
-        "securitySchemes"
-    ][OAUTH_SECURITY_SCHEME]["flows"]
     # Assert
-    assert flows[OAUTH2_FLOW]["tokenUrl"] == "https://auth.scitex.example/oauth2/token"
+    with pytest.raises(ApiPluginContractError, match="whitespace"):
+        _oauth(token_url=" https://auth.scitex.example/oauth2/token ")
 
 
 def test_a_padded_scope_name_is_emitted_stripped_in_the_flow_map():
@@ -2360,12 +2357,16 @@ def test_two_spellings_of_one_scope_are_refused():
         _oauth(scopes={"recipes:write": "a", " recipes:write ": "b"})
 
 
-def test_the_document_of_a_padded_provider_validates():
-    # Arrange — the end-to-end arm for blocker 3.
+def test_the_document_of_a_localhost_provider_validates():
+    # Arrange — the endpoint forms the contract ACCEPTS have to be emittable
+    # into a document the host's own tooling accepts, not merely constructible:
+    # http, an explicit port and an IPv4-literal host are all legal here (a
+    # localhost deployment is a deployment), while the padded provider this arm
+    # used to carry is refused at construction since the fourth review.
     validate = pytest.importorskip("openapi_spec_validator").validate
     provider = _oauth(
-        authorization_url=" https://auth.scitex.example/oauth2/authorize ",
-        token_url=" https://auth.scitex.example/oauth2/token ",
+        authorization_url="http://127.0.0.1:8443/oauth2/authorize",
+        token_url="https://auth.scitex.example/oauth2/token",
     )
     document = _validated_document(_plugin(oauth=provider))
     # Act
@@ -2397,6 +2398,290 @@ def test_the_validator_refuses_a_padded_component_key():
     # Assert
     with pytest.raises(errors.OpenAPIValidationError):
         validate(document)
+
+
+# ─── the fourth review: the ENDPOINT URI is validated on the RAW string ────
+#
+# Three defects were reproduced at 1c5bcd3, all one defect class: every check
+# ran against what `urlsplit` RETURNED, and `urlsplit` DELETES every C0
+# control, every DEL and any leading whitespace from the string it parses
+# (WHATWG-compatible, adopted by CPython). Measured at the reviewed head:
+#
+#   urlsplit("https://auth.example/oa\nuth").path   ==  "/oauth"   (the LF is gone)
+#   urlsplit("https://auth .example/x").netloc      ==  "auth .example"
+#
+#  1. an `authorization_url`/`token_url` carrying an embedded \n, \r or \t
+#     constructed — the parse hid the control — and was stored and EMITTED
+#     unchanged, so the document carried a control character inside
+#     `authorizationUrl`/`tokenUrl`;
+#  2. a hostname containing a space constructed and was emitted with the space;
+#  3. a fragment-bearing endpoint (RFC 6749 §3.1 forbids a fragment on an
+#     endpoint URI) was accepted.
+#
+# The fix validates the WHOLE URI against the RAW string — controls, whitespace
+# (padding included), non-ASCII characters, the URI alphabet, the authority's
+# host and port grammar, the absence of a fragment — stores the raw string only
+# when it passes, and then requires the parse to AGREE with the stored text.
+# Every arm below reads the EMITTED value of BOTH
+# `flows.authorizationCode.authorizationUrl` and `flows.authorizationCode.tokenUrl`,
+# or the named refusal; "construction succeeded" is exactly what the review
+# measured to be insufficient.
+
+
+def test_both_endpoints_are_emitted_unchanged():
+    # Arrange — the positive control for both fields at once: a URL that IS a
+    # complete RFC 3986 URI reaches the document exactly as declared.
+    provider = _oauth(
+        authorization_url="https://auth.scitex.example/oauth2/authorize",
+        token_url="https://auth.scitex.example/oauth2/token",
+    )
+    # Act
+    flow = _plugin(oauth=provider).openapi_fragment()["components"][
+        "securitySchemes"
+    ][OAUTH_SECURITY_SCHEME]["flows"][OAUTH2_FLOW]
+    # Assert
+    assert (flow["authorizationUrl"], flow["tokenUrl"]) == (
+        "https://auth.scitex.example/oauth2/authorize",
+        "https://auth.scitex.example/oauth2/token",
+    )
+
+
+def test_a_localhost_http_endpoint_is_emitted_unchanged():
+    # Arrange — http and an explicit port are accepted forms (a localhost
+    # deployment is legitimate), and the emitted value is the declared one.
+    provider = _oauth(token_url="http://127.0.0.1:8443/oauth2/token")
+    # Act
+    flow = _plugin(oauth=provider).openapi_fragment()["components"][
+        "securitySchemes"
+    ][OAUTH_SECURITY_SCHEME]["flows"][OAUTH2_FLOW]
+    # Assert
+    assert flow["tokenUrl"] == "http://127.0.0.1:8443/oauth2/token"
+
+
+def test_a_bracketed_ipv6_endpoint_is_emitted_unchanged():
+    # Arrange — the authority grammar's other host form: an IP-literal with a
+    # port is emitted with its brackets, not with the parser's hostname.
+    provider = _oauth(authorization_url="https://[::1]:8443/oauth2/authorize")
+    # Act
+    flow = _plugin(oauth=provider).openapi_fragment()["components"][
+        "securitySchemes"
+    ][OAUTH_SECURITY_SCHEME]["flows"][OAUTH2_FLOW]
+    # Assert
+    assert flow["authorizationUrl"] == "https://[::1]:8443/oauth2/authorize"
+
+
+def test_a_case_differing_endpoint_is_emitted_verbatim():
+    # Arrange — the RAW string is what is stored: RFC 3986 makes the scheme and
+    # the host case-insensitive, so an uppercase declaration is legal and is
+    # emitted as declared rather than lowercased into something nobody wrote.
+    provider = _oauth(authorization_url="HTTPS://AUTH.Scitex.example/oauth2/authorize")
+    # Act
+    flow = _plugin(oauth=provider).openapi_fragment()["components"][
+        "securitySchemes"
+    ][OAUTH_SECURITY_SCHEME]["flows"][OAUTH2_FLOW]
+    # Assert
+    assert flow["authorizationUrl"] == "HTTPS://AUTH.Scitex.example/oauth2/authorize"
+
+
+def test_an_embedded_newline_in_the_authorization_url_is_refused():
+    # Arrange — blocker 1: urlsplit deleted the LF from its result, so the
+    # START of the string was validated while the whole string was emitted.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="control character"):
+        _oauth(
+            authorization_url="https://auth.scitex.example/oa\nuth",
+        )
+
+
+def test_an_embedded_carriage_return_in_the_token_url_is_refused():
+    # Arrange — the same for CR, which is the second half of a header-injection
+    # pair once the emitted URL reaches a client.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="control character"):
+        _oauth(token_url="https://auth.scitex.example/oauth2/to\rken")
+
+
+def test_an_embedded_tab_in_the_authorization_url_is_refused():
+    # Arrange — a tab is a C0 control urlsplit also deletes silently.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="control character"):
+        _oauth(authorization_url="https://auth.scitex.example/oa\tuth")
+
+
+def test_a_del_character_in_the_token_url_is_refused():
+    # Arrange — DEL (0x7f) is the control urlsplit deletes but ord() < 0x20
+    # alone would miss.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="control character"):
+        _oauth(token_url="https://auth.scitex.example/oauth2/token\x7f")
+
+
+def test_a_nul_byte_in_the_authorization_url_is_refused():
+    # Arrange — a NUL is what a downstream C consumer truncates on, so a string
+    # whose tail is invisible has to be refused rather than published.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="control character"):
+        _oauth(authorization_url="https://auth.scitex.example/oauth2/authorize\x00")
+
+
+def test_a_leading_space_in_the_authorization_url_is_refused():
+    # Arrange — urlsplit lstrips a space before parsing, so a check written
+    # against its result could not see this one either.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="whitespace"):
+        _oauth(authorization_url=" https://auth.scitex.example/oauth2/authorize")
+
+
+def test_a_trailing_space_in_the_token_url_is_refused():
+    # Arrange — the same at the other end of the string.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="whitespace"):
+        _oauth(token_url="https://auth.scitex.example/oauth2/token ")
+
+
+def test_an_interior_space_in_the_authorization_url_is_refused():
+    # Arrange — the case no strip and no lstrip can reach.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="whitespace"):
+        _oauth(authorization_url="https://auth.scitex.example/oauth2/auth orize")
+
+
+def test_a_space_inside_the_hostname_is_refused():
+    # Arrange — blocker 2: the space stayed in `netloc` (urlsplit only removes
+    # the padding around the whole string), so the host was emitted as
+    # "auth .example" — a hostname no client can resolve.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="whitespace"):
+        _oauth(authorization_url="https://auth .scitex.example/oauth2/authorize")
+
+
+def test_a_fragment_in_the_authorization_url_is_refused():
+    # Arrange — blocker 3: RFC 6749 §3.1 forbids a fragment on an endpoint URI,
+    # and one would have a client call an address the server never described.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="fragment"):
+        _oauth(
+            authorization_url="https://auth.scitex.example/oauth2/authorize#grant",
+        )
+
+
+def test_a_fragment_in_the_token_url_is_refused():
+    # Arrange — the same rule for the endpoint that issues the token.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="fragment"):
+        _oauth(token_url="https://auth.scitex.example/oauth2/token#frag")
+
+
+def test_a_host_character_outside_the_uri_alphabet_is_refused():
+    # Arrange — a character no URI may carry anywhere; urlsplit keeps it in
+    # `netloc`, so the authority has to be checked against RFC 3986 rather than
+    # merely for being non-empty.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="nowhere in a URI"):
+        _oauth(authorization_url="https://auth|scitex.example/oauth2/authorize")
+
+
+def test_an_authority_naming_no_host_is_refused():
+    # Arrange — a port with no host in front of it ('https://:8443/...') has a
+    # non-empty authority, so only the host grammar itself refuses it.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="reg-name"):
+        _oauth(token_url="https://:8443/oauth2/token")
+
+
+def test_a_non_numeric_port_is_refused():
+    # Arrange — a port the parser keeps and no client can dial.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="port"):
+        _oauth(token_url="https://auth.scitex.example:oauth/oauth2/token")
+
+
+def test_a_userinfo_credential_in_the_authorization_url_is_refused():
+    # Arrange — the URL is PUBLISHED inside the generated document, so a
+    # credential embedded in it is a leak, not an authentication.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="userinfo"):
+        _oauth(
+            authorization_url="https://client:secret@auth.scitex.example/oauth2/authorize",
+        )
+
+
+def test_a_non_ascii_character_in_the_token_url_is_refused():
+    # Arrange — RFC 3986 URIs are ASCII, so an internationalised endpoint has
+    # to be declared percent-encoded (or in punycode) to be callable.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="non-ASCII"):
+        _oauth(token_url="https://auth.scitex.example/oauth2/tokén")
+
+
+def test_a_pct_encoded_control_in_the_authorization_url_is_refused():
+    # Arrange — a character refused RAW is refused encoded: %0a is the same
+    # CR/LF pair as a literal one once a client's parser decodes it.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="pct-encodes"):
+        _oauth(authorization_url="https://auth.scitex.example/oauth2/autho%0arize")
+
+
+def test_a_bare_percent_in_the_token_url_is_refused():
+    # Arrange — a '%' that begins no octet leaves the URI's escaping undefined.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="pct-encoded"):
+        _oauth(token_url="https://auth.scitex.example/oauth2/tok%zen")
+
+
+def test_a_bracket_outside_the_authority_is_refused():
+    # Arrange — brackets delimit the authority's IP-literal and mean nothing in
+    # a path, so one there is not the URI the declaration reads as.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="outside its authority"):
+        _oauth(authorization_url="https://auth.scitex.example/[x]/authorize")
+
+
+def test_a_blank_authorization_url_is_refused():
+    # Arrange — whitespace-only is refused before any of the above: an endpoint
+    # that is blank is indistinguishable from an undeclared one.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError, match="non-blank string"):
+        _oauth(authorization_url="   ")
+
+
+def test_the_validator_accepts_a_malformed_flow_url():
+    # Arrange — pins WHY the refusal has to live in the descriptor: measured
+    # with openapi-spec-validator 0.9.0, a flow URL carrying a control
+    # character validates, so nothing downstream of the declaration would have
+    # caught the defect this assignment closes (the document is built from a
+    # valid declaration and then malformed by hand, exactly as the raw URL used
+    # to be emitted).
+    validate = pytest.importorskip("openapi_spec_validator").validate
+    document = _validated_document(_plugin())
+    flow = document["components"]["securitySchemes"][OAUTH_SECURITY_SCHEME]["flows"][
+        OAUTH2_FLOW
+    ]
+    flow["tokenUrl"] = "https://auth.scitex.example/oauth2/token\n"
+    # Act
+    result = validate(document)
+    # Assert
+    assert result is None
 
 
 # EOF

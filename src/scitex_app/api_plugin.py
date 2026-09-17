@@ -40,6 +40,7 @@ for the card's owner — see the note in :data:`DESCRIPTOR_IMPLEMENTATION`.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -173,6 +174,41 @@ _COMPONENT_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 #: whole token alphabet is enforced rather than only the obvious few.
 _HTTP_TOKEN_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
+#: RFC 3986 §3.2.2 ``reg-name`` — the alphabet a host is built from:
+#: ``unreserved`` (``A-Za-z0-9-._~``) plus ``sub-delims``, so a DNS name (dots
+#: and hyphens) and an internal hostname (``_``) need nothing extra, or else a
+#: pct-encoded octet. A space, ``<``, ``|``, ``^``, a bracket or a non-ASCII
+#: byte is outside it: a host the grammar does not accept is one no client can
+#: resolve, whatever a permissive parser reported as ``netloc``.
+_REG_NAME_RE = re.compile(r"^(?:[A-Za-z0-9\-._~!$&'()*+,;=]|%[0-9A-Fa-f]{2})+$")
+
+#: RFC 3986 §3.2.3 spells ``port = *DIGIT``; made strict here, because a port a
+#: declaration carries but a client cannot dial (empty, non-numeric, out of
+#: range) is a promise the endpoint does not keep.
+_PORT_RE = re.compile(r"^[0-9]+$")
+
+#: RFC 3986 §2.1: ``pct-encoded = "%" HEXDIG HEXDIG``. A ``%`` that begins no
+#: triplet leaves the escaping of the URI undefined, so a client cannot know
+#: what the string it was handed means.
+_PCT_SYNTAX_RE = re.compile(r"%(?![0-9A-Fa-f]{2})")
+
+#: Every pct-encoded octet, for the rule that a character refused RAW is
+#: refused encoded as well: ``%0a`` smuggles the same CR/LF pair as a literal
+#: one once a client hands the URL to its parser.
+_PCT_OCTET_RE = re.compile(r"%([0-9A-Fa-f]{2})")
+
+#: Every character a URI may contain (RFC 3986 §2.1-§2.3): ``unreserved``,
+#: ``sub-delims``, the ``gen-delims`` that separate components, and ``%``.
+#: Anything else — space, a control character, ``<``, ``>``, ``"``, ``{``,
+#: ``}``, ``|``, ``\``, ``^``, a backtick, a non-ASCII byte — is not a URI
+#: character, so a string carrying one is not a URI at all.
+_URI_CHAR_RE = re.compile(r"^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$")
+
+#: The same alphabet for the PATH and QUERY, where ``[`` and ``]`` have no
+#: meaning: they delimit the authority's IP-literal and nothing else, and the
+#: fragment ``#`` is refused separately (RFC 6749 §3.1).
+_PATH_QUERY_CHAR_RE = re.compile(r"^[A-Za-z0-9\-._~:/?@!$&'()*+,;=%]*$")
+
 #: Characters that must never appear in a declared path. A path is a
 #: DECLARATION that a host will compose into a real route, so anything that
 #: could escape the mount, reach a shell, or smuggle a scheme is refused here
@@ -279,6 +315,220 @@ def _require_token(value: object, what: str) -> str:
             "header), nor a space or ':'"
         )
     return text
+
+
+def _require_oauth_endpoint_url(value: object, label: str) -> str:
+    """Return the RAW endpoint URL once the whole string is an RFC 3986 URI.
+
+    THE TRAP THIS CLOSES IS THE PARSER'S OWN NORMALIZATION. CPython's
+    ``urlsplit`` deletes every C0 control, every DEL and any leading whitespace
+    from the string it parses — ``urlsplit`` of a URL whose path is
+    ``/oa<LF>uth`` reports the path ``/oauth`` — so a check written against the
+    parsed components accepts a declaration whose RAW text still carries the
+    control character, and the raw text is exactly what this descriptor stores
+    and what the document emits as ``authorizationUrl``/``tokenUrl``. Every
+    rule below therefore reads the RAW string, and the parse is required to
+    AGREE with it (scheme, authority and host alike) before the string is
+    stored.
+
+    Refused by name: any control character (``ord < 0x20`` or ``0x7f``) or any
+    whitespace character anywhere in the string, padding included (an RFC 3986
+    URI carries neither, so neither can be normalized away); any non-ASCII
+    character (a URI is ASCII, so an internationalised endpoint has to be
+    declared percent-encoded or in punycode); a fragment (``#``, which
+    RFC 6749 §3.1 forbids on an endpoint URI); a ``%`` that begins no
+    pct-encoded octet; a pct-encoded control character (a character refused raw
+    is refused encoded); any character outside the URI alphabet; a scheme other
+    than http/https; a string whose parse disagrees with its own text; a
+    missing authority; a userinfo credential; a host outside RFC 3986; ``[`` or
+    ``]`` outside the authority; and a port that is not a number in 1..65535
+    (see :func:`_require_endpoint_host`).
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ApiPluginContractError(
+            f"OAuth {label} must be a non-blank string (got {value!r}); an "
+            f"empty OAuth {label} is indistinguishable from an undeclared one"
+        )
+    text = value
+    for index, char in enumerate(text):
+        codepoint = ord(char)
+        if codepoint < 0x20 or codepoint == 0x7F:
+            raise ApiPluginContractError(
+                f"OAuth {label} {value!r} carries the control character "
+                f"{char!r} at index {index}; the endpoint is emitted verbatim, "
+                "and urlsplit deletes the controls and spaces it PARSEs, so "
+                "this one would be validated as absent and published as "
+                "present"
+            )
+        if char.isspace():
+            raise ApiPluginContractError(
+                f"OAuth {label} {value!r} carries whitespace ({char!r}) at "
+                f"index {index}; an RFC 3986 URI has none, so neither padding "
+                "nor a space inside the hostname can be normalized away — the "
+                "string a client is handed has to be the string that was "
+                "validated"
+            )
+        if codepoint > 0x7E:
+            raise ApiPluginContractError(
+                f"OAuth {label} {value!r} carries the non-ASCII character "
+                f"{char!r} at index {index}; RFC 3986 URIs are ASCII, so an "
+                "internationalised endpoint has to be declared in its "
+                "percent-encoded (or punycode) form for a client to call it"
+            )
+    if "#" in text:
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} carries a fragment ('#'); RFC 6749 §3.1 "
+            "forbids a fragment in an endpoint URI, and a client that resolved "
+            "one would call an address the authorization server never "
+            "described"
+        )
+    if _PCT_SYNTAX_RE.search(text):
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} carries a '%' that begins no pct-encoded "
+            "octet (RFC 3986: pct-encoded = '%' HEXDIG HEXDIG); the escaping "
+            "of the URI is undefined, so a client cannot construct the request"
+        )
+    for match in _PCT_OCTET_RE.finditer(text):
+        octet = int(match.group(1), 16)
+        if octet <= 0x20 or octet == 0x7F:
+            raise ApiPluginContractError(
+                f"OAuth {label} {value!r} pct-encodes the control character "
+                f"{octet:#04x}; a character this contract refuses RAW is "
+                "refused encoded too, because the endpoint is one string that "
+                "a client hands to a URL parser"
+            )
+    if not _URI_CHAR_RE.match(text):
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} carries a character RFC 3986 permits "
+            "nowhere in a URI; the alphabet is unreserved, sub-delims, the "
+            "gen-delims that separate components and pct-encoded octets, and "
+            "nothing else"
+        )
+    try:
+        parts = urlsplit(text)
+    except ValueError as exc:
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} is not a parseable URL: {exc}"
+        ) from exc
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} is not an absolute http(s) URL; a "
+            "flow endpoint a client must call has to name its scheme "
+            "and host, and it is declared here rather than invented by "
+            "the fragment renderer"
+        )
+    marker = len(parts.scheme) + 3
+    if text[:marker].lower() != f"{parts.scheme}://":
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} does not parse to itself: the parse "
+            f"reports the scheme {parts.scheme!r}, so the declaration has to "
+            f"begin with {parts.scheme + '://'!r} (compared case-insensitively "
+            "— RFC 3986 §3.1 makes the scheme case-insensitive)"
+        )
+    authority = text[marker:].split("/", 1)[0].split("?", 1)[0]
+    if authority != parts.netloc:
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} declares the authority {authority!r} "
+            f"while its parse reports {parts.netloc!r}; a component the parser "
+            "does not recover from the raw string is one a client cannot "
+            "resolve, and this contract stores and emits the raw string"
+        )
+    if not _PATH_QUERY_CHAR_RE.match(text[marker + len(authority) :]):
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} carries '[' or ']' outside its "
+            "authority; those two characters delimit an IP-literal host and "
+            "mean nothing anywhere else in an http(s) URI"
+        )
+    hostname = _require_endpoint_host(authority, label, value)
+    # RE-MEASURED, on the string that IS stored: the components validated above
+    # are the components a client recovers from it. This is what keeps the RAW
+    # string the subject of the contract — should a later urlsplit normalize
+    # something else out of (or into) its result, the parse and the stored text
+    # stop agreeing and the declaration is refused instead of published.
+    reparsed = urlsplit(text)
+    if (reparsed.scheme, reparsed.netloc, reparsed.hostname) != (
+        parts.scheme,
+        authority,
+        hostname,
+    ):
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} does not round-trip through urlsplit: "
+            f"its parse reports the scheme {reparsed.scheme!r}, authority "
+            f"{reparsed.netloc!r} and host {reparsed.hostname!r} while the "
+            f"declared string carries the scheme {parts.scheme!r}, authority "
+            f"{authority!r} and host {hostname!r}; the endpoint is emitted as "
+            "one string, so its parse and its text have to be the same thing"
+        )
+    return text
+
+
+def _require_endpoint_host(authority: str, label: str, value: object) -> str:
+    """Return the hostname of a RAW authority, or refuse it under RFC 3986.
+
+    The authority grammar is ``[ userinfo "@" ] host [ ":" port ]``
+    (RFC 3986 §3.2). USERINFO is refused rather than accepted: this URL is
+    published inside the generated document, so a ``client_id:secret@`` baked
+    into it is a credential leak, and no OAuth endpoint needs one. The host is
+    then required to be a ``reg-name`` (:data:`_REG_NAME_RE`) or a bracketed
+    IPv6 literal — RFC 3986's two forms of ``host`` — and a port the
+    declaration carries has to be one a client can dial. The hostname is
+    returned as ``urlsplit().hostname`` reports it (lowercased, brackets
+    removed) so the caller can require the parse to agree with the raw text.
+    """
+    if "@" in authority:
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} carries userinfo ('@'); the endpoint is "
+            "emitted inside the generated document, where a credential baked "
+            "into the URL is a leak rather than an authentication"
+        )
+    if authority.startswith("["):
+        closing = authority.find("]")
+        tail = authority[closing + 1 :] if closing != -1 else ""
+        if closing == -1 or (tail and not tail.startswith(":")):
+            raise ApiPluginContractError(
+                f"OAuth {label} {value!r} authority {authority!r} is not a "
+                "host with an optional port: a bracketed IP-literal has to be "
+                "closed by ']' and followed by ':port' or by nothing"
+            )
+        literal = authority[1:closing]
+        port = tail[1:] if tail else None
+        hostname = literal.lower()
+        if "%" in literal:
+            raise ApiPluginContractError(
+                f"OAuth {label} {value!r} authority {authority!r} carries a "
+                "zone id; a scoped link-local address names an interface on "
+                "one machine, which is not an endpoint another client can call"
+            )
+        try:
+            ipaddress.IPv6Address(literal)
+        except ValueError as exc:
+            raise ApiPluginContractError(
+                f"OAuth {label} {value!r} authority {authority!r} is not a "
+                "bracketed IPv6 literal (RFC 3986 IP-literal); nothing else "
+                "may stand inside the brackets, and a bracketed IPv4 address "
+                "is not an IP-literal either"
+            ) from exc
+    else:
+        host, separator, port = authority.rpartition(":")
+        if not separator:
+            host, port = authority, None
+        hostname = host.lower()
+        if not _REG_NAME_RE.match(host):
+            raise ApiPluginContractError(
+                f"OAuth {label} {value!r} host {host!r} is not an RFC 3986 "
+                "reg-name (unreserved / sub-delims / pct-encoded); a host "
+                "outside the grammar is one a client cannot resolve"
+            )
+    if port is not None and (
+        not _PORT_RE.match(port) or not 1 <= int(port) <= 65535
+    ):
+        raise ApiPluginContractError(
+            f"OAuth {label} {value!r} authority {authority!r} carries the port "
+            f"{port!r}; RFC 3986 spells a port as digits, and a port a "
+            "declaration carries has to be complete and in 1..65535, because a "
+            "client dials it"
+        )
+    return hostname
 
 
 def _require_elements(value: object, element_type: type, what: str) -> tuple:
@@ -1007,9 +1257,14 @@ class OAuthProvider:
 
     ``authorization_url``/``token_url`` must be absolute ``http(s)`` URLs (a
     localhost deployment is legitimate, a bare host or a relative path is not:
-    a client has to be able to construct the request). ``scopes`` is the map the
-    emitted scheme publishes, scope name -> human description; every scope a
-    route requires must appear in it (checked by :class:`ApiPlugin`).
+    a client has to be able to construct the request). Each is validated as a
+    WHOLE RFC 3986 URI against the RAW declared string — no control character,
+    no whitespace (padding included), no fragment (RFC 6749 §3.1), no userinfo,
+    a host the authority grammar accepts, and a parse that agrees with the text
+    it was handed — because the raw string is what gets stored and emitted.
+    ``scopes`` is the map the emitted scheme publishes, scope name -> human
+    description; every scope a route requires must appear in it (checked by
+    :class:`ApiPlugin`).
     """
 
     authorization_url: str
@@ -1018,28 +1273,19 @@ class OAuthProvider:
 
     def __post_init__(self) -> None:
         # STORED, not merely checked: these URLs are emitted inside the OAuth2
-        # flow (authorizationUrl / tokenUrl). A padded URL passed the check and
-        # then reached the document unchanged — the defect this assignment
-        # closes.
+        # flow (authorizationUrl / tokenUrl), so the string that is validated
+        # has to be the string that is stored. The validation reads the RAW
+        # declaration rather than the parser's normalized result, because
+        # urlsplit deletes the controls and spaces it parses — a padded URL
+        # used to pass a check written against `parts` and then reach the
+        # document unchanged, and an embedded newline (invisible to the parse)
+        # was emitted verbatim. Now a URL that is not a complete RFC 3986 URI
+        # is refused instead of normalized.
         for label, url in (
             ("authorization_url", self.authorization_url),
             ("token_url", self.token_url),
         ):
-            text = _require_text(url, f"OAuth {label}")
-            try:
-                parts = urlsplit(text)
-            except ValueError as exc:
-                raise ApiPluginContractError(
-                    f"OAuth {label} {url!r} is not a parseable URL: {exc}"
-                ) from exc
-            if parts.scheme not in ("http", "https") or not parts.netloc:
-                raise ApiPluginContractError(
-                    f"OAuth {label} {url!r} is not an absolute http(s) URL; a "
-                    "flow endpoint a client must call has to name its scheme "
-                    "and host, and it is declared here rather than invented by "
-                    "the fragment renderer"
-                )
-            object.__setattr__(self, label, text)
+            object.__setattr__(self, label, _require_oauth_endpoint_url(url, label))
         if not isinstance(self.scopes, Mapping):
             raise ApiPluginContractError(
                 "OAuth scopes must be a mapping of scope name to description "
