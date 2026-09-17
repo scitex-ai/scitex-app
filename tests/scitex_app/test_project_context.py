@@ -321,15 +321,16 @@ def test_unavailable_state_names_why():
 
 
 def test_a_resolution_that_is_not_ok_cannot_carry_a_project():
-    # Arrange / Act
-    construction = lambda: ProjectResolution(state=STATE_NONE, project=ActiveProject("a", "A"))
-    # Assert
+    # Arrange
+    inconsistent = {"state": STATE_NONE, "project": ActiveProject("a", "A")}
+    # Act
     try:
-        construction()
+        ProjectResolution(**inconsistent)
     except ValueError:
         raised = True
     else:
         raised = False
+    # Assert
     assert raised
 
 
@@ -337,10 +338,12 @@ def test_a_resolution_that_is_not_ok_cannot_carry_a_project():
 
 
 def test_the_command_has_a_stable_declared_name():
-    # Arrange / Act
+    # Arrange
+    expected = "scitex.project.change"
+    # Act
     name = CHANGE_PROJECT_COMMAND
     # Assert
-    assert name == "scitex.project.change"
+    assert name == expected
 
 
 def test_the_command_changes_and_persists_the_active_project():
@@ -572,21 +575,25 @@ def test_the_command_raised_on_a_failing_provider_is_not_a_permission_answer():
 
 
 def test_the_standalone_provider_path_names_this_module():
-    # Arrange / Act
+    # Arrange
+    expected_module = "scitex_app.project_context"
+    # Act
     module_path, _, attribute = STANDALONE_PROVIDER_PATH.rpartition(".")
     # Assert — so settings.SCITEX_PROJECT_PROVIDER can resolve it
-    assert module_path == "scitex_app.project_context" and attribute
+    assert module_path == expected_module and attribute
 
 
 def test_an_unknown_module_attribute_still_raises():
-    # Arrange / Act
-    raised = None
-    try:
-        import scitex_app.project_context as module
+    # Arrange
+    import scitex_app.project_context as module
 
+    # Act
+    try:
         _ = module.no_such_attribute
     except AttributeError as exc:
         raised = exc
+    else:
+        raised = None
     # Assert
     assert raised is not None
 
