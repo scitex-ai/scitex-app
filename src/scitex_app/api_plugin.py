@@ -96,6 +96,17 @@ PAGINATION_STYLES = ("none", "offset", "cursor")
 #: Default header a client sends its idempotency key in.
 IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
 
+#: RECOMMENDED rate/quota classes — examples for the approved deployments, NOT
+#: a closed enum. The hub ruled (2026-09-17) that a leaf may declare its own
+#: extensible class, so these are documentation constants: a third-party plugin
+#: is not refused for naming a class this module has never heard of, and the
+#: approval surface compares against the deployment's own list.
+RECOMMENDED_RATE_CLASSES = ("interactive", "standard", "bulk")
+
+#: RECOMMENDED compute-cost declarations, same standing as the rate classes:
+#: examples that make a declaration readable, quoted by the docs, not enforced.
+RECOMMENDED_COMPUTE_COSTS = ("light", "standard", "heavy")
+
 _METHOD_RE = re.compile(r"^[A-Z]+$")
 _VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
 _HANDLER_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_][\w.]*$")
@@ -365,11 +376,15 @@ class Pagination:
 class RateLimit:
     """The route's rate/quota class and its declared compute cost.
 
-    Both are REQUIRED and non-blank. The vocabulary itself is not fixed by any
-    operator ruling yet, so this contract deliberately does not invent a closed
-    taxonomy that a leaf could then be rejected for — it requires the leaf to
-    state one of the approved deployment's classes and the cost it implies
-    (``compute_cost``), which is the declaration the approval surface needs.
+    Both are REQUIRED and non-blank, and whitespace-only is refused — but the
+    vocabulary is EXTENSIBLE rather than closed, per the hub's ruling
+    (2026-09-17): a third-party plugin must not be rejected for naming a class
+    this module has never heard of, so the approval surface compares a
+    declaration against the DEPLOYMENT's own approved list.
+    :data:`RECOMMENDED_RATE_CLASSES` and :data:`RECOMMENDED_COMPUTE_COSTS` are
+    the documented examples a leaf should reach for first, and the ones the
+    generated OpenAPI fragment's ``x-scitex-rate-class`` /
+    ``x-scitex-compute-cost`` extensions will carry.
     """
 
     rate_class: str
@@ -683,6 +698,8 @@ __all__ = [
     "MUTATING_METHODS",
     "PAGINATION_STYLES",
     "PROJECT_SCOPES",
+    "RECOMMENDED_COMPUTE_COSTS",
+    "RECOMMENDED_RATE_CLASSES",
     "TRANSPORTS",
     "ApiError",
     "ApiField",

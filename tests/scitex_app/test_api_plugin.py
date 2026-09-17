@@ -17,6 +17,8 @@ import pytest
 from scitex_app.api_plugin import (
     API_ENTRY_POINT_GROUP,
     DESCRIPTOR_IMPLEMENTATION,
+    RECOMMENDED_COMPUTE_COSTS,
+    RECOMMENDED_RATE_CLASSES,
     ApiError,
     ApiField,
     ApiPlugin,
@@ -306,12 +308,64 @@ def test_a_blank_rate_class_is_refused():
         RateLimit(rate_class="", compute_cost="render")
 
 
+def test_a_whitespace_only_rate_class_is_refused():
+    # Arrange — hub ruling 2026-09-17: extensible, but never whitespace.
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError):
+        RateLimit(rate_class="   ", compute_cost="render")
+
+
 def test_a_blank_compute_cost_is_refused():
     # Arrange
     # Act
     # Assert
     with pytest.raises(ApiPluginContractError):
         RateLimit(rate_class="interactive", compute_cost="")
+
+
+def test_a_whitespace_only_compute_cost_is_refused():
+    # Arrange
+    # Act
+    # Assert
+    with pytest.raises(ApiPluginContractError):
+        RateLimit(rate_class="interactive", compute_cost="\t\n")
+
+
+def test_a_deployment_specific_rate_class_is_accepted():
+    # Arrange — the vocabulary is extensible; a third-party class must not be
+    # rejected for not being one of the documented examples.
+    # Act
+    rate_class = RateLimit(rate_class="gpu-batch", compute_cost="heavy").rate_class
+    # Assert
+    assert rate_class == "gpu-batch"
+
+
+def test_the_recommended_rate_classes_are_the_documented_examples():
+    # Arrange — calibration: the docs quote these names, so a silent rename
+    # would leave the documentation describing classes that no longer exist.
+    # Act
+    classes = tuple(RECOMMENDED_RATE_CLASSES)
+    # Assert
+    assert classes == ("interactive", "standard", "bulk")
+
+
+def test_the_recommended_compute_costs_are_the_documented_examples():
+    # Arrange
+    # Act
+    costs = tuple(RECOMMENDED_COMPUTE_COSTS)
+    # Assert
+    assert costs == ("light", "standard", "heavy")
+
+
+def test_a_recommended_rate_class_and_cost_are_accepted_together():
+    # Arrange — the documented pair must itself be a valid declaration.
+    # Act
+    rate = RateLimit(
+        rate_class=RECOMMENDED_RATE_CLASSES[0], compute_cost=RECOMMENDED_COMPUTE_COSTS[1]
+    )
+    # Assert
+    assert rate.compute_cost == "standard"
 
 
 def test_an_unknown_audit_level_is_refused():
