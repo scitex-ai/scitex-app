@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """The mount-side app-shell contract (``scitex_app.shell_contract``).
 
 Title / version / project provider / actions / named commands: the GENERIC
@@ -39,8 +37,8 @@ if not settings.configured:
     )
     django.setup()
 
-from scitex_app._django import ScitexAppConfig  # noqa: E402
-from scitex_app.shell_contract import (  # noqa: E402
+from scitex_app._django import ScitexAppConfig
+from scitex_app.shell_contract import (
     DEFAULT_COMMAND_GROUP,
     SHELL_PROPS_CONTEXT_KEY,
     SHELL_PROPS_META_NAME,

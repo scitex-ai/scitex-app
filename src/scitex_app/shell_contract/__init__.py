@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """The mount-side app-shell contract: the props a leaf hands to the shell.
 
 A leaf app (FigRecipe, Writer, Scholar, Stats, ...) does not own the header or
@@ -59,12 +57,9 @@ from __future__ import annotations
 import html
 import json
 import re
-from dataclasses import dataclass
-from dataclasses import field
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any
-from typing import Mapping
-from typing import Optional
-from typing import Sequence
 
 #: Name of the emitted ``<meta>``. The presentation layer reads this name; a
 #: single-name contract is why it is a module constant rather than a literal
@@ -117,8 +112,8 @@ class ShellAction:
 
     id: str
     label: str
-    command: Optional[str] = None
-    href: Optional[str] = None
+    command: str | None = None
+    href: str | None = None
     order: int = 0
 
     def __post_init__(self) -> None:
@@ -165,7 +160,7 @@ class ShellCommand:
     id: str
     label: str
     group: str = DEFAULT_COMMAND_GROUP
-    sequence: Optional[str] = None
+    sequence: str | None = None
 
     def __post_init__(self) -> None:
         _require_text(self.id, "command id")
@@ -228,7 +223,7 @@ class ShellProps:
     title: str
     version: str
     scope: str
-    project: Optional[ProjectProvider] = None
+    project: ProjectProvider | None = None
     actions: Sequence[ShellAction] = field(default_factory=tuple)
     commands: Sequence[ShellCommand] = field(default_factory=tuple)
 
@@ -237,8 +232,7 @@ class ShellProps:
         _require_text(self.title, "app title")
         _require_text(self.version, "app version")
 
-        from ._app_scope import SCOPE_PROJECT
-        from ._app_scope import normalize_scope
+        from .._app_scope import SCOPE_PROJECT, normalize_scope
 
         # normalize_scope raises on a typo rather than guessing, and this is
         # the one field that decides whether a project picker may appear.
@@ -307,7 +301,7 @@ class ShellProps:
 def shell_props_from_app_config(
     app_config: Any,
     *,
-    project: Optional[ProjectProvider] = None,
+    project: ProjectProvider | None = None,
     actions: Sequence[ShellAction] = (),
     commands: Sequence[ShellCommand] = (),
 ) -> ShellProps:
