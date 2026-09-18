@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # File: scitex_app/project_context.py
 
 """The leaf-facing project-context API: one selected project, carried to every app.
@@ -43,7 +41,7 @@ the product rules forbid.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 __all__ = [
     "CHANGE_PROJECT_COMMAND",
@@ -109,7 +107,7 @@ class _ProjectProvider(Protocol):
         """Projects this request's user can access, in display order."""
         ...
 
-    def last_visited(self, request: Any) -> Optional[str]:
+    def last_visited(self, request: Any) -> str | None:
         """The stored last visited project id, or None."""
         ...
 
@@ -161,7 +159,7 @@ class ProjectResolution:
     """
 
     state: str
-    project: Optional[ActiveProject] = None
+    project: ActiveProject | None = None
     reason: str = ""
 
     def __post_init__(self) -> None:
@@ -210,7 +208,7 @@ class ProjectUnavailableError(RuntimeError):
 STANDALONE_PROVIDER_PATH = "scitex_app.project_context.StandaloneProjectProvider"
 
 
-def _host_provider() -> tuple[Optional[_ProjectProvider], str]:
+def _host_provider() -> tuple[_ProjectProvider | None, str]:
     """The host's registered provider, or ``(None, reason)``.
 
     Never guesses. When scitex-ui is absent, or no provider is configured, the
@@ -223,7 +221,7 @@ def _host_provider() -> tuple[Optional[_ProjectProvider], str]:
         return None, "scitex-ui is not installed, so no provider can be resolved"
     try:
         provider = host_project_provider()
-    except Exception as exc:  # Django not configured, bad dotted path, ...
+    except Exception as exc:  # noqa: BLE001 - host provider boundary is untrusted
         return None, f"the configured provider could not be loaded: {exc}"
     if provider is None:
         reason = (
@@ -253,8 +251,8 @@ def _accessible(provider: _ProjectProvider, request: Any) -> dict[str, ActivePro
 
 def resolve_active_project(
     request: Any,
-    provider: Optional[_ProjectProvider] = None,
-    explicit: Optional[str] = None,
+    provider: _ProjectProvider | None = None,
+    explicit: str | None = None,
 ) -> ProjectResolution:
     """Resolve the project this request should open, fail-closed.
 
@@ -280,7 +278,7 @@ def resolve_active_project(
 
     try:
         accessible = _accessible(resolved_provider, request)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - provider implementations are external
         # Fail CLOSED, not loudly-500. A provider that cannot answer must not
         # make the page unrenderable, and it must never be read as "no project"
         # (which would show an empty picker as if the user had none) or as "ok".
@@ -308,12 +306,21 @@ def resolve_active_project(
         # next navigation, or "selected once and carried across every leaf app"
         # holds only for as long as the query string is on the URL. Written
         # AFTER the access check, so a refused project is never persisted.
-        resolved_provider.remember(request, explicit)
+        try:
+            resolved_provider.remember(request, explicit)
+        except Exception as exc:  # noqa: BLE001 - persistence provider is external
+            return ProjectResolution(
+                state=STATE_UNAVAILABLE,
+                reason=(
+                    "the project provider failed to store the selected "
+                    f"project: {exc}"
+                ),
+            )
         return ProjectResolution(state=STATE_OK, project=accessible[explicit])
 
     try:
         stored = resolved_provider.last_visited(request)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - provider implementations are external
         return ProjectResolution(
             state=STATE_UNAVAILABLE,
             reason=f"the project provider failed to report the stored project: {exc}",
@@ -330,7 +337,7 @@ def resolve_active_project(
     )
 
 
-def _explicit_from_request(request: Any) -> Optional[str]:
+def _explicit_from_request(request: Any) -> str | None:
     """``?project=`` from the request, or None. Any request shape is tolerated.
 
     A request without ``GET`` is legitimate here — this function is also called
@@ -342,12 +349,12 @@ def _explicit_from_request(request: Any) -> Optional[str]:
         return None
     try:
         value = get.get(PROJECT_QUERY_PARAM)
-    except Exception:
+    except Exception:  # noqa: BLE001 - tolerate non-QueryDict request adapters
         return None
     return value or None
 
 
-def project_context(request: Any, provider: Optional[_ProjectProvider] = None) -> dict:
+def project_context(request: Any, provider: _ProjectProvider | None = None) -> dict:
     """Context processor: hand every leaf template its project context.
 
     Register once and a mounted app renders its project surface without the
@@ -381,7 +388,7 @@ def project_context(request: Any, provider: Optional[_ProjectProvider] = None) -
 
 
 def change_project(
-    request: Any, project_id: str, provider: Optional[_ProjectProvider] = None
+    request: Any, project_id: str, provider: _ProjectProvider | None = None
 ) -> ActiveProject:
     """The ``scitex.project.change`` command: make ``project_id`` the active one.
 
@@ -425,7 +432,13 @@ def change_project(
             "active project is unchanged"
         )
 
-    resolved_provider.remember(request, project_id)
+    try:
+        resolved_provider.remember(request, project_id)
+    except Exception as exc:
+        raise ProjectUnavailableError(
+            "cannot change project: the provider failed to store the selected "
+            f"project: {exc}"
+        ) from exc
     return accessible[project_id]
 
 
@@ -467,7 +480,7 @@ def project_provider_endpoint() -> str:
         return ""
     try:
         return host_project_provider_url() or ""
-    except Exception:
+    except Exception:  # noqa: BLE001 - broken host reverse must not take down leaf
         # A broken reverse() must not take down a leaf page whose only
         # job here was to advertise a slot.
         return ""

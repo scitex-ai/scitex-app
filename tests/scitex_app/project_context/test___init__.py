@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """The leaf-facing project-context contract (scitex-hub PR 923).
 
 SSOT: scitex-hub ``docs/product/PRIVATE_BETA_LOGIN_TO_WOW.md``.
@@ -53,7 +51,7 @@ if not settings.configured:
     )
     django.setup()
 
-from scitex_app.project_context import (  # noqa: E402
+from scitex_app.project_context import (
     CHANGE_PROJECT_COMMAND,
     PROJECT_QUERY_PARAM,
     STANDALONE_PROVIDER_PATH,
@@ -531,6 +529,13 @@ class _FailingProvider:
         raise OSError("the project store is unreachable")
 
 
+class _RememberFailingProvider(_RecordedProvider):
+    """Lists projects normally but cannot persist the selected project."""
+
+    def remember(self, request, project_id):
+        raise OSError("the project selection store is read-only")
+
+
 def test_a_failing_provider_reports_unavailable():
     # Arrange
     provider = _FailingProvider()
@@ -563,13 +568,38 @@ def test_the_command_raised_on_a_failing_provider_is_not_a_permission_answer():
     # Arrange
     provider = _FailingProvider()
     # Act
-    raised = None
-    try:
-        change_project(_request(), "neuro-paper", provider)
-    except Exception as exc:
-        raised = exc
     # Assert
-    assert isinstance(raised, ProjectUnavailableError)
+    with pytest.raises(ProjectUnavailableError):
+        change_project(_request(), "neuro-paper", provider)
+
+
+def test_explicit_resolution_reports_unavailable_when_remember_fails():
+    # Arrange — listing succeeds, so this reaches the previously unguarded arm.
+    provider = _RememberFailingProvider("alice")
+    # Act
+    resolution = resolve_active_project(
+        _request({"project": "neuro-paper"}), provider
+    )
+    # Assert
+    assert resolution.state == STATE_UNAVAILABLE
+
+
+def test_explicit_resolution_does_not_partially_persist_when_remember_fails():
+    # Arrange
+    provider = _RememberFailingProvider("alice")
+    # Act
+    resolve_active_project(_request({"project": "neuro-paper"}), provider)
+    # Assert
+    assert provider.stored == {}
+
+
+def test_change_command_maps_remember_failure_to_unavailable():
+    # Arrange
+    provider = _RememberFailingProvider("alice")
+    # Act
+    # Assert
+    with pytest.raises(ProjectUnavailableError):
+        change_project(_request(), "neuro-paper", provider)
 
 
 # ── The standalone provider (the mount handoff) ──────────────────────────────
