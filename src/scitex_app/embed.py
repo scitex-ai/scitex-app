@@ -43,6 +43,7 @@ try:
     )
     from . import context_processors  # noqa: F401  (version-display context processors)
     from . import _app_scope  # noqa: F401  (declarative leaf-app scope contract)
+    from . import project_context  # noqa: F401  (project-context API + states)
 except ImportError:
     # _django requires Django; keep embed importable for consumers that
     # only need the standalone launcher (which lazy-imports Django itself).
@@ -237,6 +238,7 @@ __all__ = [
     "package_version",
     "context_processors",
     "_app_scope",
+    "project_context",
     "serve_gui",
     "gui_status",
     "gui_stop",

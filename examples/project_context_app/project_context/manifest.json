@@ -1,0 +1,14 @@
+{
+  "name": "project_context",
+  "slug": "project-context",
+  "label": "Project Context",
+  "pip_package": "scitex-app",
+  "icon": "fas fa-folder-tree",
+  "license": "AGPL-3.0",
+  "description": "Reference consumer for the scitex-app project-context contract: one selected project, carried to every mounted app, with fail-closed states.",
+  "frontend_type": "django",
+  "scope": "project",
+  "dependencies": {
+    "python": ["scitex-app", "django"]
+  }
+}

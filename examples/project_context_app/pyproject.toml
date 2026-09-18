@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scitex-project-context-app"
+version = "0.1.0"
+description = "Reference consumer for the scitex-app project-context contract."
+license = { text = "AGPL-3.0" }
+requires-python = ">=3.10"
+dependencies = ["scitex-app", "django"]
+
+[project.entry-points."scitex.apps"]
+project_context = "project_context.apps:ProjectContextConfig"
+
+[tool.setuptools]
+packages = ["project_context"]
