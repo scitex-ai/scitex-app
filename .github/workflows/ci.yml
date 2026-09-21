@@ -150,19 +150,24 @@ jobs:
 
   # --------------------------------------------------------------------------
   # access-conformance — the REQUIRED non-skipped proof for
-  # scitex_app.access_django (hub review item 2 on PR #198).
+  # scitex_app.access_django (hub review item 2 on PR #198) and for the
+  # declared (kind, action) access-pair composition (scitex_app.api_access).
   #
   # The normal pinned CI (pytest-matrix) installs scitex-dev 0.60.1, which
   # LACKS scitex_dev.access, so test_access_django.py SKIPS there (the guarded
-  # import raises ScitexDevAccessMissingError). A skip is not a proof. This job
+  # import raises ScitexDevAccessMissingError) and the api_access conformance
+  # suite skips with the same named reason. A skip is not a proof. This job
   # installs scitex-app PLUS the exact scitex-dev commit known to contain the
   # access core (72e8891584d8, scitex-dev develop; access introduced by the
   # merged PR #800), so the conformance battery runs NON-SKIPPED against the
   # real core: assert_equivalent(selector, seeds=range(40)) over a real SQLite
-  # queryset filtered by to_q, plus the deterministic fail-closed cases.
+  # queryset filtered by to_q, plus the deterministic fail-closed cases, plus
+  # the declared-pair equivalence (accept/refuse == the core's, the composed
+  # filter field-identical to accessible(), and the composed Q admitting exactly
+  # what check() allows).
   #
   # RETIRE this job when scitex-dev publishes the access release and scitex-app
-  # pins it: then the normal pinned CI has the core, the test runs non-skipped
+  # pins it: then the normal pinned CI has the core, the tests run non-skipped
   # there, and this pinned-commit job is redundant.
   # --------------------------------------------------------------------------
   access-conformance:
@@ -180,7 +185,7 @@ jobs:
           # Pin the exact scitex-dev commit that carries scitex_dev.access.
           # (Until the access release publishes, 0.60.1 is the latest and lacks it.)
           uv pip install "scitex-dev @ git+https://github.com/scitex-ai/scitex-dev.git@72e8891584d8e3388f6a12a0122f9b1c3fb64ca5"
-          # The conformance test must NOT skip: assert the core is importable.
+          # The conformance tests must NOT skip: assert the core is importable.
           python -c "import scitex_dev.access as a; assert hasattr(a, 'AccessFilter')"
       - name: Run the FULL exact-core tests/scitex_app (no cross-module errors)
         run: |
@@ -205,3 +210,18 @@ jobs:
           # authoritative proof cannot pass by skipping a case (core or DB
           # missing).
           python -m pytest tests/scitex_app/test_access_django.py -v --no-header -p no:cacheprovider
+      - name: Run the access-composition differential (non-skipped, strict)
+        env:
+          SCITEX_ACCESS_STRICT: "1"
+        run: |
+          source .venv/bin/activate
+          # The DECLARED (kind, action) pair composed into an AccessFilter and a
+          # Django Q (scitex_app.api_access), proven against the same pinned core:
+          # the pair verdict must equal the core's own (accept/refuse, both
+          # directions), the composed filter must be field-identical to
+          # accessible()'s, and the composed Q must admit exactly the refs
+          # check() allows. A SEPARATE process from the step above, so this
+          # module's own module-top :memory: configure is the one in play (Django
+          # settings are process-global); the same strict flag makes a skip a
+          # failure, so this proof cannot pass by not running against the core.
+          python -m pytest tests/scitex_app/api_access/ -v --no-header -p no:cacheprovider
