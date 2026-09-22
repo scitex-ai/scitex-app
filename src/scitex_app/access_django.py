@@ -68,8 +68,13 @@ import re
 from types import ModuleType
 from typing import Any, Optional
 
-from django.db import models
-from django.db.models import Q
+try:
+    from django.db import models
+    from django.db.models import Q
+except ImportError as exc:
+    raise ImportError(
+        "scitex_app.access_django needs django: pip install scitex-app[all]"
+    ) from exc
 
 # The core's filter object. Typed as Any here because scitex_dev.access is an
 # optional runtime dependency (imported via importlib, invisible to the PS-140

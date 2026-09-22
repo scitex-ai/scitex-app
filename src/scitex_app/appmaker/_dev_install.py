@@ -33,7 +33,12 @@ def dev_install(
     dict
         Server response with 'success' key.
     """
-    import requests
+    try:
+        import requests
+    except ImportError as exc:
+        raise ImportError(
+            "dev_install() needs requests: pip install scitex-app[all]"
+        ) from exc
 
     from ._validate import validate
 
@@ -84,7 +89,12 @@ def dev_install(
 
 def _get_username_from_token(server_url: str, token: str) -> str | None:
     """Resolve the current user's username from the server."""
-    import requests
+    try:
+        import requests
+    except ImportError as exc:
+        raise ImportError(
+            "dev_install() needs requests: pip install scitex-app[all]"
+        ) from exc
 
     try:
         url = f"{server_url.rstrip('/')}/platform/api/context/"

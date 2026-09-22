@@ -25,6 +25,7 @@
 <p align="center">
   <a href="https://github.com/ywatanabe1989/scitex-app/actions/workflows/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml"><img src="https://img.shields.io/github/actions/workflow/status/ywatanabe1989/scitex-app/pytest-matrix-on-ubuntu-py3-11-3-12-3-13.yml?branch=develop&label=tests" alt="tests"></a>
   <a href="https://codecov.io/gh/ywatanabe1989/scitex-app"><img src="https://img.shields.io/codecov/c/github/ywatanabe1989/scitex-app/develop?label=cov" alt="cov"></a>
+  <a href="https://scitex-app.readthedocs.io/en/latest/"><img src="https://img.shields.io/readthedocs/scitex-app?label=docs" alt="docs-status"></a>
 </p>
 <!-- scitex-badges:end -->
 
@@ -34,7 +35,7 @@
 
 | # | Problem | Solution |
 |---|---------|----------|
-| 1 | **Every lab reinvents its Django "lab tools" webapp** -- three months of plumbing before the first domain feature ships | **App scaffold** -- `scitex-app init <name>` produces a working Django app with auth, file browser, session logging, routes, manifest |
+| 1 | Every lab reinvents its Django "lab tools" webapp -- **three months of plumbing** before the first domain feature ships | **App scaffold** -- `scitex-app init <name>` produces a working Django app with auth, file browser, session logging, routes, manifest |
 | 2 | **Apps don't compose** -- each lab's app is a snowflake; can't install B into A's workspace | **FilesBackend plugin registry** -- apps declare a `manifest.json`; `scitex-app dev-install` registers them into any SciTeX Cloud workspace |
 | 3 | **Local-vs-cloud storage fork** -- `pathlib` everywhere; cloud integration means rewriting every app | **Auto-backend `get_files(root)`** -- returns a FilesBackend that transparently uses local disk or cloud storage; same read/write API |
 
@@ -62,40 +63,6 @@ Every backend implements the same 7-method protocol:
 
 <p align="center"><sub><b>Table 2.</b> The <code>FilesBackend</code> protocol. Uses <code>typing.Protocol</code> for structural subtyping — backends just implement the methods, no inheritance required.</sub></p>
 
-## Installation
-
-Requires Python >= 3.10. **Zero dependencies** — pure stdlib.
-
-```bash
-pip install scitex-app
-```
-
-## Architecture
-
-```
-src/scitex_app/
-├── appmaker/        # scaffold, validate, publish helpers
-├── sdk/             # FilesBackend protocol + implementations
-├── _cli/            # `scitex-app` Click CLI
-├── _mcp/            # MCP server entry
-├── _chat/           # AI backend interface
-├── _django.py       # ScitexAppConfig base class
-├── paths.py         # project path resolution
-├── validator.py     # AppValidator (security/privilege)
-└── _standalone.py   # umbrella↔standalone bridge
-```
-
-## Demo
-
-```mermaid
-flowchart LR
-    App[User App] --> SDK[scitex_app.sdk.get_files]
-    SDK -->|local| FS[FilesBackend - filesystem]
-    SDK -->|SCITEX_API_TOKEN| Cloud[FilesBackend - cloud REST]
-    SDK -->|custom| Plugin[FilesBackend - plugin]
-    CLI[scitex-app appmaker] --> Init[init / validate / submit]
-```
-
 ## Quickstart
 
 ```python
@@ -114,6 +81,54 @@ import os
 os.environ["SCITEX_API_TOKEN"] = "your-token"
 cloud_files = get_files()  # routes through cloud REST API
 ```
+
+## Demo
+
+```mermaid
+flowchart LR
+    App[User App] --> SDK[scitex_app.sdk.get_files]
+    SDK -->|local| FS[FilesBackend - filesystem]
+    SDK -->|SCITEX_API_TOKEN| Cloud[FilesBackend - cloud REST]
+    SDK -->|custom| Plugin[FilesBackend - plugin]
+    CLI[scitex-app appmaker] --> Init[init / validate / submit]
+```
+
+<p align="center"><sub><b>Figure 2.</b> Demo topology. One SDK call fans out to local, cloud, or plugin storage; the appmaker CLI covers the scaffold-to-submit lifecycle.</sub></p>
+
+## Installation
+
+```bash
+uv pip install "scitex-app[all]"
+```
+
+Requires Python >= 3.10. The base install stays light
+(`click`, `rich`, `scitex-config`, `scitex-logging`); `[all]` adds every
+runtime capability (Django integration, MCP server, LLM backends, cloud
+SDK transport, UI shell).
+
+<details>
+<summary><strong>Extras matrix</strong></summary>
+
+| Extra | Contents |
+|-------|----------|
+| `all` | Everything: `django`, `fastmcp`, `anthropic`, `litellm`, `requests`, `scitex-ui` |
+
+</details>
+
+## Architecture
+
+```mermaid
+flowchart TD
+    User[Leaf app code] --> SDK[scitex_app.sdk.get_files]
+    SDK -->|no token| FS[FileSystemBackend — local disk]
+    SDK -->|SCITEX_API_TOKEN| Cloud[CloudFilesBackend — platform REST]
+    SDK -->|registered| Plugin[Custom backend — S3 / NAS / ...]
+    CLI[scitex-app CLI — app / file / mcp] --> SDK
+    Mount[Django mount — ScitexAppConfig] --> SDK
+    Standalone[run_standalone launcher] --> Mount
+```
+
+<p align="center"><sub><b>Figure 1.</b> Request flow. Every surface (SDK, CLI, Django mount, standalone launcher) funnels through the FilesBackend protocol, which auto-selects local, cloud, or plugin storage.</sub></p>
 
 ## Three Interfaces
 

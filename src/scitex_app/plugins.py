@@ -97,7 +97,12 @@ def installed_app_paths(
 
 def loaded_plugin_configs(plugins: Optional[Iterable[PluginApp]] = None) -> list:
     """The ready AppConfig instances of discovered plugins (needs Django set up)."""
-    from django.apps import apps
+    try:
+        from django.apps import apps
+    except ImportError as exc:
+        raise ImportError(
+            "scitex_app.plugins needs django: pip install scitex-app[all]"
+        ) from exc
 
     wanted = {p.app_config for p in (discover_plugin_apps() if plugins is None else plugins)}
     return [

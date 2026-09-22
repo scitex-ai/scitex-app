@@ -507,7 +507,13 @@ def _standalone_provider_class():
     """
     import os
 
-    from scitex_ui.project_scope import LocalProjectProvider
+    try:
+        from scitex_ui.project_scope import LocalProjectProvider
+    except ImportError as exc:
+        raise ImportError(
+            "StandaloneProjectProvider needs the scitex-ui shell: "
+            "pip install scitex-ui"
+        ) from exc
 
     class StandaloneProjectProvider(LocalProjectProvider):
         """Every non-hidden folder under the standalone working directory."""

@@ -17,6 +17,10 @@ import webbrowser
 from pathlib import Path
 from typing import Optional
 
+import scitex_logging as slogging
+
+log = slogging.getLogger(__name__)
+
 
 class ScitexUiRequiredError(RuntimeError):
     """A standalone workspace cannot render without the scitex-ui shell.
@@ -134,7 +138,12 @@ def run_standalone(
     _configure_django(app_module, extra_installed_apps, extra_staticfiles_dirs, host=host)
     _warn_about_uncompiled_languages(app_module, extra_installed_apps)
 
-    import django
+    try:
+        import django
+    except ImportError as exc:
+        raise ImportError(
+            "run_standalone() needs django: pip install scitex-app[all]"
+        ) from exc
 
     django.setup()
 
@@ -147,8 +156,8 @@ def run_standalone(
         try:
             import webview
         except ImportError:
-            print(
-                "pywebview not installed. Falling back to browser.\n"
+            log.warning(
+                "pywebview not installed. Falling back to browser. "
                 "Install with: pip install pywebview"
             )
             if open_browser:
@@ -416,8 +425,8 @@ def _warn_about_uncompiled_languages(
     missing = _languages_missing_catalogs(codes, modules)
     if not missing:
         return
-    print(
-        f"WARNING: SCITEX_LANGUAGES declares {', '.join(missing)} but no compiled "
+    log.warning(
+        f"SCITEX_LANGUAGES declares {', '.join(missing)} but no compiled "
         f"catalog (locale/<lang>/LC_MESSAGES/django.mo) was found for "
         f"{'it' if len(missing) == 1 else 'them'} in {', '.join(modules)}. "
         f"Those languages will render the source strings, which looks like "
@@ -434,7 +443,12 @@ def _configure_django(
     host: str = "127.0.0.1",
 ) -> None:
     """Configure Django settings for standalone mode."""
-    import django.conf
+    try:
+        import django.conf
+    except ImportError as exc:
+        raise ImportError(
+            "run_standalone() needs django: pip install scitex-app[all]"
+        ) from exc
 
     if django.conf.settings.configured:
         return
@@ -553,7 +567,12 @@ def _resolve_module_static(module_path: str) -> Optional[str]:
 
 def _run_server(host: str, port: int, hot_reload: bool) -> None:
     """Start Django development server."""
-    from django.core.management import call_command
+    try:
+        from django.core.management import call_command
+    except ImportError as exc:
+        raise ImportError(
+            "run_standalone() needs django: pip install scitex-app[all]"
+        ) from exc
 
     noreload = [] if hot_reload else ["--noreload"]
     call_command("runserver", f"{host}:{port}", *noreload)

@@ -24,6 +24,9 @@ dependencies = [
     "click>=8.0.0",
     "rich>=13.0.0",
     "scitex-config>=0.3.6",
+    # PS-220: package source must log via scitex-logging, so it is a hard
+    # runtime dependency (not an extra) — every module can import it.
+    "scitex-logging>=0.1.0",
 ]
 
 # Extras are all-or-nothing (operator directive, 2026-07-13): one [all]
@@ -45,6 +48,9 @@ all = [
     "requests>=2.28.0",
     "django>=4.2",
     "fastmcp>=2.0.0",
+    # PS-233: src imports scitex_ui at runtime (standalone shell +
+    # project_context provider); [all] must give every runtime capability.
+    "scitex-ui>=0.22.0",
 ]
 
 # PEP 735 dependency groups -- NOT installable via `pip install pkg[dev]`,
@@ -111,6 +117,8 @@ packages = ["src/scitex_app"]
 testpaths = ["tests"]
 markers = [
     "slow: marks tests as slow (pip-install/venv-build gates; deselect with '-m \"not slow\"')",
+    "smoke: fast subprocess CLI happy-path layer (tests/smoke/)",
+    "e2e: end-to-end workflows against real subsystems (tests/e2e/)",
 ]
 
 [tool.coverage.run]

@@ -16,16 +16,15 @@ from pathlib import Path
 
 import pytest
 
+if shutil.which("scitex-dev") is None:
+    pytest.skip(
+        "scitex-dev not installed — add `scitex-dev[cli-audit]` "
+        "to [project.optional-dependencies.dev]",
+        allow_module_level=True,
+    )
+
 
 def test_audit_all_clean():
-    # Arrange
-    # Act
-    # Assert
-    if shutil.which("scitex-dev") is None:
-        pytest.skip(
-            "scitex-dev not installed — add `scitex-dev[cli-audit]` "
-            "to [project.optional-dependencies.dev]"
-        )
     from scitex_dev.testing import audit_all_for_package
 
     # PIN THE TREE. Without `path=`, audit-all resolves its own target by
@@ -35,5 +34,10 @@ def test_audit_all_clean():
     # (STX-TQ002, PR #158) passed here three times, because cwd was the main
     # checkout on develop and the edit was in .worktrees/. scitex-dev warns
     # about this on stderr; a warning nobody reads is not a guard.
+    # Arrange
     repo_root = Path(__file__).resolve().parents[2]
-    audit_all_for_package('scitex-app', path=repo_root)
+    distribution = 'scitex-app'
+    # Act
+    result = audit_all_for_package(distribution, path=repo_root)
+    # Assert
+    assert result is None

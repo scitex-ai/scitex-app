@@ -16,17 +16,23 @@ Usage::
 from __future__ import annotations
 
 import json
-import logging
 
-from django.http import JsonResponse, StreamingHttpResponse
-from django.urls import path
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
+import scitex_logging as slogging
+
+try:
+    from django.http import JsonResponse, StreamingHttpResponse
+    from django.urls import path
+    from django.views.decorators.csrf import csrf_exempt
+    from django.views.decorators.http import require_http_methods
+except ImportError as exc:
+    raise ImportError(
+        "scitex_app._chat._django needs django: pip install scitex-app[all]"
+    ) from exc
 
 from ._sse import sse_keepalive_wrap
 from ._stream import stream_chat
 
-logger = logging.getLogger(__name__)
+log = slogging.getLogger(__name__)
 
 # Default system prompt — apps can override via request body
 _DEFAULT_SYSTEM = (
@@ -76,7 +82,7 @@ def chat_stream_view(request):
     except ImportError as e:
         return JsonResponse({"error": str(e)}, status=503)
     except Exception as e:
-        logger.exception("Chat stream setup failed")
+        log.exception("Chat stream setup failed")
         return JsonResponse({"error": str(e)}, status=500)
 
     response = StreamingHttpResponse(generator, content_type="text/event-stream")

@@ -41,14 +41,14 @@ into every self-hosted install.
 
 from __future__ import annotations
 
-import logging
+import scitex_logging as slogging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional
 
-logger = logging.getLogger(__name__)
+log = slogging.getLogger(__name__)
 
 #: The five answers. `kind` is always exactly one of these.
 ALLOWED = "allowed"
@@ -428,7 +428,7 @@ def denied_no_hub(*, action: str | None = None) -> Verdict:
     global _hub_hint_emitted
     if not _hub_hint_emitted:
         _hub_hint_emitted = True
-        logger.warning(
+        log.warning(
             "no hub is configured, so every hub-dependent action is denied. "
             "This is the DEFAULT: an unconfigured install contacts nothing. "
             "Set %s=<your hub> to enable them, or ignore this if this "

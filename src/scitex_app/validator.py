@@ -20,13 +20,13 @@ Usage:
 from __future__ import annotations
 
 import json
-import logging
+import scitex_logging as slogging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-logger = logging.getLogger(__name__)
+log = slogging.getLogger(__name__)
 
 # Required manifest fields — IMPORTED, not declared. NOTE: `version` is
 # intentionally NOT required; the app version is the single source of truth of

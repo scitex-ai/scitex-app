@@ -11,11 +11,11 @@ URL resolution: SCITEX_API_URL env var (default: http://127.0.0.1:8000).
 from __future__ import annotations
 
 import json
-import logging
+import scitex_logging as slogging
 import os
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+log = slogging.getLogger(__name__)
 
 
 class PlatformClient:
@@ -40,7 +40,12 @@ class PlatformClient:
         files: Optional[dict] = None,
     ) -> dict:
         """Make authenticated HTTP request to Platform API."""
-        import requests
+        try:
+            import requests
+        except ImportError as exc:
+            raise ImportError(
+                "PlatformClient needs requests: pip install scitex-app[all]"
+            ) from exc
 
         url = f"{self.base_url}{endpoint}"
         headers = {"X-Requested-With": "XMLHttpRequest"}

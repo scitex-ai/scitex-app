@@ -23,12 +23,12 @@ Directory conventions::
 from __future__ import annotations
 
 import json
-import logging
+import scitex_logging as slogging
 import os
 from pathlib import Path
 from typing import Iterator, Optional, Union
 
-logger = logging.getLogger(__name__)
+log = slogging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -145,14 +145,14 @@ def resolve_user_project_dir(
     """
     root = get_base_dir(base_dir)
     if not (_is_safe_segment(owner) and _is_safe_segment(repo)):
-        logger.warning(
+        log.warning(
             "Refused unsafe project request: owner=%r repo=%r", owner, repo
         )
         return None
     users_root = root / "data" / "users"
     project_dir = _contained(users_root / owner / "proj" / repo, users_root)
     if project_dir is None:
-        logger.warning(
+        log.warning(
             "Refused project escaping the users tree: owner=%r repo=%r", owner, repo
         )
         return None
@@ -178,12 +178,12 @@ def resolve_published_project_dir(
     """
     root = get_base_dir(base_dir)
     if not _is_safe_segment(slug):
-        logger.warning("Refused unsafe published project request: slug=%r", slug)
+        log.warning("Refused unsafe published project request: slug=%r", slug)
         return None
     projects_root = root / "data" / "projects"
     project_dir = _contained(projects_root / slug, projects_root)
     if project_dir is None:
-        logger.warning("Refused published project escaping its tree: slug=%r", slug)
+        log.warning("Refused published project escaping its tree: slug=%r", slug)
         return None
     return project_dir if project_dir.is_dir() else None
 
@@ -201,14 +201,14 @@ def resolve_manifest(project_dir: Union[str, Path]) -> dict:
     project_dir = Path(project_dir)
     manifest_path = _contained(project_dir / "manifest.json", project_dir)
     if manifest_path is None:
-        logger.warning("Refused manifest escaping its project dir: %s", project_dir)
+        log.warning("Refused manifest escaping its project dir: %s", project_dir)
         return {}
     if not manifest_path.is_file():
         return {}
     try:
         return json.loads(manifest_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
-        logger.warning("Failed to read manifest %s: %s", manifest_path, exc)
+        log.warning("Failed to read manifest %s: %s", manifest_path, exc)
         return {}
 
 
@@ -233,7 +233,7 @@ def find_partial_template(
     """
     templates_dir = Path(templates_dir)
     if not _is_safe_segment(filename):
-        logger.warning("Refused unsafe template filename: %r", filename)
+        log.warning("Refused unsafe template filename: %r", filename)
         return None
     if not templates_dir.is_dir():
         return None
@@ -247,7 +247,7 @@ def find_partial_template(
             continue
         nested = _contained(subdir / filename, templates_dir)
         if nested is None:
-            logger.warning("Skipped template subdir escaping its tree: %s", subdir)
+            log.warning("Skipped template subdir escaping its tree: %s", subdir)
             continue
         if nested.is_file():
             return nested
@@ -266,7 +266,7 @@ def resolve_template_dir(
     project_dir = Path(project_dir)
     tpl = _contained(project_dir / "templates", project_dir)
     if tpl is None:
-        logger.warning("Refused templates dir escaping its project: %s", project_dir)
+        log.warning("Refused templates dir escaping its project: %s", project_dir)
         return None
     return tpl if tpl.is_dir() else None
 
@@ -287,7 +287,7 @@ def resolve_static_dir(
     project_dir = Path(project_dir)
     static = _contained(project_dir / "static", project_dir)
     if static is None:
-        logger.warning("Refused static dir escaping its project: %s", project_dir)
+        log.warning("Refused static dir escaping its project: %s", project_dir)
         return None
     return static if static.is_dir() else None
 
@@ -319,7 +319,7 @@ def parse_dev_module_name(module_name: str) -> Optional[tuple[str, str]]:
         return None
     owner, repo = parts[1], parts[2]
     if not (_is_safe_segment(owner) and _is_safe_segment(repo)):
-        logger.warning("Rejected dev module name %r", module_name)
+        log.warning("Rejected dev module name %r", module_name)
         return None
     return owner, repo
 
@@ -337,7 +337,7 @@ def safe_iterdir(directory: Union[str, Path]) -> Iterator[Path]:
                 continue
             yield entry
     except (PermissionError, OSError) as exc:
-        logger.debug("Cannot iterate %s: %s", directory, exc)
+        log.debug("Cannot iterate %s: %s", directory, exc)
 
 
 def validate_project_structure(
