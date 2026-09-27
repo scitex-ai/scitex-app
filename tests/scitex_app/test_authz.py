@@ -16,6 +16,7 @@ THE ARMS SPLIT IN TWO, deliberately, and the split is by what they need:
 
 from __future__ import annotations
 
+import importlib
 import subprocess
 import sys
 
@@ -30,8 +31,10 @@ from scitex_app.authz import (
     UNRESOLVED,
     VERDICT_KINDS,
     AccessPrimitiveMissingError,
+    DataScope,
     ResolveNotAttemptedError,
     ResolveState,
+    ScopeError,
     Verdict,
     VerdictError,
     _missing_access_primitive,
@@ -40,6 +43,8 @@ from scitex_app.authz import (
     denied,
     denied_not_entitled,
     denied_not_signed_in,
+    scope_for,
+    scope_from_decision,
     unresolved,
     verdict_from_decision,
 )
@@ -897,6 +902,469 @@ def test_the_core_decision_kinds_are_the_verdict_kinds(_core):
     core_kinds = {member.value for member in _core.DecisionKind}
     # Assert
     assert core_kinds == set(VERDICT_KINDS)
+
+
+# ─── scope_for(): the LIST path. Contract arms first — these need no core. ──
+#
+# `can()` answers about ONE resource; `scope_for()` answers about a LIST, and
+# the value it returns exists to keep "there are no rows for you" apart from "we
+# could not find out who you are". The contract arms hold that apart with no
+# core installed; the decision arms then hold the row RULE to the core's own
+# filter rather than to a hand-written expectation.
+
+
+def test_a_scope_refuses_an_unknown_kind():
+    """A row-set whose answer is not one of the five is not an answer.
+
+    `DataScope` validates against `VERDICT_KINDS` — the same tuple the drift
+    gate pins to the core's `DecisionKind` — so a sixth kind has to become a
+    conversation with scitex-ui on BOTH surfaces rather than a branch one of
+    them grows alone.
+    """
+    # Arrange
+    error = None
+    # Act
+    try:
+        DataScope(kind="probably-fine", access_filter=object())
+    except ScopeError as exc:
+        error = exc
+    # Assert
+    assert error is not None
+
+
+def test_an_allowed_scope_requires_a_filter():
+    """`allowed` with nothing to filter by is not a state an app can act on: it
+    would have to either show every row or guess, and both are the bug class this
+    type removes."""
+    # Arrange
+    error = None
+    # Act
+    try:
+        DataScope(kind=ALLOWED)
+    except ScopeError as exc:
+        error = exc
+    # Assert
+    assert error is not None
+
+
+def test_a_non_allowed_scope_must_not_carry_a_filter():
+    """BOTH DIRECTIONS, like `Verdict`'s payload rule, and this is the direction
+    that matters: a filter on `unresolved` would be USED, and using it renders
+    "nobody checked" as "you have no content"."""
+    # Arrange
+    error = None
+    # Act
+    try:
+        DataScope(kind=UNRESOLVED, access_filter=object())
+    except ScopeError as exc:
+        error = exc
+    # Assert
+    assert error is not None
+
+
+def _scope_assignment_outcome(scope):
+    """Try to mutate a scope; return the exception raised, or None.
+
+    ``setattr`` rather than an attribute assignment so the intent — "is this
+    frozen?" — is what is being tested, not the attribute's type.
+    """
+    try:
+        setattr(scope, "access_filter", object())
+    except Exception as exc:  # frozen dataclasses raise FrozenInstanceError
+        return exc
+    return None
+
+
+def test_a_scope_cannot_be_edited_after_construction():
+    """A scope is a fact about a moment; a caller able to edit one could turn
+    four non-allowed kinds into an allowed one by assignment."""
+    # Arrange
+    scope = DataScope(kind=UNRESOLVED)
+    # Act
+    outcome = _scope_assignment_outcome(scope)
+    # Assert
+    assert outcome is not None
+
+
+def test_there_is_no_allowed_boolean_property_on_a_scope():
+    """The same prohibition as `Verdict`, and it bites harder here: on a LIST
+    `if scope.allowed:` makes "we could not decide" indistinguishable from
+    "nothing for you" — the two states a sign-in failure and an empty account
+    produce, which is exactly the incident this primitive exists to stop."""
+    # Arrange
+    # Act
+    has_allowed = hasattr(DataScope(kind=UNRESOLVED), "allowed")
+    # Assert
+    assert has_allowed is False
+
+
+def test_scope_for_raises_before_anything_is_resolved():
+    """ONE resolve-before-render contract, so the list path raises for the same
+    violation the single-resource path raises for. Returning a scope here would
+    let a bug render as a correct-looking empty list — silently, and forever.
+
+    `_exploding_importer` proves the core is never consulted: a caller who never
+    resolved has nothing to ask it about.
+    """
+    # Arrange
+    # Act
+    error = None
+    try:
+        scope_for(
+            object(),
+            "view",
+            _KIND,
+            state=ResolveState.NOT_ATTEMPTED,
+            importer=_exploding_importer,
+        )
+    except ResolveNotAttemptedError as exc:
+        error = exc
+    # Assert
+    assert error is not None
+
+
+def test_the_scope_contract_violation_is_the_single_resource_one():
+    """The same CLASS, not a parallel one: an app that already handles the
+    verdict-side violation needs no second except clause, which is what makes
+    this one contract rather than two that drift."""
+    # Arrange
+    # Act
+    raised = None
+    try:
+        scope_for(
+            object(),
+            "view",
+            _KIND,
+            state=ResolveState.NOT_ATTEMPTED,
+            importer=_exploding_importer,
+        )
+    except VerdictError as exc:
+        raised = exc
+    # Assert
+    assert isinstance(raised, ResolveNotAttemptedError)
+
+
+def test_a_failed_resolution_yields_unresolved_with_no_filter():
+    """FAILED RETURNS rather than raising — a hub that is unreachable is a real
+    operating state the screen must still draw — and it returns the FAIL-CLOSED
+    shape: `unresolved` carries no filter, so an app cannot query with it."""
+    # Arrange
+    # Act
+    scope = scope_for(
+        object(),
+        "view",
+        _KIND,
+        state=ResolveState.FAILED,
+        importer=_exploding_importer,
+    )
+    # Assert
+    assert (scope.kind, scope.access_filter) == (UNRESOLVED, None)
+
+
+def test_a_failed_resolution_carries_the_same_kind_on_both_surfaces():
+    """THE DRIFT GATE BETWEEN THE TWO PATHS. `can()` and `scope_for()` fail the
+    same way — a hub that is unreachable is unreachable for a detail page too —
+    so one renderer branch must cover both, and a LIST must not invent a
+    different answer for a state the detail page already names.
+
+    Asserted as an EQUALITY between the two surfaces rather than against the
+    literal `unresolved`, and that is not stylistic: the literal version passed
+    under calibration, when `scope_for` was made to fail OPEN (an allowed, empty
+    row set) on a failed resolution — an arm that cannot fail measures nothing.
+    """
+    # Arrange
+    # Act
+    from_a_list = scope_for(
+        object(), "view", _KIND, state=ResolveState.FAILED, importer=_exploding_importer
+    ).kind
+    from_one_resource = can(
+        object(), "view", object(), state=ResolveState.FAILED, importer=_exploding_importer
+    ).kind
+    # Assert
+    assert (from_a_list, from_one_resource) == (UNRESOLVED, UNRESOLVED)
+
+
+def test_scope_for_refuses_by_name_when_the_core_is_not_installed():
+    """An install that CANNOT decide must not look like one that decided "no
+    rows for you": only one of those is fixed by configuring something, and an
+    empty list is the one of the two a developer does not investigate."""
+    # Arrange
+    # Act
+    error = None
+    try:
+        scope_for(
+            object(), "view", _KIND, state=ResolveState.RESOLVED, importer=_absent_importer
+        )
+    except AccessPrimitiveMissingError as exc:
+        error = exc
+    # Assert
+    assert error is not None
+
+
+def test_the_scope_missing_core_refusal_names_the_fix():
+    """A named error whose message does not say what to install is a diagnosis
+    without a remedy, and the reader is a developer at a shell."""
+    # Arrange
+    # Act
+    error = None
+    try:
+        scope_for(
+            object(), "view", _KIND, state=ResolveState.RESOLVED, importer=_absent_importer
+        )
+    except AccessPrimitiveMissingError as exc:
+        error = exc
+    # Assert
+    assert "scitex-dev" in str(error)
+
+
+def test_scope_from_decision_requires_a_filter_for_allowed():
+    """The mapping must not INVENT a row set. An enforcer that decided `allowed`
+    and did not bring a filter has not answered the list question, and a scope
+    built anyway would be a claim nobody made."""
+    # Arrange
+    class _Decision:
+        kind = type("_K", (), {"value": ALLOWED})()
+
+    error = None
+    # Act
+    try:
+        scope_from_decision(_Decision())
+    except ScopeError as exc:
+        error = exc
+    # Assert
+    assert error is not None
+
+
+def test_scope_from_decision_withholds_a_filter_from_a_non_allowed_kind():
+    """The pass-through rule, mirroring `verdict_from_decision`'s payload rule:
+    a render path holding its grants already can pass the filter on every call,
+    because a filter the deciding kind does not carry is forwarded nowhere
+    rather than being refused (which would make the natural call site illegal)."""
+    # Arrange
+    class _Decision:
+        kind = type("_K", (), {"value": DENIED_NOT_ENTITLED})()
+
+    # Act
+    scope = scope_from_decision(_Decision(), access_filter=object())
+    # Assert
+    assert (scope.kind, scope.access_filter) == (DENIED_NOT_ENTITLED, None)
+
+
+# --- scope_for(): the decision arms. These need scitex_dev.access. ---------
+
+
+@pytest.fixture(scope="module")
+def _fixtures(_core):
+    """The core's random-fixture generator, imported dynamically.
+
+    A separate fixture rather than ``_core.testing``: ``scitex_dev.access`` does
+    not import its ``testing`` submodule, so reaching it through the core module
+    would depend on some other test having imported it first — an
+    order-dependent arm, which is the thing this suite's guards exist to avoid.
+    Imported by CALL rather than by a static ``import`` statement because the
+    core is an optional runtime dependency of this package, and that is the same
+    discipline every source module here follows.
+    """
+    return importlib.import_module("scitex_dev.access.testing")
+
+
+def _filter_fields(access_filter):
+    """Every documented ``AccessFilter`` field, as a comparable tuple.
+
+    Field-by-field rather than ``==`` on the object, so the assertion stays
+    meaningful if the core ever gives ``AccessFilter`` a custom ``__eq__``. The
+    same helper, for the same reason, as tests/scitex_app/api_access/.
+    """
+    return (
+        access_filter.kind,
+        access_filter.action,
+        access_filter.required_role,
+        access_filter.owners,
+        access_filter.resources,
+        access_filter.parents,
+        access_filter.public,
+        access_filter.ceiling,
+    )
+
+
+def test_the_scope_filter_is_the_cores_own_filter(_core, _fixtures):
+    """NOT A SECOND IMPLEMENTATION, asserted rather than asserted-about-in-prose.
+
+    The returned filter is field-identical to ``accessible()``'s over the core's
+    own random fixtures and every principal they mention. This is what licenses
+    the two documented downstreams to keep working unchanged — ``core.select()``
+    in memory and ``scitex_app.access_django.to_q()`` for a queryset, whose Q
+    proof lives in that suite — because the thing they receive is literally the
+    core's object, not a lookalike.
+    """
+    # Arrange
+    core, testing = _core, _fixtures
+    mismatches = []
+    examined = 0
+    # Act
+    for seed in range(6):
+        fixture = testing.random_fixture(seed)
+        for principal in testing.askers_of(fixture):
+            for spec in fixture.kinds.values():
+                for action in sorted(spec.actions):
+                    scope = scope_for(
+                        principal,
+                        action,
+                        spec.name,
+                        state=ResolveState.RESOLVED,
+                        grants=fixture.grants,
+                        memberships=fixture.memberships,
+                        kinds=fixture.kinds,
+                    )
+                    theirs = core.accessible(
+                        principal,
+                        action,
+                        spec.name,
+                        grants=fixture.grants,
+                        memberships=fixture.memberships,
+                        kinds=fixture.kinds,
+                    )
+                    examined += 1
+                    if _filter_fields(scope.access_filter) != _filter_fields(theirs):
+                        mismatches.append((seed, str(principal), spec.name, action))
+    # Assert
+    assert mismatches == [] and examined > 0
+
+
+def test_the_scope_filter_admits_exactly_what_check_allows(_core, _fixtures):
+    """THE ROW-LEVEL PROOF, and the reason the two surfaces cannot drift: a
+    filter is a claim about MANY rows, `check()` is a decision about ONE, and
+    the whole point of the primitive is that a list shows what a detail page
+    would let you open. For every principal the fixture mentions, every kind and
+    every action, the refs the filter admits must equal the refs `check()`
+    allows — resource by resource, in both directions.
+    """
+    # Arrange
+    core, testing = _core, _fixtures
+    mismatches = []
+    examined = 0
+    # Act
+    for seed in range(6):
+        fixture = testing.random_fixture(seed)
+        for spec in fixture.kinds.values():
+            resources = [r for r in fixture.resources if r.kind == spec.name]
+            for principal in testing.askers_of(fixture):
+                for action in sorted(spec.actions):
+                    scope = scope_for(
+                        principal,
+                        action,
+                        spec.name,
+                        state=ResolveState.RESOLVED,
+                        grants=fixture.grants,
+                        memberships=fixture.memberships,
+                        kinds=fixture.kinds,
+                    )
+                    admitted = {
+                        r.ref for r in core.select(scope.access_filter, resources)
+                    }
+                    for resource in resources:
+                        allowed = core.check(
+                            principal,
+                            action,
+                            resource,
+                            grants=fixture.grants,
+                            memberships=fixture.memberships,
+                            kinds=fixture.kinds,
+                        ).is_allowed
+                        examined += 1
+                        if allowed != (resource.ref in admitted):
+                            mismatches.append(
+                                (seed, str(principal), spec.name, action, resource.ref)
+                            )
+    # Assert
+    assert mismatches == [] and examined > 0
+
+
+def test_a_stranger_gets_an_allowed_scope_that_admits_nothing(_core):
+    """THE DISTINCTION THE TYPE EXISTS FOR, on a real decision. A signed-in
+    stranger is not an error and not a denial of a LIST — they are allowed to
+    ask, and the answer is an empty row set. That must be a DIFFERENT value from
+    the unresolved one, because "no content for you" and "nobody checked" are
+    rendered differently and only one of them is fixed by retrying."""
+    # Arrange
+    core = _core
+    alice = core.Principal.parse("user:alice")
+    bob = core.Principal.parse("user:bob")
+    resource = core.Resource(kind=_KIND, path="/users/alice/d1", owner=alice)
+    # Act
+    scope = scope_for(bob, "view", _KIND, state=ResolveState.RESOLVED, kinds=_kinds(core))
+    # Assert
+    assert (scope.kind, core.select(scope.access_filter, [resource])) == (ALLOWED, [])
+
+
+def test_an_unsigned_in_actor_gets_public_rows_only(_core):
+    """The core's public rule reaches the list path unchanged: read-tier public
+    is visible to everyone, signed in or not — so an anonymous actor gets a
+    NON-EMPTY allowed scope here. Worth pinning because "anonymous therefore
+    sees nothing" is the plausible-looking assumption that would make this
+    module's fail-closed discipline look like the whole story, and it is false.
+    """
+    # Arrange
+    core = _core
+    alice = core.Principal.parse("user:alice")
+    anonymous = core.Principal.parse("anonymous")
+    private = core.Resource(kind=_KIND, path="/users/alice/d1", owner=alice)
+    public = core.Resource(
+        kind=_KIND, path="/users/alice/d2", owner=alice, visibility="public"
+    )
+    # Act
+    scope = scope_for(
+        anonymous, "view", _KIND, state=ResolveState.RESOLVED, kinds=_kinds(core)
+    )
+    # Assert
+    assert core.select(scope.access_filter, [private, public]) == [public]
+
+
+def test_an_unregistered_kind_is_unresolved_and_carries_no_filter(_core):
+    """NOT AN EXCEPTION, and not "allowed, empty". The core raises
+    ``AccessUnresolved`` because it has no filter to return; this note HAS a
+    value to return, and the core's own vocabulary already answers this case
+    (``check()`` reports ``kind-unregistered`` as ``unresolved``). Translating
+    it to anything else would make the list surface and the detail surface
+    disagree about the SAME deployment."""
+    # Arrange
+    core = _core
+    alice = core.Principal.parse("user:alice")
+    # Act
+    scope = scope_for(
+        alice, "view", "authz.no-such-kind", state=ResolveState.RESOLVED, kinds=_kinds(core)
+    )
+    # Assert
+    assert (scope.kind, scope.access_filter) == (UNRESOLVED, None)
+
+
+def test_an_agents_scope_is_capped_by_its_owner(_core):
+    """THE INTERSECTION RULE, on the case scitex-cards nominated as canonical: a
+    card can be owned by a user and assigned to an agent, so the agent's reach
+    must never exceed its owner's.
+
+    BOTH DIRECTIONS IN ONE ASSERTION, deliberately: without the control (owner
+    granted too) an arm that admitted nothing at all would pass, and an arm that
+    cannot admit anything measures nothing.
+    """
+    # Arrange
+    core = _core
+    kinds = _kinds(core)
+    alice = core.Principal.parse("user:alice")
+    bot = core.Principal.parse("agent:alice/bot")
+    bob = core.Principal.parse("user:bob")
+    resource = core.Resource(kind=_KIND, path="/users/bob/d9", owner=bob)
+    delegated = core.Grant(principal=bot, role="write", target=resource.ref)
+    owner_too = core.Grant(principal=alice, role="write", target=resource.ref)
+    # Act
+    def admitted(grants):
+        scope = scope_for(
+            bot, "edit", _KIND, state=ResolveState.RESOLVED, grants=grants, kinds=kinds
+        )
+        return core.select(scope.access_filter, [resource])
+
+    # Assert
+    assert (admitted([delegated]), admitted([delegated, owner_too])) == ([], [resource])
 
 
 # EOF

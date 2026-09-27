@@ -1,9 +1,12 @@
 """The answer to "may this actor do this?" — as a value, not a boolean.
 
-`can()` IS NOT HERE YET. This module ships the VERDICT it will return, because
-scitex-ui is building the display side against a shape agreed in conversation,
-and a contract that lives only in a message thread drifts. Shipping the type
-makes their fixtures real rather than a transcription of prose.
+TWO QUESTIONS, ONE VOCABULARY. `can()` answers for ONE resource ("may this
+actor do this?") and `scope_for()` answers for a LIST ("which rows may this
+actor see?"). Both return a value carrying the same five kinds — this module
+ships the VERDICT those answers are expressed in, because scitex-ui is building
+the display side against a shape agreed in conversation, and a contract that
+lives only in a message thread drifts. Shipping the type makes their fixtures
+real rather than a transcription of prose.
 
 WHY A TAGGED VALUE RATHER THAN A BOOLEAN. Five things a caller must be able to
 tell apart, and only one of them means "no, and nothing you do changes that":
@@ -686,6 +689,216 @@ def can(
     )
 
 
+# ---------------------------------------------------------------------------
+# SCOPE_FOR(). can() answers about ONE resource; this answers about a LIST.
+# ---------------------------------------------------------------------------
+#
+# WHY THIS DOES NOT RESTATE THE RULES. `scitex_dev.access.accessible()` already
+# returns the row-set a principal holds — owner / explicit ref / inherited
+# parent / public, plus the agent ceiling — and ADR 0002 §2 names that value
+# "the data-scope half". So what was missing was never the RULE; it was an
+# ANSWER AN APP CAN HOLD. A bare filter cannot say "we could not find out who is
+# asking", and a list rendered from the empty filter TELLS A SIGNED-IN PERSON
+# THEY HAVE NO CONTENT when the truth is that nobody checked — the same collapse
+# `Verdict` exists to prevent, one row-set down. The filter therefore travels
+# WITH the verdict kind that produced it (:class:`DataScope`).
+#
+# NOT `_app_scope`, AND THE NEAR-MISS IS WHY THE NAME DIFFERS. `scitex_app.
+# _app_scope` declares a manifest's RENDERING scope (SCOPE_USER / SCOPE_PROJECT:
+# does this app get a project selector) — a fact about a PAGE. This is a fact
+# about ROWS. Two different things answering to "scope" is how a reader
+# concludes one of them does not exist, so the value is named with the ADR's own
+# phrase for this half instead of sharing the word.
+#
+# "OWN / ORG / OPERATOR" IS DERIVED, NOT A FOURTH VOCABULARY. The ask that
+# produced this function enumerated three scopes; the approved design superseded
+# that enumeration. A principal is `user:` / `org:` / `agent:` / `anonymous` —
+# `scitex_dev.scope`'s vocabulary, not a parallel one — "own" is an owner match,
+# "org" arrives through a :class:`Membership`, and an operator is an ordinary
+# `org:` grant rather than a fourth kind of person ("treat everyone the same, me
+# or a customer"). All three therefore fall OUT of the filter, and an enum here
+# would be exactly the second vocabulary the operator ruled out.
+
+
+class ScopeError(VerdictError):
+    """A scope was constructed that cannot mean anything.
+
+    A ``VerdictError`` for the same reason :class:`ResolveNotAttemptedError` is
+    one: a caller already handling "you built or asked for a verdict-family
+    value wrong" needs no second except clause, and nothing about either should
+    reach a page.
+    """
+
+
+@dataclass(frozen=True)
+class DataScope:
+    """Which rows an actor may see — and WHICH ANSWER that row-set is.
+
+    Two fields, and the second exists because of the first. ``kind`` is one of
+    :data:`VERDICT_KINDS` (the same five strings scitex-ui already switches on,
+    so a scoped-empty list renders through the switch a denied detail page
+    renders through — the operator's "route scoped empties through the verdict,
+    not through HTTP status"); ``access_filter`` is the core's ``AccessFilter``
+    and is present on ``allowed`` and on NOTHING ELSE.
+
+    WHY THE FILTER IS WITHHELD RATHER THAN EMPTIED on the other four kinds. An
+    empty filter is a claim — "there are no rows for you" — and every non-allowed
+    kind is a case where we are not entitled to make it: a denial is a decision
+    about an action, ``unresolved`` is the absence of a decision, and rendering
+    either as "no content" invents an answer. So an app cannot accidentally
+    query with a scope that did not earn one; it has to read ``kind`` and render
+    the state, which is the work the five kinds exist to force.
+
+    ``access_filter`` is the core's object, passed through untouched, so both
+    documented downstreams work unchanged: ``scitex_dev.access.select(scope.
+    access_filter, resources)`` in memory, and ``scitex_app.access_django.
+    to_q(scope.access_filter)`` for a queryset. This type adds no query
+    grammar of its own — a translation invented here would be a second place
+    the row rule lives.
+
+    THERE IS DELIBERATELY NO ``.allowed`` BOOLEAN PROPERTY, for the reason
+    :class:`Verdict` gives, and it would be worse here: ``if scope.allowed:``
+    reads naturally and makes "we could not decide" indistinguishable from
+    "nothing for you", which is the exact confusion this pairing removes.
+
+    AND NO ``to_dict()``. :class:`Verdict` has one because it crosses a package
+    boundary into scitex-ui, which has no access to the core. A scope does not
+    cross anything: the filter is meaningless to a renderer, and the part that
+    does cross — ``kind`` — is already a plain string. Serialising a filter
+    would invent a wire format no consumer asked for.
+    """
+
+    kind: str
+    access_filter: Any = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in VERDICT_KINDS:
+            raise ScopeError(
+                f"unknown scope kind {self.kind!r}; "
+                f"expected one of {', '.join(VERDICT_KINDS)}"
+            )
+        if self.kind == ALLOWED and self.access_filter is None:
+            raise ScopeError(
+                "an allowed scope requires access_filter — without one the "
+                "caller has nothing to filter rows by, and 'allowed, unnamed "
+                "row set' is not a state any app can act on"
+            )
+        if self.kind != ALLOWED and self.access_filter is not None:
+            raise ScopeError(
+                f"{self.kind} must not carry access_filter — the four "
+                "non-allowed kinds mean we are not entitled to claim anything "
+                "about the rows, and a filter here would be used as if we were"
+            )
+
+
+def scope_from_decision(decision: Any, *, access_filter: Any = None) -> DataScope:
+    """Render a core ``AccessDecision`` as a :class:`DataScope`.
+
+    THE ENTITLEMENT SEAM, and the list-side twin of :func:`verdict_from_decision`
+    for the same reason: ``denied-because-not-entitled`` is a plan the HUB knows
+    and no path inside the core produces, so an enforcer that consulted the hub
+    hands its own decision through this mapping rather than inventing a kind.
+
+    IDENTITY ON KIND, like its twin — the core's ``DecisionKind`` members carry
+    these strings verbatim, and the drift gate in this module's tests fails here
+    rather than at scitex-ui's exhaustive switch.
+
+    ``access_filter`` is supplied BY WHOEVER KNOWS IT and is attached on
+    ``allowed`` only. A filter passed on a call that returns any other kind is
+    FORWARDED NOWHERE rather than refused, mirroring ``verdict_from_decision``'s
+    payload rule: the natural call site is a render path that has its grants
+    loaded already and does not know the answer in advance, and refusing it
+    would make that call site illegal.
+    """
+    kind = decision.kind.value
+    if kind == ALLOWED:
+        return DataScope(kind=ALLOWED, access_filter=access_filter)
+    return DataScope(kind=kind)
+
+
+def scope_for(
+    actor: Any,
+    action: str,
+    kind: str,
+    *,
+    state: ResolveState,
+    grants: Iterable[Any] = (),
+    memberships: Iterable[Any] = (),
+    kinds: Any = None,
+    importer: _Importer = importlib.import_module,
+) -> DataScope:
+    """Which rows of ``kind`` may ``actor`` reach by ``action``? TOTAL.
+
+    The list-side sibling of :func:`can`, on the SAME resolve-before-render
+    contract and the same vocabulary. ``actor`` is the core's ``Principal``;
+    the rules are the core's (``accessible()`` — owner / grant / inherited /
+    membership / public, capped for an agent by its owner); what this function
+    adds is (a) the resolve-before-render contract and (b) an answer that
+    distinguishes "no rows" from "not known".
+
+    ``action`` IS REQUIRED, with no default, and that is a decision rather than
+    terseness. The obvious default — ``read``, because a list is a read — WIDENS
+    the row set: ``accessible()`` sets ``public`` only for a ``read``-tier
+    action, so defaulting would hand an app its owner/ref/parent rows PLUS every
+    public row when the endpoint it is actually serving wanted a narrower
+    question. `scitex_app.api_access` refuses a defaulted pair for exactly this
+    reason, and the same refusal applies to half a pair.
+
+    ARGUMENT-BY-ARGUMENT, matching :func:`can`:
+
+        state
+            NOT_ATTEMPTED RAISES (:class:`ResolveNotAttemptedError`, the same
+            class the single-resource path raises, because it is one contract);
+            FAILED returns an ``unresolved`` scope with NO filter, which is
+            fail closed — an app that renders it shows the locked/empty content
+            area rather than every row, and one that reads ``kind`` can say
+            "not yet known" instead of "nothing for you"; RESOLVED decides.
+
+        grants, memberships, kinds
+            What the caller resolved, passed through to ``accessible()``
+            unchanged. Inventing them here would make this function the
+            authority on who someone is.
+
+    RAISES :class:`AccessPrimitiveMissingError` when the core is absent —
+    "this install cannot decide" is not "this actor may see nothing", and only
+    one of those is fixed by configuring something.
+
+    AN UNREGISTERED KIND IS ``unresolved``, NOT AN EXCEPTION. The core raises
+    ``AccessUnresolved`` because it has no filter to return; a note here HAS a
+    value to return, and the core's own vocabulary already answers this case —
+    ``check()`` reports ``kind-unregistered`` as ``unresolved``, so translating
+    it to anything else would make the two surfaces disagree about the same
+    deployment. An action the kind does not declare still PROPAGATES
+    (``AccessConfigError``): that is a declaration defect, and ``check()``
+    raises it too.
+    """
+    if state is ResolveState.NOT_ATTEMPTED:
+        raise ResolveNotAttemptedError(
+            "scope_for() was called with ResolveState.NOT_ATTEMPTED. Resolve "
+            "who is asking BEFORE rendering, then call scope_for() with "
+            "ResolveState.RESOLVED, or with ResolveState.FAILED if resolution "
+            "was attempted and did not succeed. Returning a scope here would "
+            "let a bug render as 'this user has no content' — silently, and "
+            "looking exactly like a correct empty list."
+        )
+    if state is ResolveState.FAILED:
+        return DataScope(kind=UNRESOLVED)
+
+    core = _load_access_primitive(importer=importer)
+    try:
+        access_filter = core.accessible(
+            actor,
+            action,
+            kind,
+            grants=grants,
+            memberships=memberships,
+            kinds=kinds,
+        )
+    except core.AccessUnresolved:
+        return DataScope(kind=UNRESOLVED)
+    return DataScope(kind=ALLOWED, access_filter=access_filter)
+
+
 __all__ = [
     "ALLOWED",
     "CORE_MODULE",
@@ -694,8 +907,10 @@ __all__ = [
     "DENIED_NOT_ENTITLED",
     "DENIED_NOT_SIGNED_IN",
     "AccessPrimitiveMissingError",
+    "DataScope",
     "ResolveNotAttemptedError",
     "ResolveState",
+    "ScopeError",
     "UNRESOLVED",
     "VERDICT_KINDS",
     "Verdict",
@@ -707,6 +922,8 @@ __all__ = [
     "denied_not_entitled",
     "denied_not_signed_in",
     "hub_url",
+    "scope_for",
+    "scope_from_decision",
     "unresolved",
     "verdict_from_decision",
 ]
