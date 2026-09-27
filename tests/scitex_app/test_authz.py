@@ -1,26 +1,47 @@
-"""Tests for scitex_app/authz.py — the verdict type.
+"""Tests for scitex_app/authz.py — the verdict type, and can() that returns it.
 
 One assertion each. Every rule here is a promise made to scitex-ui before they
 wrote their display component, so each arm names the promise it holds.
+
+THE ARMS SPLIT IN TWO, deliberately, and the split is by what they need:
+
+  * contract arms — can()'s resolve-before-render behaviour and the
+    absent-dependency predicate. These need NO core (`importer` is a seam), so
+    they are unconditional and can never skip.
+  * decision arms — the core's decision becoming this package's Verdict. These
+    need scitex_dev.access and are guarded by `_core`; under
+    SCITEX_ACCESS_STRICT=1 tests/scitex_app/conftest.py upgrades that guard to a
+    FAILURE, which is what makes it a proof rather than a silent skip.
 """
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
+import pytest
+
 from scitex_app.authz import (
     ALLOWED,
+    CORE_MODULE,
     DENIED,
     DENIED_NOT_ENTITLED,
     DENIED_NOT_SIGNED_IN,
     UNRESOLVED,
     VERDICT_KINDS,
+    AccessPrimitiveMissingError,
+    ResolveNotAttemptedError,
     ResolveState,
     Verdict,
     VerdictError,
+    _missing_access_primitive,
     allowed,
+    can,
     denied,
     denied_not_entitled,
     denied_not_signed_in,
     unresolved,
+    verdict_from_decision,
 )
 
 
@@ -517,6 +538,365 @@ def test_a_resolve_state_if_present_is_three_valued():
     verdict = _RESOLVE_STATES if members is None else members
     # Assert
     assert verdict == _RESOLVE_STATES
+
+
+# ─── can(): the contract arms. These need NO core. ──────────────────────────
+#
+# `importer` is a seam, so each of these pins one behaviour of can() ITSELF
+# without depending on a released dependency. That is deliberate: the
+# resolve-before-render contract is the part scitex-ui's screen depends on, and
+# it must not become unverifiable the day the core is absent from an env.
+
+
+def _exploding_importer(name):
+    """A core import that must NEVER happen in the arm using it."""
+    raise AssertionError(f"the core ({name}) was imported where it must not be")
+
+
+def _absent_importer(name):
+    """The exact failure an install without the access release produces."""
+    raise ModuleNotFoundError(f"No module named '{name}'", name=name)
+
+
+def test_can_raises_before_anything_is_resolved():
+    """NOT_ATTEMPTED is a CONTRACT VIOLATION, and it RAISES rather than returns.
+
+    Returning `unresolved` here would render a bug as a legitimate "not yet
+    known" screen — permanently, because the bug would never appear as anything
+    else. This is decision A of the tripwire above.
+    """
+    # Arrange — the core is unreachable on purpose: a caller who never resolved
+    # has nothing to ask the core about.
+    # Act
+    error = None
+    try:
+        can(object(), "view", object(), state=ResolveState.NOT_ATTEMPTED, importer=_exploding_importer)
+    except ResolveNotAttemptedError as exc:
+        error = exc
+    # Assert
+    assert error is not None
+
+
+def test_the_contract_violation_is_a_verdict_error():
+    """So a caller already handling "you asked for a verdict wrongly" needs no
+
+    second except clause — and, more importantly, so nothing here is a Verdict:
+    a contract violation must not be renderable.
+    """
+    # Arrange
+    # Act
+    is_verdict_error = issubclass(ResolveNotAttemptedError, VerdictError)
+    # Assert
+    assert is_verdict_error is True
+
+
+def test_can_returns_unresolved_when_resolution_was_attempted_and_failed():
+    """FAILED RETURNS instead of raising. Decision B of the tripwire.
+
+    A hub that is unreachable or 5xx-ing is a real operating state the screen
+    must still draw; raising here would push every app author into try/except
+    writing their own unknown-display, scattering the judgement this module
+    exists to hold in one place.
+    """
+    # Arrange — the core must not be consulted: nothing has been resolved to ask
+    # it about. `_exploding_importer` proves that by failing if it is.
+    # Act
+    verdict = can(object(), "view", object(), state=ResolveState.FAILED, importer=_exploding_importer)
+    # Assert
+    assert verdict.to_dict() == {"kind": UNRESOLVED}
+
+
+def test_a_failed_resolution_is_not_a_denial():
+    """The collapse this whole module exists to prevent, asserted on can().
+
+    `unresolved` and `denied` are different answers: one says "we do not know",
+    the other says "no". A caller that treats them alike tells a signed-in user
+    to sign in, or hides content that is merely unreachable.
+    """
+    # Arrange
+    # Act
+    kind = can(object(), "view", object(), state=ResolveState.FAILED, importer=_exploding_importer).kind
+    # Assert
+    assert kind not in (DENIED, DENIED_NOT_SIGNED_IN, DENIED_NOT_ENTITLED)
+
+
+def test_can_refuses_by_name_when_the_core_is_not_installed():
+    """An install that CANNOT decide must not look like one that decided "no".
+
+    Only one of those two is fixed by configuring something, and a caller
+    reading `denied` would go looking for a grant that does not exist.
+    """
+    # Arrange
+    # Act
+    error = None
+    try:
+        can(object(), "view", object(), state=ResolveState.RESOLVED, importer=_absent_importer)
+    except AccessPrimitiveMissingError as exc:
+        error = exc
+    # Assert
+    assert error is not None
+
+
+def test_the_missing_core_refusal_names_the_fix():
+    """A named error whose message does not say what to install is a diagnosis
+
+    without a remedy, and the reader is a developer at a shell.
+    """
+    # Arrange
+    # Act
+    error = None
+    try:
+        can(object(), "view", object(), state=ResolveState.RESOLVED, importer=_absent_importer)
+    except AccessPrimitiveMissingError as exc:
+        error = exc
+    # Assert
+    assert "scitex-dev" in str(error)
+
+
+def test_the_missing_core_predicate_agrees_with_its_sibling():
+    """"The core is missing" must not mean two things inside one package.
+
+    authz now carries the THIRD same-shaped predicate. The other two are
+    ``api_access._missing_core`` and ``access_django._missing_access``, each
+    written separately because each module must stay importable without the
+    others' dependencies. A third copy is only honest if something pins the
+    three together.
+
+    WHY ONLY ONE SIBLING IS READ HERE: importing ``access_django`` requires
+    CONFIGURED Django settings, and configuring Django in this process is the
+    process-global side effect that poisons a pytest-xdist worker for the
+    ``_chat`` suite's "this process really has no database" assertions. So the
+    leg pinned here is authz<->api_access, and the third leg is pinned
+    transitively where it can be read safely — tests/scitex_app/
+    api_access/test___init__.py compares api_access against access_django
+    case-by-case, so agreement here plus agreement there IS agreement among all
+    three. A pure arm (PA-306 §3: hand-built exceptions, no mocking).
+    """
+    # Arrange — a true case for each accepted spelling, plus three that must NOT
+    # be laundered into "absent". The controls matter more than the positives: a
+    # predicate that answered True everywhere would pass an agreement check alone.
+    from scitex_app import api_access
+
+    cases = [
+        ModuleNotFoundError("no scitex_dev", name="scitex_dev"),
+        ModuleNotFoundError("no scitex_dev.access", name=CORE_MODULE),
+        ImportError("a real failure inside an installed core"),
+        ModuleNotFoundError("no yaml", name="yaml"),
+        RuntimeError("not an import error at all"),
+    ]
+    # Act
+    rows = [
+        (_missing_access_primitive(exc), api_access._missing_core(exc)) for exc in cases
+    ]
+    # Assert — both agree on every case, AND the agreed answer is not vacuously
+    # one-valued.
+    assert all(len(set(row)) == 1 for row in rows) and {row[0] for row in rows} == {True, False}
+
+
+def test_importing_this_module_does_not_import_the_core():
+    """`authz` stays stdlib-only at module load, so importing it cannot fail or
+
+    slow down on a deployment without the access release — and the PS-140 static
+    symbol gate never sees a dependency that is genuinely optional.
+
+    A SUBPROCESS, because an in-process check would be order-dependent: any other
+    test in the session that imports the core would make this pass regardless of
+    what this module does.
+    """
+    # Arrange
+    code = (
+        "import sys, scitex_app.authz; "
+        "print('scitex_dev' in sys.modules or 'scitex_dev.access' in sys.modules)"
+    )
+    # Act
+    completed = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+    )
+    # Assert
+    assert (completed.returncode, completed.stdout.strip()) == (0, "False")
+
+
+# ─── can(): the decision arms. These need scitex_dev.access. ────────────────
+
+
+@pytest.fixture(scope="module")
+def _core():
+    """The access core, or a named skip — mirrors test_access_django.py's guard.
+
+    The skip is live for any environment whose scitex-dev predates the access
+    release (the `dev` group's floor is ``scitex-dev>=0.11.7``). Under
+    SCITEX_ACCESS_STRICT=1, tests/scitex_app/conftest.py upgrades it to a
+    FAILURE, which is how the authoritative job proves these arms RAN.
+    """
+    try:
+        from scitex_dev import access as core
+    except ImportError:
+        pytest.skip(
+            "scitex_dev.access not installed — the decision arms cannot run "
+            "against the core (pip install -U scitex-dev)."
+        )
+    return core
+
+
+#: A kind this file registers itself, through the core's own seam, so the arms
+#: depend on NO package's entry point being installed.
+_KIND = "authz.testdoc"
+
+
+def _kinds(core):
+    """A one-kind registry, built through the core's own extension point."""
+
+    def provide():
+        return [
+            core.KindSpec(
+                name=_KIND,
+                path_prefix="/",
+                actions={"view": "read", "edit": "write", "share": "admin"},
+            )
+        ]
+
+    return core.discover_kinds(include_entry_points=False, extra_providers=[provide])
+
+
+def _world(core):
+    """The one resource and the three principals every arm below reasons over."""
+    alice = core.Principal.parse("user:alice")
+    return alice, core.Resource(kind=_KIND, path="/users/alice/d1", owner=alice)
+
+
+def test_can_allows_the_owner(_core):
+    """The baseline the rest are measured against: with no grants and no
+    memberships, the owner still holds admin."""
+    # Arrange
+    alice, resource = _world(_core)
+    # Act
+    verdict = can(alice, "edit", resource, state=ResolveState.RESOLVED, kinds=_kinds(_core))
+    # Assert
+    assert verdict.to_dict() == {"kind": ALLOWED}
+
+
+def test_can_denies_a_signed_in_stranger(_core):
+    """A denial, NOT a sign-in prompt: this user is already signed in, so
+    offering a route would tell them to do something that cannot help."""
+    # Arrange
+    _alice, resource = _world(_core)
+    bob = _core.Principal.parse("user:bob")
+    # Act
+    verdict = can(bob, "view", resource, state=ResolveState.RESOLVED, kinds=_kinds(_core))
+    # Assert
+    assert verdict.to_dict() == {"kind": DENIED}
+
+
+def test_can_asks_an_anonymous_actor_to_sign_in(_core):
+    """The core decides this from the principal alone, and can() must carry its
+    sign-in route out — the payload that keeps the component from hardcoding
+    one."""
+    # Arrange
+    _alice, resource = _world(_core)
+    anonymous = _core.Principal.parse("anonymous")
+    # Act
+    verdict = can(
+        anonymous,
+        "view",
+        resource,
+        state=ResolveState.RESOLVED,
+        kinds=_kinds(_core),
+        sign_in_url="/accounts/signin/",
+    )
+    # Assert
+    assert verdict.to_dict() == {
+        "kind": DENIED_NOT_SIGNED_IN,
+        "sign_in_url": "/accounts/signin/",
+    }
+
+
+def test_a_not_signed_in_verdict_without_a_route_is_refused(_core):
+    """Omitting the one payload that kind requires fails LOUD, out of the
+    validator that owns the rule — it is never invented here."""
+    # Arrange
+    _alice, resource = _world(_core)
+    anonymous = _core.Principal.parse("anonymous")
+    # Act
+    error = None
+    try:
+        can(anonymous, "view", resource, state=ResolveState.RESOLVED, kinds=_kinds(_core))
+    except VerdictError as exc:
+        error = exc
+    # Assert
+    assert error is not None
+
+
+def test_can_honours_an_explicit_grant(_core):
+    """The rules are the CORE's, not a second implementation: a grant the core
+    admits must be admitted through can() too."""
+    # Arrange
+    _alice, resource = _world(_core)
+    bob = _core.Principal.parse("user:bob")
+    grant = _core.Grant(bob, "read", resource.ref)
+    # Act
+    verdict = can(
+        bob, "view", resource, state=ResolveState.RESOLVED, kinds=_kinds(_core),
+        grants=[grant], memberships=[],
+    )
+    # Assert
+    assert verdict.to_dict() == {"kind": ALLOWED}
+
+
+def test_can_carries_an_entitlement_denial_from_an_adapter(_core):
+    """ENTITLEMENT IS THE ONE KIND check() CANNOT PRODUCE — it is a plan the HUB
+    knows, so an enforcer that consulted the hub hands its own decision through
+    the same mapping. Without this arm one of the five kinds would be
+    unreachable from the primitive."""
+    # Arrange
+    alice, resource = _world(_core)
+    decision = _core.AccessDecision(
+        request=_core.AccessRequest(principal=alice, action="edit", resource=resource.ref),
+        reason=_core.Reason.NOT_ENTITLED,
+        detail="needs the pro plan",
+        hint="upgrade",
+    )
+    # Act
+    verdict = verdict_from_decision(decision, entitlement="pro", upgrade_url="/pricing/")
+    # Assert
+    assert verdict.to_dict() == {
+        "kind": DENIED_NOT_ENTITLED,
+        "entitlement": "pro",
+        "upgrade_url": "/pricing/",
+    }
+
+
+def test_a_payload_the_deciding_kind_does_not_carry_is_not_forwarded(_core):
+    """A render path that has its deployment's routes in hand can pass them on
+    EVERY call without knowing the verdict in advance — so a payload that does
+    not apply must not reach the verdict, and must not be an error either.
+
+    Both halves matter: forwarding it would put a sign-in route on a page that
+    is not about signing in, and refusing the call would make the natural call
+    site illegal.
+    """
+    # Arrange
+    alice, resource = _world(_core)
+    decision = _core.check(alice, "edit", resource, grants=[], memberships=[], kinds=_kinds(_core))
+    # Act
+    verdict = verdict_from_decision(decision, sign_in_url="/accounts/signin/", upgrade_url="/pricing/")
+    # Assert
+    assert verdict.to_dict() == {"kind": ALLOWED}
+
+
+def test_the_core_decision_kinds_are_the_verdict_kinds(_core):
+    """THE DRIFT GATE. The mapping in verdict_from_decision is an identity on
+    `kind`, which is only safe while the two vocabularies are literally the same
+    strings — across a package boundary, in two repositories, with nothing else
+    in between to say why.
+
+    This is the arm that fails the day one side renames, and it fails HERE
+    rather than at scitex-ui's exhaustive switch.
+    """
+    # Arrange
+    # Act
+    core_kinds = {member.value for member in _core.DecisionKind}
+    # Assert
+    assert core_kinds == set(VERDICT_KINDS)
 
 
 # EOF

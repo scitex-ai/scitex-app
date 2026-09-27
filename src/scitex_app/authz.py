@@ -42,10 +42,12 @@ into every self-hosted install.
 from __future__ import annotations
 
 import scitex_logging as slogging
+import importlib
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from types import ModuleType
 from typing import Any, Optional
 
 log = slogging.getLogger(__name__)
@@ -450,24 +452,263 @@ def _reset_hub_hint_for_testing() -> None:
     global _hub_hint_emitted
     _hub_hint_emitted = False
 
+
+# ---------------------------------------------------------------------------
+# CAN(). Everything above this line ships the ANSWER; this asks the question.
+# ---------------------------------------------------------------------------
+#
+# WHY TWO FUNCTIONS AND NOT ONE. `scitex_dev.access.check()` is a PURE function
+# of its arguments — no session, no database, no hub — so `can()` can simply
+# call it, and that is the ordinary path. What `check()` cannot decide is
+# ENTITLEMENT: `Reason.NOT_ENTITLED` exists in the core and NO code path inside
+# `check()` produces it, because entitlement is a plan the HUB knows and not a
+# token scope (see `denied_not_entitled`). So the decision->verdict mapping is
+# factored out as `verdict_from_decision()`, and an entitlement enforcer that
+# consulted the hub hands its own `AccessDecision` through the SAME mapping.
+# One vocabulary on the far side of the package boundary; two producers, which
+# is the truth rather than an inconvenience.
+
+#: The module that carries the decision rules, named once so the
+#: absent-dependency predicate and the error message cannot disagree.
+CORE_MODULE = "scitex_dev.access"
+
+#: Type of the injectable importer seam. ``Any``-free on purpose: the seam is
+#: `str -> ModuleType` and nothing else, so a test cannot pass something that
+#: silently changes the contract.
+_Importer = Callable[[str], ModuleType]
+
+
+class AccessPrimitiveMissingError(RuntimeError):
+    """``scitex_dev.access`` is not installed, so ``can()`` cannot decide.
+
+    The same shape as :class:`scitex_app.access_django.ScitexDevAccessMissingError`
+    and :class:`scitex_app.api_access.AccessCoreMissingError`, for the same
+    reason: deciding is UNAVAILABLE rather than silently permissive, and the fix
+    is named. Deliberately not an ``ImportError`` — an import failure is what
+    happened, not what it means, and a deployment asking \"can this install
+    enforce access at all?\" must be able to catch the meaning.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "scitex_app.authz.can() needs scitex_dev.access to decide an access "
+            f"question, and {CORE_MODULE} is not installed. "
+            "Run: pip install -U scitex-dev"
+        )
+
+
+class ResolveNotAttemptedError(VerdictError):
+    """``can()`` was called before anyone resolved who was asking.
+
+    A CONTRACT VIOLATION rather than a denial, which is why it RAISES. The
+    documented step is resolve-then-render, and returning an `unresolved` verdict
+    here would render a BUG as a legitimate \"not yet known\" screen — silently
+    and permanently, because the bug never surfaces as anything else.
+    `ResolveState` exists to keep the two causes of \"unresolved\" apart; this is
+    the half that must not be returned.
+
+    A ``VerdictError`` rather than a bare ``ValueError`` so a caller already
+    handling \"you built/asked for a verdict wrong\" needs no second except
+    clause. It is emphatically NOT a ``Verdict``: nothing about it should reach
+    a page.
+    """
+
+
+def _missing_access_primitive(exc: BaseException) -> bool:
+    """True only for the \"``scitex_dev.access`` is not installed yet\" case.
+
+    The same narrowness as :func:`scitex_app.access_django._missing_access` and
+    :func:`scitex_app.api_access._missing_core`: only a ``ModuleNotFoundError``
+    naming the core or its parent module counts as absent. An ``ImportError``
+    raised INSIDE an installed core is a REAL failure and propagates instead of
+    being laundered into \"not installed\" — which would read as a skip and hide
+    a defect. A differential test pins this predicate to its sibling, so \"the
+    core is missing\" cannot mean two things in one package.
+    """
+    return isinstance(exc, ModuleNotFoundError) and getattr(exc, "name", None) in (
+        "scitex_dev",
+        CORE_MODULE,
+    )
+
+
+def _load_access_primitive(*, importer: _Importer = importlib.import_module) -> ModuleType:
+    """Import the core, separating \"not released yet\" from a real failure.
+
+    Via ``importlib.import_module`` — a CALL, not a static ``ImportFrom`` — for
+    the same reason ``access_django`` does it: this is a true OPTIONAL runtime
+    dependency and must not appear in the package's static symbol list, where it
+    would fail on any scitex-dev version that lacks ``access``. ``importer`` is
+    the test seam; the default is the real one.
+    """
+    try:
+        return importer(CORE_MODULE)
+    except ImportError as exc:  # ModuleNotFoundError is a subclass
+        if _missing_access_primitive(exc):
+            raise AccessPrimitiveMissingError() from exc
+        raise  # a real import failure — do not masquerade it as "absent"
+
+
+def verdict_from_decision(
+    decision: Any,
+    *,
+    sign_in_url: Optional[str] = None,
+    entitlement: Optional[str] = None,
+    upgrade_url: Optional[str] = None,
+) -> Verdict:
+    """Render a core ``AccessDecision`` as this package's ``Verdict``.
+
+    IDENTITY ON KIND, NOT A TRANSLATION TABLE. ``scitex_dev.access.DecisionKind``
+    says so in its own words — \"The five answers; the strings match
+    scitex_app.authz's Verdict kinds\" — and its members carry these strings
+    verbatim, so the kind crosses BY VALUE. A table here would be a second place
+    the five names live, and the next rename would have to be made in both.
+
+    WHY THIS IS A FUNCTION AND NOT JUST ``.value``: the two payload-bearing kinds
+    cannot be built from the kind alone. `Verdict` REFUSES a not-signed-in
+    verdict with no route and a not-entitled verdict with no identifier — its
+    validator enforces BOTH directions — so the payload must be supplied by
+    whoever knows it. That is the HUB, not this module: a sign-in route or an
+    upgrade URL compiled in here would put ONE deployment's routes into every
+    self-hosted install, which is the argument `denied_not_entitled` already
+    makes for `upgrade_url`. The payload is passed through untouched, so an
+    absent one fails LOUD in the validator that owns the rule instead of being
+    invented here.
+
+    A payload the deciding kind does NOT carry is FORWARDED NOWHERE — it is not
+    attached to the verdict, so the page-facing rule (`Verdict`: a route on a
+    denial that is not about signing in tells the user to do something that
+    cannot help) still holds, and the natural call site stays legal: a render
+    path that has its deployment's routes in hand can pass them on EVERY call
+    without first knowing which kind it will get back. Deliberately not an
+    error, because such a caller is doing the right thing; deliberately not
+    threaded through either, because the verdict is what reaches the page.
+
+    TOTAL over the core's kinds, and a kind the core grows and this module does
+    not know lands in `Verdict`'s own unknown-kind refusal — loud AT the
+    boundary, which is where a sixth kind has to become a conversation with
+    scitex-ui rather than a silent branch (see `VERDICT_KINDS`).
+    """
+    kind = decision.kind.value
+    # Built through `Verdict` rather than through the named constructors, which
+    # are one-line wrappers over exactly these calls: it keeps the payload
+    # pass-through honest about being Optional while leaving the
+    # required-payload rule in the ONE place that owns it — the validator.
+    if kind == DENIED_NOT_SIGNED_IN:
+        return Verdict(kind=DENIED_NOT_SIGNED_IN, sign_in_url=sign_in_url)
+    if kind == DENIED_NOT_ENTITLED:
+        return Verdict(
+            kind=DENIED_NOT_ENTITLED, entitlement=entitlement, upgrade_url=upgrade_url
+        )
+    return Verdict(kind=kind)
+
+
+def can(
+    actor: Any,
+    action: str,
+    resource: Any,
+    *,
+    state: ResolveState,
+    grants: Iterable[Any] = (),
+    memberships: Iterable[Any] = (),
+    kinds: Any = None,
+    sign_in_url: Optional[str] = None,
+    entitlement: Optional[str] = None,
+    upgrade_url: Optional[str] = None,
+    importer: _Importer = importlib.import_module,
+) -> Verdict:
+    """May ``actor`` do ``action`` to ``resource``? SYNCHRONOUS AND TOTAL.
+
+    The one question every app asks instead of hand-rolling a gate. The decision
+    RULES are not reimplemented here: they are the core's
+    (``scitex_dev.access.check`` — owner / grant / inherited / org / public, the
+    agent ceiling, no staff bypass), and this function's job is to (a) enforce
+    the resolve-before-render contract and (b) express the answer in the ONE
+    vocabulary scitex-ui already renders.
+
+    ARGUMENTS, and why each is not a convenience:
+
+        actor, action, resource
+            The core's ``Principal`` / ``str`` / ``Resource``. Typed ``Any``
+            because ``scitex_dev.access`` is an OPTIONAL runtime dependency
+            imported through a call (invisible to the PS-140 static gate), so
+            naming its types here would import the core at module load — the
+            thing `access_django` deliberately avoids.
+
+        state
+            `ResolveState`, and the reason this signature has a keyword that a
+            boolean would have hidden. NOT_ATTEMPTED RAISES (a caller who never
+            resolved has violated the contract), FAILED RETURNS `unresolved()`
+            (a real operating state the screen must still draw), RESOLVED
+            decides. Held as \"a value, or None\" the first two are one state and
+            this function cannot choose — the tripwire in this module's tests
+            was written before this function existed, to guard exactly that.
+
+        grants, memberships
+            What the caller resolved. Passed through to ``check()`` unchanged.
+            An entitlement enforcer that needs to attach an external decision
+            should call :func:`verdict_from_decision` instead.
+
+        sign_in_url, entitlement, upgrade_url
+            The payloads for the two kinds that carry one — supplied BY THE
+            DEPLOYMENT, never derived here (see :func:`verdict_from_decision`).
+            A deployment's render path can pass them on EVERY call, because a
+            payload the returned kind does not carry is simply not attached; you
+            do not have to know the verdict in advance to supply them. Omitting
+            one that the returned kind DOES require fails loud, out of
+            `Verdict`'s validator, which is the one place that rule lives.
+
+    FAILS CLOSED AND LOUD on a missing core (:class:`AccessPrimitiveMissingError`)
+    rather than returning `denied`: an install that cannot decide and an install
+    that decided \"no\" are different situations, and only one of them is fixed by
+    configuring something.
+    """
+    if state is ResolveState.NOT_ATTEMPTED:
+        raise ResolveNotAttemptedError(
+            "can() was called with ResolveState.NOT_ATTEMPTED. Resolve who is "
+            "asking — and whether they are entitled — BEFORE rendering, then call "
+            "can() with ResolveState.RESOLVED, or with ResolveState.FAILED if "
+            "resolution was attempted and did not succeed. Returning `unresolved` "
+            "here would render a bug as a legitimate 'not yet known' screen."
+        )
+    if state is ResolveState.FAILED:
+        return unresolved()
+
+    # state is RESOLVED: an answer is available, so ask the core for it.
+    core = _load_access_primitive(importer=importer)
+    decision = core.check(
+        actor, action, resource, grants=grants, memberships=memberships, kinds=kinds
+    )
+    return verdict_from_decision(
+        decision,
+        sign_in_url=sign_in_url,
+        entitlement=entitlement,
+        upgrade_url=upgrade_url,
+    )
+
+
 __all__ = [
     "ALLOWED",
+    "CORE_MODULE",
     "HUB_URL_ENV",
     "DENIED",
     "DENIED_NOT_ENTITLED",
     "DENIED_NOT_SIGNED_IN",
+    "AccessPrimitiveMissingError",
+    "ResolveNotAttemptedError",
     "ResolveState",
     "UNRESOLVED",
     "VERDICT_KINDS",
     "Verdict",
     "VerdictError",
     "allowed",
+    "can",
     "denied",
     "denied_no_hub",
     "denied_not_entitled",
     "denied_not_signed_in",
     "hub_url",
     "unresolved",
+    "verdict_from_decision",
 ]
 
 # EOF
