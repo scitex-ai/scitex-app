@@ -20,6 +20,20 @@ The host (scitex-hub, or any Django project) then:
 
 Pre-installed apps use the same path: the hub's own dependency list pins
 them, the entry point does the rest.
+
+GUI layout contract (all Django-side code in one place):
+
+* ``<pkg>/src/<pkg>/_django/`` owns everything Django: ``apps.py`` (the
+  ``ScitexAppConfig`` subclass named by the entry point), ``urls.py``,
+  ``views.py`` (or ``views/``), ``templates/``, ``static/``.
+* The entry-point value is always ``"<pkg>._django.apps:<Cfg>"``, e.g.::
+
+      figrecipe = "figrecipe._django.apps:FigRecipeEditorConfig"
+
+* No other top-level Django modules: the hub never imports a leaf's views
+  or models directly — it mounts ``<name>.urls`` and reads the manifest.
+  (``scitex-cards`` keeps one-off ``_health_gui.py``-style helpers outside
+  ``_django/``; new code belongs inside it.)
 """
 
 from __future__ import annotations
