@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+import scitex_logging as slogging
 from pathlib import Path
 from typing import Optional
 
@@ -23,7 +23,7 @@ from ._scaffold_html import (
 )
 from ._scaffold_react import build_react_files
 
-logger = logging.getLogger(__name__)
+log = slogging.getLogger(__name__)
 
 
 def init_app(
@@ -89,14 +89,14 @@ def init_app(
     for relpath, content in files.items():
         filepath = target / relpath
         if filepath.exists() and not overwrite:
-            logger.debug("Skipping existing file: %s", relpath)
+            log.debug("Skipping existing file: %s", relpath)
             continue
         filepath.parent.mkdir(parents=True, exist_ok=True)
         filepath.write_text(content, encoding="utf-8")
         created.append(relpath)
-        logger.debug("Created: %s", relpath)
+        log.debug("Created: %s", relpath)
 
-    logger.info("Scaffolded %d/%d files in %s", len(created), len(files), target)
+    log.info("Scaffolded %d/%d files in %s", len(created), len(files), target)
     return created
 
 

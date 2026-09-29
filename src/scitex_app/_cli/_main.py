@@ -11,10 +11,9 @@ try:
 except ImportError:
 
     def main(argv=None):
-        print(
+        sys.stderr.write(
             "ERROR: click is not installed (a base scitex-app dependency)."
-            " Reinstall with: pip install scitex-app",
-            file=sys.stderr,
+            " Reinstall with: pip install scitex-app\n"
         )
         raise SystemExit(1)
 

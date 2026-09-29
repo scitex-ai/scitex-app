@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-from rich.console import Console
 
-console = Console()
+import scitex_logging as slogging
+
+log = slogging.getLogger(__name__)
 
 
 @click.group()
@@ -61,13 +62,13 @@ def app_init(
     if not (app_name.endswith("_app") or app_name.endswith("-app")):
         sep = "-" if "-" in app_name else "_"
         suffixed = f"{app_name}{sep}app"
-        console.print(
-            f"[yellow]Warning:[/yellow] App name '{app_name}' does not end with "
+        log.warning(
+            f"App name '{app_name}' does not end with "
             f"'_app' or '-app'. Adding suffix: '{suffixed}'"
         )
         app_name = suffixed
 
-    console.print(f"[cyan]Scaffolding app:[/cyan] {app_name} in {target}")
+    log.info(f"Scaffolding app: {app_name} in {target}")
 
     created = init_app(
         target_dir=target,
@@ -80,12 +81,12 @@ def app_init(
     )
 
     for filepath in created:
-        console.print(f"  [green]+[/green] {filepath}")
+        log.info(f"  + {filepath}")
 
     if not created:
-        console.print("  [yellow]No new files created (all already exist).[/yellow]")
+        log.warning("No new files created (all already exist).")
     else:
-        console.print(f"\n[green]Done![/green] Created {len(created)} files.")
+        log.success(f"Done! Created {len(created)} files.")
 
 
 @app.command("validate")
@@ -106,16 +107,16 @@ def app_validate(app_dir):
     # exit code. Printing them only on failure would deliver advice exactly when
     # nobody is reading it, and exiting 1 on them is the defect this tier fixed.
     if warnings:
-        console.print(f"[yellow]{len(warnings)} advisory notice(s):[/yellow]")
+        log.warning(f"{len(warnings)} advisory notice(s):")
         for warn in warnings:
-            console.print(f"  [yellow]![/yellow] {warn}")
+            log.warning(f"  ! {warn}")
 
     if not errors:
-        console.print("[green]All checks passed![/green] App is ready for submission.")
+        log.success("All checks passed! App is ready for submission.")
     else:
-        console.print(f"[red]Found {len(errors)} issue(s):[/red]")
+        log.error(f"Found {len(errors)} issue(s):")
         for err in errors:
-            console.print(f"  [red]✗[/red] {err}")
+            log.error(f"  ✗ {err}")
         raise SystemExit(1)
 
 
@@ -172,30 +173,28 @@ def app_install_dev(app_dir, server, token, owner, repo, dry_run, yes):
         )
         return
     if not token:
-        console.print(
-            "[red]Error:[/red] No API token. Set SCITEX_API_TOKEN or use --token."
-        )
+        log.error("No API token. Set SCITEX_API_TOKEN or use --token.")
         raise SystemExit(1)
 
     from scitex_app.appmaker._dev_install import dev_install
 
-    console.print(f"[cyan]Dev-installing from:[/cyan] {Path(app_dir).resolve()}")
-    console.print(f"[cyan]Server:[/cyan] {server}")
+    log.info(f"Dev-installing from: {Path(app_dir).resolve()}")
+    log.info(f"Server: {server}")
 
     result = dev_install(
         app_dir, server_url=server, token=token, owner=owner, repo=repo
     )
 
     if result.get("success"):
-        console.print("[green]Dev install successful![/green]")
+        log.success("Dev install successful!")
         if result.get("module_name"):
-            console.print(f"  Module: {result['module_name']}")
-        console.print("  Your app should appear in the workspace sidebar.")
+            log.info(f"  Module: {result['module_name']}")
+        log.info("  Your app should appear in the workspace sidebar.")
     else:
         errors = result.get("errors", [result.get("error", "Unknown error")])
-        console.print("[red]Dev install failed:[/red]")
+        log.error("Dev install failed:")
         for err in errors:
-            console.print(f"  [red]✗[/red] {err}")
+            log.error(f"  ✗ {err}")
         raise SystemExit(1)
 
 
@@ -221,26 +220,24 @@ def app_submit(app_dir, server, token):
         scitex-app app submit /path/to/my_app --server https://scitex.example.com
     """
     if not token:
-        console.print(
-            "[red]Error:[/red] No API token. Set SCITEX_API_TOKEN or use --token."
-        )
+        log.error("No API token. Set SCITEX_API_TOKEN or use --token.")
         raise SystemExit(1)
 
     from scitex_app.appmaker._publish import publish
 
-    console.print(f"[cyan]Submitting app from:[/cyan] {Path(app_dir).resolve()}")
+    log.info(f"Submitting app from: {Path(app_dir).resolve()}")
 
     result = publish(app_dir, server_url=server, token=token)
 
     if result.get("success"):
-        console.print("[green]Submission successful![/green]")
+        log.success("Submission successful!")
         if result.get("pr_url"):
-            console.print(f"  PR: {result['pr_url']}")
+            log.info(f"  PR: {result['pr_url']}")
     else:
         errors = result.get("errors", [result.get("error", "Unknown error")])
-        console.print("[red]Submission failed:[/red]")
+        log.error("Submission failed:")
         for err in errors:
-            console.print(f"  [red]✗[/red] {err}")
+            log.error(f"  ✗ {err}")
         raise SystemExit(1)
 
 

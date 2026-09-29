@@ -91,8 +91,6 @@ def _inject_scope_meta(html: str, scope: Optional[str]) -> str:
     tag = scope_meta_tag(scope)
     if not tag:
         return html
-    from django.utils.html import escape  # noqa: F401  (kept for symmetry)
-
     import re
 
     _head_open = re.compile(r"<head(?:\s[^>]*)?>", re.IGNORECASE)

@@ -154,7 +154,12 @@ def make_messages(app: Union[str, Path], locales: Iterable[str] = ("ja",)) -> Pa
     ``app`` is an importable package name or the package directory itself.
     Needs GNU gettext's ``xgettext`` and ``msgmerge`` on PATH.
     """
-    from django.core.management import call_command
+    try:
+        from django.core.management import call_command
+    except ImportError as exc:
+        raise ImportError(
+            "scitex_app.i18n needs django: pip install scitex-app[all]"
+        ) from exc
 
     locale_dir = Path(app) / "locale" if isinstance(app, Path) else app_locale_dir(app)
     locale_dir.mkdir(exist_ok=True)
@@ -181,8 +186,13 @@ def make_messages(app: Union[str, Path], locales: Iterable[str] = ("ja",)) -> Pa
 
 def check_app_locales(app_configs=None, **kwargs) -> list:
     """Django system check: catalogs outside the app path, and uncompiled catalogs."""
-    from django.apps import apps
-    from django.core import checks
+    try:
+        from django.apps import apps
+        from django.core import checks
+    except ImportError as exc:
+        raise ImportError(
+            "scitex_app.i18n needs django: pip install scitex-app[all]"
+        ) from exc
 
     from ._django import ScitexAppConfig
 

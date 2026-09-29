@@ -25,7 +25,12 @@ def publish(app_dir: str | Path, server_url: str, token: str) -> dict:
     dict
         Server response with 'success' and 'pr_url' keys.
     """
-    import requests
+    try:
+        import requests
+    except ImportError as exc:
+        raise ImportError(
+            "publish() needs requests: pip install scitex-app[all]"
+        ) from exc
 
     from ._validate import validate
 

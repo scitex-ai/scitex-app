@@ -15,10 +15,11 @@ public ``scitex_app.embed`` surface, not from here directly::
 from __future__ import annotations
 
 import json
-import logging
 import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import scitex_logging as slogging
 
 try:
     from django.apps import AppConfig
@@ -30,7 +31,7 @@ except ImportError as e:
         "scitex_app._django requires Django. Install with: pip install django"
     ) from e
 
-logger = logging.getLogger(__name__)
+log = slogging.getLogger(__name__)
 
 # Required fields in manifest.json
 MANIFEST_REQUIRED = {"name", "slug", "label", "version", "icon"}
@@ -56,7 +57,12 @@ class ScitexAppConfig(AppConfig):
         self._manifest: Optional[Dict[str, Any]] = None
 
     def ready(self):
-        from django.core import checks
+        try:
+            from django.core import checks
+        except ImportError as exc:
+            raise ImportError(
+                "scitex_app._django requires Django. Install with: pip install django"
+            ) from exc
 
         from .i18n import check_app_locales
 
@@ -77,7 +83,7 @@ class ScitexAppConfig(AppConfig):
                 self._manifest = json.loads(manifest_path.read_text())
             else:
                 self._manifest = {}
-                logger.warning(
+                log.warning(
                     "[%s] No manifest.json found at %s", self.label, manifest_path
                 )
         return self._manifest
@@ -373,7 +379,7 @@ def scitex_api_dispatch(
             try:
                 return handler(request, editor)
             except Exception as e:
-                logger.exception("API error on /%s", endpoint)
+                log.exception("API error on /%s", endpoint)
                 return JsonResponse({"error": str(e)}, status=500)
 
         # Parameterized handlers
@@ -383,7 +389,7 @@ def scitex_api_dispatch(
                 try:
                     return handler(request, editor, param)
                 except Exception as e:
-                    logger.exception("API error on /%s%s", prefix, param)
+                    log.exception("API error on /%s%s", prefix, param)
                     return JsonResponse({"error": str(e)}, status=500)
 
         return JsonResponse({"error": f"Unknown endpoint: {endpoint}"}, status=404)
@@ -403,7 +409,12 @@ def scitex_urlpatterns(views_module) -> list:
         from . import views
         urlpatterns = scitex_urlpatterns(views)
     """
-    from django.urls import path
+    try:
+        from django.urls import path
+    except ImportError as exc:
+        raise ImportError(
+            "scitex_app._django requires Django. Install with: pip install django"
+        ) from exc
 
     return [
         path("", views_module.editor_page, name="editor"),

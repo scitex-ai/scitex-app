@@ -23,17 +23,24 @@ from __future__ import annotations
 
 import functools
 import json
-import logging
 
-from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
+import scitex_logging as slogging
+
+try:
+    from django.conf import settings
+    from django.core.exceptions import ImproperlyConfigured
+    from django.http import JsonResponse
+    from django.views.decorators.csrf import csrf_exempt
+    from django.views.decorators.http import require_http_methods
+except ImportError as exc:
+    raise ImportError(
+        "scitex_app._chat._session_views needs django: "
+        "pip install scitex-app[all]"
+    ) from exc
 
 from ._models import ChatMessage, ChatSession
 
-logger = logging.getLogger(__name__)
+log = slogging.getLogger(__name__)
 
 
 class ChatSessionsUnavailableError(ImproperlyConfigured):
@@ -128,7 +135,13 @@ def _app_is_installed(label: str) -> bool:
     whatever `_models.py` declares and so it can be exercised in both
     directions in a test.
     """
-    from django.apps import apps
+    try:
+        from django.apps import apps
+    except ImportError as exc:
+        raise ImportError(
+            "scitex_app._chat._session_views needs django: "
+            "pip install scitex-app[all]"
+        ) from exc
 
     try:
         apps.get_app_config(label)

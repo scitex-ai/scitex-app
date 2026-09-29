@@ -26,7 +26,12 @@ database.
 
 from __future__ import annotations
 
-from django.db import models
+try:
+    from django.db import models
+except ImportError as exc:
+    raise ImportError(
+        "scitex_app._chat._models needs django: pip install scitex-app[all]"
+    ) from exc
 
 
 class ChatSession(models.Model):

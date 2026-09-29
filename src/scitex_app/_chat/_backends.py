@@ -4,11 +4,11 @@
 
 from __future__ import annotations
 
-import logging
+import scitex_logging as slogging
 import os
 from typing import Any, Dict, Iterator, List, Optional
 
-logger = logging.getLogger(__name__)
+log = slogging.getLogger(__name__)
 
 
 class AnthropicChatBackend:
@@ -35,7 +35,13 @@ class AnthropicChatBackend:
         temperature: float = 0.7,
         system: Optional[str] = None,
     ) -> Iterator[Dict[str, Any]]:
-        import anthropic
+        try:
+            import anthropic
+        except ImportError as exc:
+            raise ImportError(
+                "AnthropicChatBackend needs the anthropic SDK: "
+                "pip install scitex-app[all]"
+            ) from exc
 
         client = anthropic.Anthropic(api_key=self._api_key)
         kwargs: Dict[str, Any] = {
@@ -52,7 +58,7 @@ class AnthropicChatBackend:
                     yield {"type": "chunk", "text": text}
             yield {"type": "done"}
         except Exception as e:
-            logger.exception("Anthropic chat error")
+            log.exception("Anthropic chat error")
             yield {"type": "error", "error": str(e)}
 
 
@@ -75,7 +81,12 @@ class LiteLLMChatBackend:
         temperature: float = 0.7,
         system: Optional[str] = None,
     ) -> Iterator[Dict[str, Any]]:
-        import litellm
+        try:
+            import litellm
+        except ImportError as exc:
+            raise ImportError(
+                "LiteLLMChatBackend needs litellm: pip install scitex-app[all]"
+            ) from exc
 
         msgs = []
         if system:
@@ -96,7 +107,7 @@ class LiteLLMChatBackend:
                     yield {"type": "chunk", "text": delta.content}
             yield {"type": "done"}
         except Exception as e:
-            logger.exception("LiteLLM chat error")
+            log.exception("LiteLLM chat error")
             yield {"type": "error", "error": str(e)}
 
 
@@ -121,7 +132,7 @@ def _resolve_default_model() -> str:
     legacy = os.getenv("LLM_MODEL")
     if prefixed:
         if legacy and legacy != prefixed:
-            logger.warning(
+            log.warning(
                 "Both SCITEX_APP_LLM_MODEL and the deprecated LLM_MODEL are "
                 "set and they disagree (%r vs %r). Using SCITEX_APP_LLM_MODEL; "
                 "unset LLM_MODEL to silence this.",
@@ -130,7 +141,7 @@ def _resolve_default_model() -> str:
             )
         return prefixed
     if legacy:
-        logger.warning(
+        log.warning(
             "LLM_MODEL is deprecated and will be removed; rename it to "
             "SCITEX_APP_LLM_MODEL (same value, %r).",
             legacy,

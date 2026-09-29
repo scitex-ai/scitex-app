@@ -9,7 +9,12 @@ from __future__ import annotations
 import json as _json_mod
 from typing import Optional
 
-from fastmcp import FastMCP
+try:
+    from fastmcp import FastMCP
+except ImportError as exc:
+    raise ImportError(
+        "scitex_app._mcp.server needs fastmcp: pip install scitex-app[all]"
+    ) from exc
 
 mcp = FastMCP("scitex-app")
 

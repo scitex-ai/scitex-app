@@ -47,6 +47,12 @@ guard names it; scitex-ui does not import scitex-app). So the consolidation is
 a **packaging/naming** decision with a real but bounded code-surface to
 reconcile, not a dependency tangle.
 
+## Status
+
+Accepted (2026-09-14, operator + scitex-app lead). Implementation is
+facade-first per ## Decision below; the shims stay until the gradual move
+completes. Superseded by nothing as of this writing.
+
 ## Decision
 
 Consolidate into one project, **`scitex-sdk`**, exposing the two halves as

@@ -15,7 +15,7 @@ themselves live one concern per module:
 
 from __future__ import annotations
 
-import logging
+import scitex_logging as slogging
 from pathlib import Path
 
 from ._app_layout import (
@@ -75,7 +75,7 @@ from ._privileges import (
 )
 from ._security import FORBIDDEN_PATTERNS, validate_security
 
-logger = logging.getLogger(__name__)
+log = slogging.getLogger(__name__)
 
 __all__ = [
     "APP_CONTAINERS",
