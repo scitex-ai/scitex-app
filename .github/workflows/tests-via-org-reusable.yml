@@ -50,7 +50,7 @@ jobs:
   # second step to promote it to a gate).
   example:
     name: reference-example-mounts-anywhere
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, scitex-ci]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python

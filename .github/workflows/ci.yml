@@ -172,7 +172,7 @@ jobs:
   # --------------------------------------------------------------------------
   access-conformance:
     name: access-conformance (exact core 72e8891584d8)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, scitex-ci]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
