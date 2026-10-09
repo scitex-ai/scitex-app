@@ -6,6 +6,8 @@
 
 # SciTeX App (<code>scitex-app</code>)
 
+> **⚠️ Retired:** This repository is archived. App code is maintained in [`scitex-sdk`](https://github.com/scitex-ai/scitex-sdk) (`scitex_sdk.app`).
+
 <p align="center">
   <a href="https://scitex.ai">
     <img src="docs/scitex-logo-blue-cropped.png" alt="SciTeX" width="400">
